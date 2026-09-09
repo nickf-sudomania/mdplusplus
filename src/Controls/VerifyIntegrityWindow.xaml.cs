@@ -47,7 +47,47 @@ namespace MDPlus.Controls
         {
             var palette = ThemeManager.Instance.CurrentPalette;
             RootGrid.Background = palette.EditorBg;
+
+            HeaderBorder.Background = palette.SidebarBg;
+            HeaderBorder.BorderBrush = palette.Border;
+            HeaderTitleText.Foreground = palette.HeadingFg;
+            HeaderSubtitleText.Foreground = palette.MutedFg;
+
+            TargetFileLabel.Foreground = palette.MutedFg;
+            FilePathTextBox.Background = palette.CodeBg;
+            FilePathTextBox.Foreground = palette.EditorFg;
+            FilePathTextBox.BorderBrush = palette.Border;
+
+            ComputedHashLabel.Foreground = palette.MutedFg;
+            ComputedHashTextBox.Background = palette.CodeBg;
+            ComputedHashTextBox.BorderBrush = palette.Border;
+
+            ExpectedHashLabel.Foreground = palette.MutedFg;
+            ExpectedHashTextBox.Background = palette.CodeBg;
+            ExpectedHashTextBox.Foreground = palette.EditorFg;
+            ExpectedHashTextBox.BorderBrush = palette.Border;
+
+            StatusBanner.Background = palette.SidebarBg;
+            StatusBanner.BorderBrush = palette.Border;
+            FooterBorder.Background = palette.SidebarBg;
+            FooterBorder.BorderBrush = palette.Border;
+
+            ApplyButtonStyle(BrowseButton, palette);
+            ApplyButtonStyle(CurrentAppButton, palette);
+            ApplyButtonStyle(CopyHashButton, palette);
+            ApplyButtonStyle(PasteButton, palette);
+            ApplyButtonStyle(LoadFileButton, palette);
+            ApplyButtonStyle(CloseButton, palette);
+
             DwmHelper.ApplyTitleBarTheme(this, palette);
+        }
+
+        private static void ApplyButtonStyle(System.Windows.Controls.Button? btn, ThemePalette palette)
+        {
+            if (btn == null) return;
+            btn.Background = palette.MenuHoverBg;
+            btn.Foreground = palette.MenuFg;
+            btn.BorderBrush = palette.Border;
         }
 
         private void BrowseFile_Click(object sender, RoutedEventArgs e)

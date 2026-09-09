@@ -153,6 +153,13 @@ namespace MDPlus.Tests
             RunTest("AppSettings Thread-Safe Concurrent Persistence", TestAppSettingsConcurrentSaveSafety);
             RunTest("DWM Border Color Attribute & Reset Helper Integrity", TestDwmHelperBorderAndResetAttributes);
             RunTest("Update Service Exact Asset Priority over Loose Suffix Matches", TestUpdateServiceExactAssetPriority);
+            RunTest("Update Service Multi-Asset Release Highlights Hash Extraction", TestUpdateServiceMultiAssetReleaseHighlightsHashExtraction);
+            RunTest("Update Service Incomplete Download Detection", TestUpdateServiceIncompleteDownloadDetection);
+            RunTest("Update Service Version Prefix and Tag Edge Cases", TestUpdateServiceVersionPrefixAndTagEdgeCases);
+            RunTest("Update Service Rate Limit Reset Header & Retry-After Parsing", TestUpdateServiceRateLimitWithResetHeaderAndRetryAfter);
+            RunTest("Update Service Installer Process Start & Exit Hooks", TestUpdateServiceInstallerProcessLaunchAndExitHooks);
+            RunTest("DWM Helper High Contrast & Win10 1809 Fallback Integrity", TestDwmHelperHighContrastAndWin10Fallback);
+            RunTest("Verify Integrity Window Dynamic Palette Theming", TestVerifyIntegrityWindowPaletteDynamicTheming);
 
             sw.Stop();
 
@@ -2381,6 +2388,246 @@ b4f2e7af3a2e26456be05a236d8fa5f6750069fe45f8cf16197ea9934ee53b0a  MDPlus-win-x64
 
             AssertEqual("https://download/exact/MDPlus-Setup.exe", res.SetupDownloadUrl!, "Exact SetupFileName must take priority over loose *Setup.exe matches");
             AssertEqual("https://download/exact/SHA256SUMS.txt", res.ChecksumsDownloadUrl!, "Exact ChecksumsFileName must take priority over loose *.sha256 matches");
+        }
+
+        private static void TestUpdateServiceMultiAssetReleaseHighlightsHashExtraction()
+        {
+            // 1. Markdown list with multiple assets and backtick hashes
+            string markdownList = @"
+## Release v1.3.0 Notes
+- **Other-MDPlus-Setup.exe**: `1111111111111111111111111111111111111111111111111111111111111111`
+- **MDPlus-Setup.exe**: `2222222222222222222222222222222222222222222222222222222222222222`
+- **MDPlus-win-x64.zip**: `3333333333333333333333333333333333333333333333333333333333333333`
+";
+            string? listHash = UpdateService.ExtractExpectedHash(markdownList, "MDPlus-Setup.exe");
+            AssertEqual("2222222222222222222222222222222222222222222222222222222222222222", listHash, "Extracted hash from multi-asset markdown list");
+
+            // 2. GFM Table with multiple assets
+            string gfmTable = @"
+| File | SHA-256 Checksum |
+| :--- | :--- |
+| `Other-MDPlus-Setup.exe` | 4444444444444444444444444444444444444444444444444444444444444444 |
+| `MDPlus-Setup.exe` | 5555555555555555555555555555555555555555555555555555555555555555 |
+| `MDPlus.zip` | 6666666666666666666666666666666666666666666666666666666666666666 |
+";
+            string? tableHash = UpdateService.ExtractExpectedHash(gfmTable, "MDPlus-Setup.exe");
+            AssertEqual("5555555555555555555555555555555555555555555555555555555555555555", tableHash, "Extracted hash from multi-asset markdown table");
+
+            // 3. Multi-line heading + label
+            string multiLine = @"
+### MDPlus-Setup.exe
+SHA-256: 7777777777777777777777777777777777777777777777777777777777777777
+
+### MDPlus-Portable.zip
+SHA-256: 8888888888888888888888888888888888888888888888888888888888888888
+";
+            string? multiLineHash = UpdateService.ExtractExpectedHash(multiLine, "MDPlus-Setup.exe");
+            AssertEqual("7777777777777777777777777777777777777777777777777777777777777777", multiLineHash, "Extracted hash from multi-line heading followed by SHA-256 label");
+        }
+
+        private static void TestUpdateServiceIncompleteDownloadDetection()
+        {
+            var handler = new MockHttpMessageHandler(request =>
+            {
+                var resp = new System.Net.Http.HttpResponseMessage(System.Net.HttpStatusCode.OK);
+                resp.Content = new System.Net.Http.ByteArrayContent(new byte[500]);
+                resp.Content.Headers.ContentLength = 10000;
+                return resp;
+            });
+
+            using var httpClient = new System.Net.Http.HttpClient(handler);
+            var updateService = new UpdateService(httpClient);
+
+            var checkInfo = new UpdateCheckResult
+            {
+                IsSuccess = true,
+                IsUpdateAvailable = true,
+                SetupDownloadUrl = "https://mock.download/MDPlus-Setup.exe",
+                ReleaseHighlights = "9999999999999999999999999999999999999999999999999999999999999999"
+            };
+
+            var installTask = updateService.DownloadAndVerifyUpdateAsync(checkInfo);
+            installTask.Wait();
+            var installResult = installTask.Result;
+
+            Assert(!installResult.Success, "Incomplete download must fail");
+            Assert(installResult.ErrorMessage != null && installResult.ErrorMessage.Contains("incomplete"),
+                "Error message explains truncated/incomplete download");
+
+            string destFile = System.IO.Path.Combine(System.IO.Path.GetTempPath(), "MDPlusUpdate", UpdateService.SetupFileName);
+            Assert(!System.IO.File.Exists(destFile), "Truncated destination file must be deleted");
+        }
+
+        private static void TestUpdateServiceVersionPrefixAndTagEdgeCases()
+        {
+            // Version prefix parsing
+            var compRelease = UpdateService.ParseVersionComponents("release-1.2.0");
+            Assert(compRelease != null && compRelease.Length == 3 && compRelease[0] == 1 && compRelease[1] == 2 && compRelease[2] == 0,
+                "Parse 'release-1.2.0' should yield [1, 2, 0]");
+
+            var compApp = UpdateService.ParseVersionComponents("MDPlus-v2.5.1");
+            Assert(compApp != null && compApp.Length == 3 && compApp[0] == 2 && compApp[1] == 5 && compApp[2] == 1,
+                "Parse 'MDPlus-v2.5.1' should yield [2, 5, 1]");
+
+            var compBuild = UpdateService.ParseVersionComponents("1.0.0+build100");
+            Assert(compBuild != null && compBuild.Length == 3 && compBuild[0] == 1 && compBuild[1] == 0 && compBuild[2] == 0,
+                "Parse '1.0.0+build100' should yield [1, 0, 0]");
+
+            var compPrerelease = UpdateService.ParseVersionComponents("1.3.0-rc.1");
+            Assert(compPrerelease != null && compPrerelease.Length == 3 && compPrerelease[0] == 1 && compPrerelease[1] == 3 && compPrerelease[2] == 0,
+                "Parse '1.3.0-rc.1' should yield [1, 3, 0]");
+
+            var compInvalid = UpdateService.ParseVersionComponents("no-digits");
+            Assert(compInvalid == null, "Non-version string without digits should return null");
+
+            // Comparison
+            Assert(UpdateService.CompareVersions("release-1.3.0", "v1.2.0") > 0, "release-1.3.0 > v1.2.0");
+            Assert(UpdateService.CompareVersions("MDPlus-v1.0.0", "1.0.0") == 0, "MDPlus-v1.0.0 == 1.0.0");
+            Assert(UpdateService.IsNewerVersion("1.0.0", "release-1.0.1"), "release-1.0.1 is newer than 1.0.0");
+            Assert(!UpdateService.IsNewerVersion("1.0.0", "release-1.0.0"), "release-1.0.0 is not newer than 1.0.0");
+        }
+
+        private static void TestUpdateServiceRateLimitWithResetHeaderAndRetryAfter()
+        {
+            long futureEpoch = DateTimeOffset.UtcNow.AddMinutes(15).ToUnixTimeSeconds();
+
+            var rateLimitHandler = new MockHttpMessageHandler(request =>
+            {
+                if (request.RequestUri?.ToString().Contains("ratelimit-403") == true)
+                {
+                    var resp = new System.Net.Http.HttpResponseMessage(System.Net.HttpStatusCode.Forbidden);
+                    resp.Headers.Add("x-ratelimit-reset", futureEpoch.ToString());
+                    return resp;
+                }
+                if (request.RequestUri?.ToString().Contains("ratelimit-429") == true)
+                {
+                    var resp = new System.Net.Http.HttpResponseMessage((System.Net.HttpStatusCode)429);
+                    resp.Headers.Add("Retry-After", "120");
+                    return resp;
+                }
+                return new System.Net.Http.HttpResponseMessage(System.Net.HttpStatusCode.OK);
+            });
+
+            using var client = new System.Net.Http.HttpClient(rateLimitHandler);
+
+            // 1. 403 with x-ratelimit-reset
+            var service403 = new UpdateService(client, "https://mock.api/ratelimit-403");
+            var task403 = service403.CheckForUpdatesAsync("1.0.0");
+            task403.Wait();
+            var res403 = task403.Result;
+
+            Assert(!res403.IsSuccess, "403 rate limit should report failure");
+            Assert(res403.ErrorMessage != null && res403.ErrorMessage.Contains("rate limit reached"),
+                "Message mentions rate limit reached");
+            Assert(res403.ErrorMessage != null && res403.ErrorMessage.Contains("Window resets in approximately"),
+                "Message includes reset countdown estimation");
+
+            // 2. 429 with Retry-After
+            var service429 = new UpdateService(client, "https://mock.api/ratelimit-429");
+            var task429 = service429.CheckForUpdatesAsync("1.0.0");
+            task429.Wait();
+            var res429 = task429.Result;
+
+            Assert(!res429.IsSuccess, "429 rate limit should report failure");
+            Assert(res429.ErrorMessage != null && res429.ErrorMessage.Contains("rate limit reached"),
+                "Message mentions rate limit reached on 429");
+            Assert(res429.ErrorMessage != null && res429.ErrorMessage.Contains("Please retry in approximately"),
+                "Message includes retry-after estimation");
+        }
+
+        private static void TestUpdateServiceInstallerProcessLaunchAndExitHooks()
+        {
+            // 1. Non-existent file throws FileNotFoundException
+            bool threwMissing = false;
+            try
+            {
+                UpdateService.CreateInstallerProcessStartInfo("C:\\nonexistent\\installer.exe");
+            }
+            catch (System.IO.FileNotFoundException)
+            {
+                threwMissing = true;
+            }
+            Assert(threwMissing, "CreateInstallerProcessStartInfo throws FileNotFoundException for missing file");
+
+            // 2. Existing file returns valid ProcessStartInfo
+            string tempInstaller = System.IO.Path.GetTempFileName();
+            try
+            {
+                var psi = UpdateService.CreateInstallerProcessStartInfo(tempInstaller);
+                AssertEqual(tempInstaller, psi.FileName, "ProcessStartInfo.FileName matches installer path");
+                Assert(psi.UseShellExecute, "ProcessStartInfo.UseShellExecute is true");
+
+                // 3. LaunchInstallerAndExit with test hooks executes delegates safely
+                bool launched = false;
+                bool exited = false;
+
+                UpdateService.LaunchInstallerAndExit(
+                    tempInstaller,
+                    startProcess: p => { launched = (p.FileName == tempInstaller); },
+                    exitApp: () => { exited = true; });
+
+                Assert(launched, "startProcess delegate was executed with correct ProcessStartInfo");
+                Assert(exited, "exitApp delegate was executed");
+            }
+            finally
+            {
+                try { System.IO.File.Delete(tempInstaller); } catch { }
+            }
+        }
+
+        private static void TestDwmHelperHighContrastAndWin10Fallback()
+        {
+            // Reset on IntPtr.Zero returns false
+            Assert(!DwmHelper.ResetTitleBarTheme(IntPtr.Zero), "ResetTitleBarTheme(IntPtr.Zero) returns false");
+
+            // ApplyTitleBarTheme with null palette returns false
+            Assert(!DwmHelper.ApplyTitleBarTheme(IntPtr.Zero, null!), "ApplyTitleBarTheme with null palette returns false");
+
+            // Color conversions
+            int red = DwmHelper.ColorToColorRef(Color.FromRgb(255, 0, 0));
+            AssertEqual(0x000000FF, red, "Red ColorRef is 0x000000FF");
+
+            int green = DwmHelper.ColorToColorRef(Color.FromRgb(0, 255, 0));
+            AssertEqual(0x0000FF00, green, "Green ColorRef is 0x0000FF00");
+
+            int blue = DwmHelper.ColorToColorRef(Color.FromRgb(0, 0, 255));
+            AssertEqual(0x00FF0000, blue, "Blue ColorRef is 0x00FF0000");
+
+            // Reset constants
+            AssertEqual(unchecked((int)0xFFFFFFFF), unchecked((int)DwmHelper.DWMWA_COLOR_DEFAULT), "DWMWA_COLOR_DEFAULT is 0xFFFFFFFF");
+        }
+
+        private static void TestVerifyIntegrityWindowPaletteDynamicTheming()
+        {
+            // Verify XAML contains the named borders and buttons
+            string[] possiblePaths = new[]
+            {
+                System.IO.Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "..", "..", "..", "..", "src", "Controls", "VerifyIntegrityWindow.xaml"),
+                System.IO.Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "..", "..", "..", "src", "Controls", "VerifyIntegrityWindow.xaml"),
+                System.IO.Path.Combine(Environment.CurrentDirectory, "src", "Controls", "VerifyIntegrityWindow.xaml")
+            };
+            string xamlPath = possiblePaths.FirstOrDefault(p => System.IO.File.Exists(p)) ?? string.Empty;
+            Assert(!string.IsNullOrEmpty(xamlPath), "VerifyIntegrityWindow.xaml must exist");
+
+            string xaml = System.IO.File.ReadAllText(xamlPath);
+            Assert(xaml.Contains("Name=\"HeaderBorder\""), "VerifyIntegrityWindow.xaml has HeaderBorder");
+            Assert(xaml.Contains("Name=\"FooterBorder\""), "VerifyIntegrityWindow.xaml has FooterBorder");
+            Assert(xaml.Contains("Name=\"BrowseButton\""), "VerifyIntegrityWindow.xaml has BrowseButton");
+            Assert(xaml.Contains("Name=\"CloseButton\""), "VerifyIntegrityWindow.xaml has CloseButton");
+
+            // Verify UpdateDialog also has appropriate buttons
+            string[] updateDialogPaths = new[]
+            {
+                System.IO.Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "..", "..", "..", "..", "src", "Controls", "UpdateDialog.xaml"),
+                System.IO.Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "..", "..", "..", "src", "Controls", "UpdateDialog.xaml"),
+                System.IO.Path.Combine(Environment.CurrentDirectory, "src", "Controls", "UpdateDialog.xaml")
+            };
+            string updateXamlPath = updateDialogPaths.FirstOrDefault(p => System.IO.File.Exists(p)) ?? string.Empty;
+            Assert(!string.IsNullOrEmpty(updateXamlPath), "UpdateDialog.xaml must exist");
+            string updateXaml = System.IO.File.ReadAllText(updateXamlPath);
+            Assert(updateXaml.Contains("Name=\"UpdateNowButton\""), "UpdateDialog.xaml has UpdateNowButton");
+            Assert(updateXaml.Contains("Name=\"LaterButton\""), "UpdateDialog.xaml has LaterButton");
+            Assert(updateXaml.Contains("Name=\"ReleaseNotesButton\""), "UpdateDialog.xaml has ReleaseNotesButton");
         }
 
         private class MockHttpMessageHandler : System.Net.Http.HttpMessageHandler

@@ -59,6 +59,19 @@ namespace MDPlus.Core
 
             try
             {
+                // Accessibility: If Windows High Contrast mode is active, preserve the OS high-contrast accessibility scheme
+                try
+                {
+                    if (SystemParameters.HighContrast)
+                    {
+                        return ResetTitleBarTheme(hwnd);
+                    }
+                }
+                catch
+                {
+                    // Fall through if SystemParameters is unavailable
+                }
+
                 // 1. Immersive dark mode (attribute 20 for Win10 2004+ and Win11; attribute 19 fallback for Win10 1809-1909)
                 int useDarkMode = isDark ? 1 : 0;
                 int hr = DwmSetWindowAttribute(hwnd, DWMWA_USE_IMMERSIVE_DARK_MODE, ref useDarkMode, sizeof(int));
@@ -93,6 +106,7 @@ namespace MDPlus.Core
 
         /// <summary>
         /// Resets title bar DWM attributes back to Windows default OS caption styling.
+        /// Gracefully handles Win10 1809-1909 attribute 19 and Win11 attributes.
         /// </summary>
         public static bool ResetTitleBarTheme(IntPtr hwnd)
         {
@@ -101,7 +115,11 @@ namespace MDPlus.Core
             try
             {
                 int defaultMode = 0;
-                DwmSetWindowAttribute(hwnd, DWMWA_USE_IMMERSIVE_DARK_MODE, ref defaultMode, sizeof(int));
+                int hr = DwmSetWindowAttribute(hwnd, DWMWA_USE_IMMERSIVE_DARK_MODE, ref defaultMode, sizeof(int));
+                if (hr != 0)
+                {
+                    DwmSetWindowAttribute(hwnd, DWMWA_USE_IMMERSIVE_DARK_MODE_BEFORE_20H1, ref defaultMode, sizeof(int));
+                }
 
                 int defaultColor = unchecked((int)DWMWA_COLOR_DEFAULT);
                 DwmSetWindowAttribute(hwnd, DWMWA_CAPTION_COLOR, ref defaultColor, sizeof(int));

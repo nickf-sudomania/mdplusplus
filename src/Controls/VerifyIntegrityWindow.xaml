@@ -20,10 +20,10 @@
         </Grid.RowDefinitions>
 
         <!-- Header -->
-        <Border Grid.Row="0" Background="#252526" Padding="20,16,20,16" BorderBrush="#3f3f46" BorderThickness="0,0,0,1">
+        <Border Grid.Row="0" Name="HeaderBorder" Background="#252526" Padding="20,16,20,16" BorderBrush="#3f3f46" BorderThickness="0,0,0,1">
             <StackPanel>
-                <TextBlock Text="🛡️ Release Integrity &amp; SHA-256 Verification" FontSize="16" FontWeight="Bold" Foreground="#f0f6fc" Margin="0,0,0,4"/>
-                <TextBlock Text="Verify your MDPlus binary or any downloaded release against cryptographic SHA-256 hashes (Notepad++ standard)."
+                <TextBlock Name="HeaderTitleText" Text="🛡️ Release Integrity &amp; SHA-256 Verification" FontSize="16" FontWeight="Bold" Foreground="#f0f6fc" Margin="0,0,0,4"/>
+                <TextBlock Name="HeaderSubtitleText" Text="Verify your MDPlus binary or any downloaded release against cryptographic SHA-256 hashes (Notepad++ standard)."
                            FontSize="12" Foreground="#8b949e" TextWrapping="Wrap"/>
             </StackPanel>
         </Border>
@@ -32,7 +32,7 @@
         <ScrollViewer Grid.Row="1" VerticalScrollBarVisibility="Auto" Padding="24,16,24,16">
             <StackPanel>
                 <!-- Target File Selector -->
-                <TextBlock Text="Target File to Verify:" FontWeight="SemiBold" FontSize="13" Foreground="#c9d1d9" Margin="0,0,0,6"/>
+                <TextBlock Name="TargetFileLabel" Text="Target File to Verify:" FontWeight="SemiBold" FontSize="13" Foreground="#c9d1d9" Margin="0,0,0,6"/>
                 <Grid Margin="0,0,0,12">
                     <Grid.ColumnDefinitions>
                         <ColumnDefinition Width="*" />
@@ -41,14 +41,14 @@
                     </Grid.ColumnDefinitions>
                     <TextBox Grid.Column="0" Name="FilePathTextBox" Background="#2d2d30" Foreground="#e6edf3" BorderBrush="#3f3f46" 
                              Padding="8,6,8,6" FontSize="12" VerticalContentAlignment="Center" TextChanged="FilePathTextBox_TextChanged"/>
-                    <Button Grid.Column="1" Content="Browse..." Margin="8,0,0,0" Padding="12,6,12,6" Background="#3c3c3c" Foreground="#e6edf3"
+                    <Button Grid.Column="1" Name="BrowseButton" Content="Browse..." Margin="8,0,0,0" Padding="12,6,12,6" Background="#3c3c3c" Foreground="#e6edf3"
                             BorderBrush="#555555" Cursor="Hand" Click="BrowseFile_Click"/>
-                    <Button Grid.Column="2" Content="Current App" Margin="6,0,0,0" Padding="10,6,10,6" Background="#3c3c3c" Foreground="#e6edf3"
+                    <Button Grid.Column="2" Name="CurrentAppButton" Content="Current App" Margin="6,0,0,0" Padding="10,6,10,6" Background="#3c3c3c" Foreground="#e6edf3"
                             BorderBrush="#555555" ToolTip="Verify currently running MDPlus.exe" Cursor="Hand" Click="CurrentApp_Click"/>
                 </Grid>
 
                 <!-- Computed Hash -->
-                <TextBlock Text="Computed SHA-256 Hash:" FontWeight="SemiBold" FontSize="13" Foreground="#c9d1d9" Margin="0,4,0,6"/>
+                <TextBlock Name="ComputedHashLabel" Text="Computed SHA-256 Hash:" FontWeight="SemiBold" FontSize="13" Foreground="#c9d1d9" Margin="0,4,0,6"/>
                 <Grid Margin="0,0,0,16">
                     <Grid.ColumnDefinitions>
                         <ColumnDefinition Width="*" />
@@ -58,11 +58,11 @@
                              FontFamily="Cascadia Code, Consolas, monospace" FontSize="12" Padding="8,6,8,6" BorderBrush="#30363d"
                              VerticalContentAlignment="Center" Text="Select a file to compute hash..."/>
                     <Button Grid.Column="1" Name="CopyHashButton" Content="Copy Hash" Margin="8,0,0,0" Padding="12,6,12,6" 
-                            Background="#3c3c3c" Foreground="#e6edf3" BorderBrush="#555555" Cursor="Hand" Click="CopyHash_Click"/>
+                             Background="#3c3c3c" Foreground="#e6edf3" BorderBrush="#555555" Cursor="Hand" Click="CopyHash_Click"/>
                 </Grid>
 
                 <!-- Expected Hash -->
-                <TextBlock Text="Expected SHA-256 Hash (from official release notes or SHA256SUMS.txt):" FontWeight="SemiBold" FontSize="13" Foreground="#c9d1d9" Margin="0,4,0,6"/>
+                <TextBlock Name="ExpectedHashLabel" Text="Expected SHA-256 Hash (from official release notes or SHA256SUMS.txt):" FontWeight="SemiBold" FontSize="13" Foreground="#c9d1d9" Margin="0,4,0,6"/>
                 <Grid Margin="0,0,0,16">
                     <Grid.ColumnDefinitions>
                         <ColumnDefinition Width="*" />
@@ -72,9 +72,9 @@
                     <TextBox Grid.Column="0" Name="ExpectedHashTextBox" Background="#2d2d30" Foreground="#e6edf3" BorderBrush="#3f3f46" 
                              FontFamily="Cascadia Code, Consolas, monospace" FontSize="12" Padding="8,6,8,6" VerticalContentAlignment="Center"
                              TextChanged="ExpectedHashTextBox_TextChanged"/>
-                    <Button Grid.Column="1" Content="Paste" Margin="8,0,0,0" Padding="12,6,12,6" Background="#3c3c3c" Foreground="#e6edf3"
+                    <Button Grid.Column="1" Name="PasteButton" Content="Paste" Margin="8,0,0,0" Padding="12,6,12,6" Background="#3c3c3c" Foreground="#e6edf3"
                             BorderBrush="#555555" Cursor="Hand" Click="PasteExpected_Click"/>
-                    <Button Grid.Column="2" Content="Load File..." Margin="6,0,0,0" Padding="10,6,10,6" Background="#3c3c3c" Foreground="#e6edf3"
+                    <Button Grid.Column="2" Name="LoadFileButton" Content="Load File..." Margin="6,0,0,0" Padding="10,6,10,6" Background="#3c3c3c" Foreground="#e6edf3"
                             BorderBrush="#555555" ToolTip="Load from .sha256 or SHA256SUMS.txt" Cursor="Hand" Click="LoadChecksumFile_Click"/>
                 </Grid>
 
@@ -90,9 +90,9 @@
         </ScrollViewer>
 
         <!-- Footer -->
-        <Border Grid.Row="2" Background="#252526" Padding="16,12,16,12" BorderBrush="#3f3f46" BorderThickness="0,1,0,0">
+        <Border Grid.Row="2" Name="FooterBorder" Background="#252526" Padding="16,12,16,12" BorderBrush="#3f3f46" BorderThickness="0,1,0,0">
             <DockPanel LastChildFill="False">
-                <Button DockPanel.Dock="Right" Content="Close" Width="90" Height="28" Background="#3c3c3c" Foreground="#e6edf3"
+                <Button DockPanel.Dock="Right" Name="CloseButton" Content="Close" Width="90" Height="28" Background="#3c3c3c" Foreground="#e6edf3"
                         BorderBrush="#555555" Cursor="Hand" Click="Close_Click"/>
             </DockPanel>
         </Border>

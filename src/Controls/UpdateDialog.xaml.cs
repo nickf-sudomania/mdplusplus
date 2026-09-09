@@ -42,7 +42,7 @@ namespace MDPlus.Controls
             string current = !string.IsNullOrEmpty(_updateInfo.CurrentVersion) ? _updateInfo.CurrentVersion : UpdateService.GetCurrentVersion();
 
             TitleTextBlock.Text = $"MDPlus {latest} is Available!";
-            VersionSubtext.Text = $"Release tag: {latest} (currently running: v{current}).";
+            VersionSubtext.Text = $"Release tag: {latest} (currently running: v{current.TrimStart('v', 'V')}).";
 
             string highlights = _updateInfo.ReleaseHighlights;
             if (string.IsNullOrWhiteSpace(highlights))
@@ -54,6 +54,12 @@ namespace MDPlus.Controls
             if (string.IsNullOrEmpty(_updateInfo.ReleaseUrl))
             {
                 ReleaseNotesButton.Visibility = Visibility.Collapsed;
+            }
+
+            if (string.IsNullOrEmpty(_updateInfo.SetupDownloadUrl))
+            {
+                UpdateNowButton.IsEnabled = false;
+                UpdateNowButton.ToolTip = "Installer binary is not available for this release.";
             }
         }
 

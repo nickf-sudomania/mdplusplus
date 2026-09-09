@@ -178,8 +178,15 @@ namespace MDPlus
                                 await Dispatcher.InvokeAsync(() =>
                                 {
                                     if (!IsLoaded || !IsVisible) return;
-                                    var dlg = new UpdateDialog(updateResult, _updateService) { Owner = this };
-                                    dlg.ShowDialog();
+                                    try
+                                    {
+                                        var dlg = new UpdateDialog(updateResult, _updateService) { Owner = this };
+                                        dlg.ShowDialog();
+                                    }
+                                    catch
+                                    {
+                                        // Window closing during startup check
+                                    }
                                 });
                             }
                         }
@@ -1725,7 +1732,7 @@ Console.WriteLine($""Parsed {doc.Blocks.Count} blocks in 2ms!"");
                 else
                 {
                     MessageBox.Show(this,
-                        $"You are running the latest version of MDPlus (v{result.CurrentVersion}).\nNo updates are currently available.",
+                        $"You are running the latest version of MDPlus (v{result.CurrentVersion.TrimStart('v', 'V')}).\nNo updates are currently available.",
                         "Check for Updates", MessageBoxButton.OK, MessageBoxImage.Information);
                 }
             }

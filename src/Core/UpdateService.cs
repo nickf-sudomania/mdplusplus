@@ -96,19 +96,30 @@ namespace MDPlus.Core
             if (string.IsNullOrWhiteSpace(versionString)) return null;
 
             string trimmed = versionString.Trim();
-            if (trimmed.StartsWith("v", StringComparison.OrdinalIgnoreCase))
+
+            // Locate the first digit to strip tag prefixes like 'v', 'ver', 'release-', 'mdplus-v'
+            int firstDigitIdx = -1;
+            for (int i = 0; i < trimmed.Length; i++)
             {
-                trimmed = trimmed.Substring(1).Trim();
+                if (char.IsDigit(trimmed[i]))
+                {
+                    firstDigitIdx = i;
+                    break;
+                }
             }
 
-            // Remove prerelease or build metadata tags (e.g., "-beta", "+build123")
-            int separatorIdx = trimmed.IndexOfAny(new[] { '-', '+' });
+            if (firstDigitIdx < 0) return null;
+
+            string versionPart = trimmed.Substring(firstDigitIdx);
+
+            // Remove prerelease or build metadata tags following the version digits (e.g., "-beta", "+build123")
+            int separatorIdx = versionPart.IndexOfAny(new[] { '-', '+' });
             if (separatorIdx >= 0)
             {
-                trimmed = trimmed.Substring(0, separatorIdx);
+                versionPart = versionPart.Substring(0, separatorIdx);
             }
 
-            string[] parts = trimmed.Split(new[] { '.' }, StringSplitOptions.RemoveEmptyEntries);
+            string[] parts = versionPart.Split(new[] { '.' }, StringSplitOptions.RemoveEmptyEntries);
             if (parts.Length == 0) return null;
 
             var result = new List<int>();
@@ -199,7 +210,36 @@ namespace MDPlus.Core
                 }
             }
 
-            // 3. Check for hash labels (e.g. "sha256", "sha-256", "MDPlus-Setup.exe SHA-256")
+            // 3. Line-by-line target file association matching (for Markdown lists, tables, bullets, and multi-asset release notes)
+            string escapedTarget = Regex.Escape(targetFileName);
+            string targetPattern = $@"(?<![\w\.-]){escapedTarget}(?![\w\.-])";
+            string[] lines = checksumsContent.Split(new[] { '\r', '\n' }, StringSplitOptions.RemoveEmptyEntries);
+
+            for (int i = 0; i < lines.Length; i++)
+            {
+                string line = lines[i];
+                if (Regex.IsMatch(line, targetPattern, RegexOptions.IgnoreCase))
+                {
+                    // Check if this line contains a 64-hex SHA-256 hash
+                    var lineMatch = Regex.Match(line, @"\b([a-fA-F0-9]{64})\b");
+                    if (lineMatch.Success)
+                    {
+                        return lineMatch.Groups[1].Value.ToLowerInvariant();
+                    }
+
+                    // Check if next non-empty line contains the hash (e.g. header line followed by hash line)
+                    if (i + 1 < lines.Length)
+                    {
+                        var nextLineMatch = Regex.Match(lines[i + 1], @"\b([a-fA-F0-9]{64})\b");
+                        if (nextLineMatch.Success)
+                        {
+                            return nextLineMatch.Groups[1].Value.ToLowerInvariant();
+                        }
+                    }
+                }
+            }
+
+            // 4. Check for hash labels (e.g. "sha256", "sha-256", "MDPlus-Setup.exe SHA-256")
             foreach (var kvp in checksums)
             {
                 string cleanKey = kvp.Key.Trim().ToLowerInvariant();
@@ -210,13 +250,13 @@ namespace MDPlus.Core
                 }
             }
 
-            // 4. Bare hash (single hash file)
+            // 5. Bare hash (single hash file)
             if (checksums.TryGetValue(string.Empty, out var bareHash) && bareHash.Length == 64)
             {
                 return bareHash;
             }
 
-            // 5. Fallback regex search for any standalone 64-hex string in the content
+            // 6. Fallback regex search for any standalone 64-hex string in the content
             var hashMatches = Regex.Matches(checksumsContent, @"\b([a-fA-F0-9]{64})\b");
             if (hashMatches.Count == 1)
             {
@@ -242,9 +282,37 @@ namespace MDPlus.Core
 
                 if (!response.IsSuccessStatusCode)
                 {
-                    string statusMsg = response.StatusCode == System.Net.HttpStatusCode.Forbidden
-                        ? "GitHub API rate limit reached (60 requests/hour for unauthenticated checks). Please try again later."
-                        : $"GitHub API returned {(int)response.StatusCode} ({response.ReasonPhrase})";
+                    string statusMsg;
+                    if (response.StatusCode == System.Net.HttpStatusCode.Forbidden ||
+                        (int)response.StatusCode == 429)
+                    {
+                        string resetDetail = string.Empty;
+                        if (response.Headers.TryGetValues("x-ratelimit-reset", out var resetValues))
+                        {
+                            var first = System.Linq.Enumerable.FirstOrDefault(resetValues);
+                            if (long.TryParse(first, out long epoch))
+                            {
+                                var resetUtc = DateTimeOffset.FromUnixTimeSeconds(epoch).UtcDateTime;
+                                var minutesLeft = Math.Max(1, (int)Math.Ceiling((resetUtc - DateTime.UtcNow).TotalMinutes));
+                                resetDetail = $" Window resets in approximately {minutesLeft} minute{(minutesLeft == 1 ? "" : "s")} ({resetUtc:HH:mm} UTC).";
+                            }
+                        }
+                        else if (response.Headers.TryGetValues("Retry-After", out var retryValues))
+                        {
+                            var firstRetry = System.Linq.Enumerable.FirstOrDefault(retryValues);
+                            if (int.TryParse(firstRetry, out int seconds))
+                            {
+                                var mins = Math.Max(1, (int)Math.Ceiling(seconds / 60.0));
+                                resetDetail = $" Please retry in approximately {mins} minute{(mins == 1 ? "" : "s")}.";
+                            }
+                        }
+
+                        statusMsg = $"GitHub API rate limit reached (60 requests/hour for unauthenticated checks).{resetDetail} Please try again later.";
+                    }
+                    else
+                    {
+                        statusMsg = $"GitHub API returned {(int)response.StatusCode} ({response.ReasonPhrase})";
+                    }
 
                     return new UpdateCheckResult
                     {
@@ -414,6 +482,11 @@ namespace MDPlus.Core
                                 progress.Report(Math.Min(1.0, (double)totalRead / totalBytes));
                             }
                         }
+
+                        if (totalBytes > 0 && totalRead < totalBytes)
+                        {
+                            throw new IOException($"Download was incomplete: received {totalRead} of {totalBytes} bytes.");
+                        }
                     }
                 }
 
@@ -460,21 +533,47 @@ namespace MDPlus.Core
         }
 
         /// <summary>
-        /// Safely launches the verified installer and cleanly closes MDPlus.
+        /// Validates installer existence and creates a configured ProcessStartInfo instance.
         /// </summary>
-        public static void LaunchInstallerAndExit(string installerPath)
+        public static ProcessStartInfo CreateInstallerProcessStartInfo(string installerPath)
         {
             if (string.IsNullOrEmpty(installerPath) || !File.Exists(installerPath))
             {
                 throw new FileNotFoundException("Installer not found: " + installerPath);
             }
 
-            var startInfo = new ProcessStartInfo
+            return new ProcessStartInfo
             {
                 FileName = installerPath,
                 UseShellExecute = true
             };
-            Process.Start(startInfo);
+        }
+
+        /// <summary>
+        /// Safely launches the verified installer and cleanly closes MDPlus.
+        /// Optional delegates allow unit tests to verify process start and exit behaviors.
+        /// </summary>
+        public static void LaunchInstallerAndExit(
+            string installerPath,
+            Action<ProcessStartInfo>? startProcess = null,
+            Action? exitApp = null)
+        {
+            var startInfo = CreateInstallerProcessStartInfo(installerPath);
+
+            if (startProcess != null)
+            {
+                startProcess(startInfo);
+            }
+            else
+            {
+                Process.Start(startInfo);
+            }
+
+            if (exitApp != null)
+            {
+                exitApp();
+                return;
+            }
 
             if (Application.Current != null)
             {
