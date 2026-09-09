@@ -277,7 +277,7 @@ MDPlus includes dual automation scripts for interactive command prompt or headle
   ```cmd
   build.bat
   ```
-  Provides a clean numbered menu: `[1] Build`, `[2] Test`, `[3] Run`, `[4] Publish Single-File`, `[5] Verify Integrity`, `[6] Clean`.
+  Provides a clean numbered menu: `[1] Build`, `[2] Test`, `[3] Run`, `[4] Publish Full Release`, `[5] Build Windows Installer (.exe)`, `[6] Verify Integrity`, `[7] Clean`.
 
 - **PowerShell Automation Script (`build.ps1`):**
   ```powershell
@@ -290,23 +290,39 @@ MDPlus includes dual automation scripts for interactive command prompt or headle
   # Launch application
   .\build.ps1 -Action Run
 
-  # Publish single-file binary and generate SHA-256 digests in \dist
+  # Compile Windows Setup Installer (MDPlus-Setup.exe)
+  .\build.ps1 -Action Installer
+
+  # Publish release binaries, installer, source code, and SHA-256 digests in \dist
   .\build.ps1 -Action Publish
 
-  # Verify release binaries and source archives against SHA-256 digests
+  # Verify release binaries, installer, and source archives against SHA-256 digests
   .\build.ps1 -Action Verify
   ```
 
 ---
 
+## 📦 Windows Setup Installer & Prerequisite Bootstrapper
+
+MDPlus provides a native, branded Windows Setup Installer (`dist\MDPlus-Setup.exe`) configured with an intelligent .NET 8 prerequisite bootstrapper:
+
+- **Automatic .NET 8 Runtime Detection:** Setup inspects the Windows Registry, runtime directories, and system paths for `Microsoft.WindowsDesktop.App 8.0.x`.
+- **Zero-Friction Prerequisite Auto-Install:** If the .NET 8 Desktop Runtime is absent, Setup automatically downloads Microsoft's official runtime installer (`https://aka.ms/dotnet/8.0/windowsdesktop-runtime-win-x64.exe`) and executes unattended installation (`/install /quiet /norestart` with UAC elevation support) in both interactive and headless silent (`/SILENT`, `/VERYSILENT`) modes so the user never has to search for dependencies. Setup also detects local copies of the runtime installer placed next to `MDPlus-Setup.exe` for offline deployments.
+- **Windows Shell & App Paths Integration:** Automatically registers Windows file associations for `.md` and `.markdown` files with clean icons (`AppIcon.ico`), a right-click **"Open with MDPlus"** context menu verb, and registers Windows `App Paths` so `mdplus` can be launched directly from `Win+R` or Command Prompt.
+- **Start Menu & Desktop Shortcuts:** Seamless desktop integration with optional desktop shortcut task.
+- **Clean Uninstallation:** Fully registered in Windows Settings **Installed Apps** and Control Panel **Add/Remove Programs** with clean uninstallation support.
+
+---
+
 ## 🛡️ Release Integrity Verification (Notepad++ Standard)
 
-Inspired by the rigorous security and release standards of **Notepad++**, MDPlus publishes official cryptographic **SHA-256** checksums for all distributed assets—including standalone binaries, zip archives, and full source code distributions. This empowers users and system administrators to independently verify that their downloads have not been corrupted, intercepted, or tampered with.
+Inspired by the rigorous security and release standards of **Notepad++**, MDPlus publishes official cryptographic **SHA-256** checksums for all distributed assets—including the Windows Setup installer, standalone binaries, zip archives, and full source code distributions. This empowers users and system administrators to independently verify that their downloads have not been corrupted, intercepted, or tampered with.
 
 ### Official Checksum Manifests
 Every release in `dist\` is accompanied by:
 - `SHA256SUMS.txt` — Standard GNU coreutils checksum manifest.
 - `MDPlus.<version>.checksums.sha256` — Notepad++ compatible checksum manifest.
+- `MDPlus-Setup.exe.sha256` — Windows Setup installer SHA-256 digest.
 - `MDPlus.exe.sha256` — Standalone binary SHA-256 digest.
 - `MDPlus-win-x64.zip.sha256` — Portable release zip archive SHA-256 digest.
 - `MDPlus-1.0.0-src.zip.sha256` — Source distribution archive SHA-256 digest.
@@ -317,10 +333,13 @@ Every release in `dist\` is accompanied by:
 ```powershell
 .\build.ps1 -Action Verify
 ```
-Verifies all compiled artifacts and source archives against the master `SHA256SUMS.txt` manifest.
+Verifies all compiled artifacts, setup installers, and source archives against the master `SHA256SUMS.txt` manifest.
 
 #### Method 2: PowerShell (`Get-FileHash`)
 ```powershell
+# Verify Windows Setup Installer
+Get-FileHash dist\MDPlus-Setup.exe -Algorithm SHA256
+
 # Verify executable
 Get-FileHash dist\MDPlus.exe -Algorithm SHA256
 
@@ -334,6 +353,7 @@ Compare the resulting 64-character hexadecimal hash with the values recorded in 
 
 #### Method 3: Windows Command Prompt (`certutil`)
 ```cmd
+certutil -hashfile dist\MDPlus-Setup.exe SHA256
 certutil -hashfile dist\MDPlus.exe SHA256
 certutil -hashfile dist\MDPlus-win-x64.zip SHA256
 certutil -hashfile dist\MDPlus-1.0.0-src.zip SHA256
@@ -392,7 +412,7 @@ mdplus/
 │       └── AppIcon.ico             # Embedded multi-resolution icon (16x16, 32x32, 48x48, 256x256)
 ├── tests/
 │   ├── MDPlus.Tests.csproj         # Unit test project (.NET 8 console runner)
-│   └── TestRunner.cs               # 55 comprehensive tests covering AST, GFM, Hash & Themes
+│   └── TestRunner.cs               # 58 comprehensive tests covering AST, GFM, Hash, Themes & Installer
 └── sample_docs/
     ├── welcome.md                  # Interactive user guide & feature tour
     ├── gfm_features.md             # Complete GFM specification stress test

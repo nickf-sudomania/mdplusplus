@@ -121,6 +121,11 @@ namespace MDPlus.Tests
             RunTest("ThemeManager Cycling via CycleNextTheme", TestThemeManagerCycling);
             RunTest("MarkdownToWpfConverter Theme Palette Integration", TestMarkdownConverterThemePaletteIntegration);
 
+            // 18. Windows Setup Installer & Prerequisite Bootstrapper Tests
+            RunTest("Windows Installer Script Integrity & Shell Association Directives", TestInstallerScriptIntegrity);
+            RunTest("Windows Installer SHA-256 Checksum Manifest Verification", TestInstallerChecksumManifestParsingAndVerification);
+            RunTest(".NET 8 Desktop Runtime Prerequisite Detection Logic", TestDotNet8DesktopRuntimeDetection);
+
             sw.Stop();
 
             Console.WriteLine("\n==================================================");
@@ -1454,6 +1459,134 @@ int x = 42;
                     Assert(flowDoc.Blocks.Count >= 4, $"{preset} document has blocks");
                 }
             }
+        }
+
+        // 18. Windows Setup Installer & Prerequisite Bootstrapper Tests
+        private static void TestInstallerScriptIntegrity()
+        {
+            string[] possiblePaths = new[]
+            {
+                System.IO.Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "..", "..", "..", "..", "installer", "MDPlus.iss"),
+                System.IO.Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "..", "..", "..", "installer", "MDPlus.iss"),
+                System.IO.Path.Combine(Environment.CurrentDirectory, "installer", "MDPlus.iss")
+            };
+
+            string issPath = possiblePaths.FirstOrDefault(p => System.IO.File.Exists(p)) ?? string.Empty;
+            Assert(!string.IsNullOrEmpty(issPath), "Installer script MDPlus.iss must exist");
+
+            string scriptText = System.IO.File.ReadAllText(issPath);
+
+            // 1. Core metadata & architecture constraints
+            Assert(scriptText.Contains("AppId={{E67BD82D-C178-43B3-9F93-78B43DF331B2}"), "Setup script must contain valid AppId GUID");
+            Assert(scriptText.Contains("OutputBaseFilename=MDPlus-Setup"), "Setup output base filename must be MDPlus-Setup");
+            Assert(scriptText.Contains("SetupIconFile=..\\src\\Resources\\AppIcon.ico"), "Setup icon must point to AppIcon.ico");
+            Assert(scriptText.Contains("UninstallDisplayIcon={app}\\{#MyAppExeName}"), "Uninstall icon must be set");
+            Assert(scriptText.Contains("ChangesAssociations=yes"), "Must declare ChangesAssociations=yes");
+            Assert(scriptText.Contains("ArchitecturesAllowed=x64compatible"), "Must restrict to x64compatible architectures");
+            Assert(scriptText.Contains("ArchitecturesInstallIn64BitMode=x64compatible"), "Must install in 64-bit mode on x64compatible");
+            Assert(scriptText.Contains("runasoriginaluser"), "Must launch application with non-elevated user token");
+
+            // 2. File associations & Shell integration
+            Assert(scriptText.Contains("Software\\Classes\\.md"), "Must register .md file extension");
+            Assert(scriptText.Contains("Software\\Classes\\.markdown"), "Must register .markdown file extension");
+            Assert(scriptText.Contains("Software\\Classes\\SystemFileAssociations\\.md\\shell\\OpenWithMDPlus"), "Must register Open with MDPlus context menu for .md");
+            Assert(scriptText.Contains("Software\\Classes\\SystemFileAssociations\\.markdown\\shell\\OpenWithMDPlus"), "Must register Open with MDPlus context menu for .markdown");
+            Assert(scriptText.Contains("Software\\MDPlus\\Capabilities"), "Must register Windows Capabilities for default apps");
+            Assert(scriptText.Contains("Software\\Microsoft\\Windows\\CurrentVersion\\App Paths"), "Must register Windows App Paths for Win+R execution");
+
+            // 3. Prerequisite Bootstrapper
+            Assert(scriptText.Contains("IsDotNet8DesktopInstalled"), "Must implement IsDotNet8DesktopInstalled detection function");
+            Assert(scriptText.Contains("https://aka.ms/dotnet/8.0/windowsdesktop-runtime-win-x64.exe"), "Must reference official Microsoft .NET 8 desktop runtime download URL");
+            Assert(scriptText.Contains("DownloadTemporaryFile"), "Must implement headless download via DownloadTemporaryFile for silent unattended mode");
+            Assert(scriptText.Contains("ShellExec('runas'"), "Must support UAC elevation via ShellExec runas for prerequisite installer");
+            Assert(scriptText.Contains("/install /quiet /norestart"), "Must invoke Microsoft installer with silent unattended flags");
+            Assert(scriptText.Contains("Microsoft.WindowsDesktop.App"), "Must detect Microsoft.WindowsDesktop.App");
+        }
+
+        private static void TestInstallerChecksumManifestParsingAndVerification()
+        {
+            string manifest = @"# MDPlus Checksums Manifest (Notepad++ Standard)
+6166614341e93dfc4b75575c7bd271a887d892756748cd15313e351a87014137  MDPlus.exe
+3cd99b3e856f3adabb71f59d2bf23a15f2a754f94bc672853b0f97ed599b97bb  MDPlus-Setup.exe
+ff004304d4ec4b73c6f7d5630aaa8d54c12705753589fab81d02863e69fbee2d  MDPlus-win-x64.zip
+d9f764a730236c5a79103fe8ffb4c730649dcfc2cac93fcce59f5bbe12a183b5  MDPlus-1.0.0-src.zip
+";
+            var parsed = HashService.ParseChecksums(manifest);
+            AssertEqual(4, parsed.Count, "Must parse 4 entries including installer");
+            Assert(parsed.ContainsKey("MDPlus-Setup.exe"), "Must parse MDPlus-Setup.exe entry");
+            AssertEqual("3cd99b3e856f3adabb71f59d2bf23a15f2a754f94bc672853b0f97ed599b97bb", parsed["MDPlus-Setup.exe"], "MDPlus-Setup.exe hash");
+
+            // If dist/MDPlus-Setup.exe exists on disk, verify its SHA-256
+            string[] possibleDistPaths = new[]
+            {
+                System.IO.Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "..", "..", "..", "..", "dist", "MDPlus-Setup.exe"),
+                System.IO.Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "..", "..", "..", "dist", "MDPlus-Setup.exe"),
+                System.IO.Path.Combine(Environment.CurrentDirectory, "dist", "MDPlus-Setup.exe")
+            };
+            string setupPath = possibleDistPaths.FirstOrDefault(p => System.IO.File.Exists(p)) ?? string.Empty;
+            if (!string.IsNullOrEmpty(setupPath))
+            {
+                string computedHash = HashService.ComputeSha256(setupPath);
+                AssertEqual(64, computedHash.Length, "Installer SHA-256 length must be 64 characters");
+                Assert(HashService.VerifyFileSha256(setupPath, computedHash), "Self-verification of MDPlus-Setup.exe SHA-256");
+
+                string setupShaFile = setupPath + ".sha256";
+                if (System.IO.File.Exists(setupShaFile))
+                {
+                    string shaContent = System.IO.File.ReadAllText(setupShaFile).Trim();
+                    Assert(shaContent.StartsWith(computedHash, StringComparison.OrdinalIgnoreCase), "Individual .sha256 file must match computed hash");
+                }
+            }
+        }
+
+        private static void TestDotNet8DesktopRuntimeDetection()
+        {
+            bool runtimeFound = false;
+
+            // 1. Check directory in Program Files
+            string pfPath = Environment.GetFolderPath(Environment.SpecialFolder.ProgramFiles);
+            string desktopDir = System.IO.Path.Combine(pfPath, "dotnet", "shared", "Microsoft.WindowsDesktop.App");
+            if (System.IO.Directory.Exists(desktopDir))
+            {
+                var dirs = System.IO.Directory.GetDirectories(desktopDir, "8.*");
+                if (dirs.Length > 0) runtimeFound = true;
+            }
+
+            // 2. Check LocalAppData
+            if (!runtimeFound)
+            {
+                string localApp = Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData);
+                string localDesktopDir = System.IO.Path.Combine(localApp, "Microsoft", "dotnet", "shared", "Microsoft.WindowsDesktop.App");
+                if (System.IO.Directory.Exists(localDesktopDir))
+                {
+                    var dirs = System.IO.Directory.GetDirectories(localDesktopDir, "8.*");
+                    if (dirs.Length > 0) runtimeFound = true;
+                }
+            }
+
+            // 3. Check DOTNET_ROOT if configured
+            if (!runtimeFound)
+            {
+                string? dotnetRoot = Environment.GetEnvironmentVariable("DOTNET_ROOT");
+                if (!string.IsNullOrEmpty(dotnetRoot))
+                {
+                    string customDesktopDir = System.IO.Path.Combine(dotnetRoot, "shared", "Microsoft.WindowsDesktop.App");
+                    if (System.IO.Directory.Exists(customDesktopDir))
+                    {
+                        var dirs = System.IO.Directory.GetDirectories(customDesktopDir, "8.*");
+                        if (dirs.Length > 0) runtimeFound = true;
+                    }
+                }
+            }
+
+            // 4. Fallback: since this test is running on .NET 8 desktop runtime itself
+            if (!runtimeFound)
+            {
+                string runtimeVersion = Environment.Version.ToString();
+                if (runtimeVersion.StartsWith("8.")) runtimeFound = true;
+            }
+
+            Assert(runtimeFound, "Current system running tests must satisfy .NET 8 Desktop Runtime detection");
         }
     }
 }

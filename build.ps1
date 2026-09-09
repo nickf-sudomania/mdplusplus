@@ -15,7 +15,7 @@
 #>
 
 param(
-    [ValidateSet("Build", "Test", "Run", "Publish", "Verify", "Clean")]
+    [ValidateSet("Build", "Test", "Run", "Publish", "Installer", "Verify", "Clean")]
     [string]$Action = "Build"
 )
 
@@ -41,10 +41,83 @@ $solutionPath = Join-Path $PSScriptRoot "MDPlus.sln"
 $srcProjectPath = Join-Path $PSScriptRoot "src\MDPlus.csproj"
 $testsProjectPath = Join-Path $PSScriptRoot "tests\MDPlus.Tests.csproj"
 $distPath = Join-Path $PSScriptRoot "dist"
+$installerScriptPath = Join-Path $PSScriptRoot "installer\MDPlus.iss"
 
 function Get-Sha256Hex([string]$filePath) {
     $hashResult = Get-FileHash -Path $filePath -Algorithm SHA256
     return $hashResult.Hash.ToLowerInvariant()
+}
+
+function Get-InnoSetupCompiler {
+    $cmd = Get-Command iscc -ErrorAction SilentlyContinue
+    if ($cmd) { return $cmd.Source }
+
+    $candidates = @(
+        (Join-Path $env:LOCALAPPDATA "Programs\Inno Setup 6\ISCC.exe"),
+        (Join-Path ${env:ProgramFiles(x86)} "Inno Setup 6\ISCC.exe"),
+        (Join-Path $env:ProgramFiles "Inno Setup 6\ISCC.exe")
+    )
+
+    foreach ($candidate in $candidates) {
+        if (-not [string]::IsNullOrWhiteSpace($candidate) -and (Test-Path $candidate)) {
+            return $candidate
+        }
+    }
+
+    # Registry lookup
+    $regPaths = @(
+        "HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\Inno Setup 6_is1",
+        "HKCU:\SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\Inno Setup 6_is1",
+        "HKLM:\SOFTWARE\WOW6432Node\Microsoft\Windows\CurrentVersion\Uninstall\Inno Setup 6_is1"
+    )
+    foreach ($rp in $regPaths) {
+        if (Test-Path $rp) {
+            $instLoc = (Get-ItemProperty -Path $rp -Name "InstallLocation" -ErrorAction SilentlyContinue).InstallLocation
+            if ($instLoc) {
+                $isccPath = Join-Path $instLoc "ISCC.exe"
+                if (Test-Path $isccPath) { return $isccPath }
+            }
+        }
+    }
+
+    return $null
+}
+
+function Build-InstallerPackage {
+    Write-Host "`n[INFO] Compiling Windows Setup Installer (MDPlus-Setup.exe)..." -ForegroundColor Yellow
+    if (-not (Test-Path $installerScriptPath)) {
+        Write-Error "Installer script not found at '$installerScriptPath'."
+        exit 1
+    }
+
+    $exePath = Join-Path $distPath "MDPlus.exe"
+    if (-not (Test-Path $exePath)) {
+        Write-Host "[INFO] Published binary not found. Building release binary first..." -ForegroundColor Yellow
+        dotnet publish $srcProjectPath -c Release -r win-x64 --self-contained false -p:PublishSingleFile=true -o $distPath
+    }
+
+    $iscc = Get-InnoSetupCompiler
+    if (-not $iscc) {
+        Write-Error "Inno Setup compiler ('ISCC.exe') not found. Please install Inno Setup 6 (e.g. winget install JRSoftware.InnoSetup)."
+        exit 1
+    }
+
+    Write-Host "Using Inno Setup Compiler: $iscc" -ForegroundColor Gray
+    $isccOutput = & $iscc $installerScriptPath /O"$distPath" /F"MDPlus-Setup"
+    if ($LASTEXITCODE -ne 0) {
+        if ($isccOutput) { Write-Host ($isccOutput -join "`n") -ForegroundColor Red }
+        Write-Error "Inno Setup compilation failed with exit code $LASTEXITCODE."
+        exit 1
+    }
+
+    $setupPath = Join-Path $distPath "MDPlus-Setup.exe"
+    if (-not (Test-Path $setupPath)) {
+        Write-Error "Setup installer executable not found at '$setupPath'."
+        exit 1
+    }
+
+    Write-Host "[SUCCESS] Windows Setup Installer generated: $setupPath" -ForegroundColor Green
+    return $setupPath
 }
 
 switch ($Action) {
@@ -63,6 +136,40 @@ switch ($Action) {
     "Run" {
         Write-Host "[INFO] Starting MDPlus..." -ForegroundColor Yellow
         dotnet run --project $srcProjectPath
+    }
+
+    "Installer" {
+        if (-not (Test-Path $distPath)) {
+            New-Item -ItemType Directory -Path $distPath | Out-Null
+        }
+        $setupPath = Build-InstallerPackage
+        $setupHash = Get-Sha256Hex $setupPath
+        Set-Content -Path (Join-Path $distPath "MDPlus-Setup.exe.sha256") -Value "$setupHash  MDPlus-Setup.exe"
+        
+        $sumsFile = Join-Path $distPath "SHA256SUMS.txt"
+        if (Test-Path $sumsFile) {
+            $lines = Get-Content $sumsFile
+            $newLines = @()
+            $found = $false
+            foreach ($line in $lines) {
+                if ($line -match '\s+MDPlus-Setup\.exe$') {
+                    $newLines += "$setupHash  MDPlus-Setup.exe"
+                    $found = $true
+                } else {
+                    $newLines += $line
+                }
+            }
+            if (-not $found) { $newLines += "$setupHash  MDPlus-Setup.exe" }
+            $newContent = ($newLines -join "`n") + "`n"
+            Set-Content -Path $sumsFile -Value $newContent
+            $nppChecksum = Join-Path $distPath "MDPlus.1.0.0.checksums.sha256"
+            if (Test-Path $nppChecksum) {
+                Set-Content -Path $nppChecksum -Value $newContent
+            }
+            Write-Host "Updated SHA256SUMS.txt and MDPlus.1.0.0.checksums.sha256 with installer hash." -ForegroundColor DarkGray
+        }
+
+        Write-Host "`nSHA-256: $setupHash  MDPlus-Setup.exe" -ForegroundColor DarkCyan
     }
 
     "Publish" {
@@ -117,6 +224,9 @@ switch ($Action) {
         Copy-Item (Join-Path $PSScriptRoot "tests") -Destination $srcStagingDir -Recurse -Exclude @("bin", "obj")
         if (Test-Path (Join-Path $srcStagingDir "tests\bin")) { Remove-Item (Join-Path $srcStagingDir "tests\bin") -Recurse -Force }
         if (Test-Path (Join-Path $srcStagingDir "tests\obj")) { Remove-Item (Join-Path $srcStagingDir "tests\obj") -Recurse -Force }
+        if (Test-Path (Join-Path $PSScriptRoot "installer")) {
+            Copy-Item (Join-Path $PSScriptRoot "installer") -Destination $srcStagingDir -Recurse
+        }
         if (Test-Path (Join-Path $PSScriptRoot "sample_docs")) {
             Copy-Item (Join-Path $PSScriptRoot "sample_docs") -Destination $srcStagingDir -Recurse
         }
@@ -129,22 +239,28 @@ switch ($Action) {
         Compress-Archive -Path "$srcStagingDir\*" -DestinationPath $srcZipPath -Force
         Remove-Item (Join-Path $distPath "src_staging") -Recurse -Force
 
-        # 4. Generate cryptographic SHA-256 hashes (Notepad++ release integrity standard)
+        # 4. Package Windows Setup Installer with .NET 8 bootstrapper
+        $setupPath = Build-InstallerPackage
+
+        # 5. Generate cryptographic SHA-256 hashes (Notepad++ release integrity standard)
         Write-Host "`n[INFO] Calculating cryptographic SHA-256 hashes..." -ForegroundColor Yellow
         $exeHash = Get-Sha256Hex $exePath
         $zipHash = Get-Sha256Hex $zipPath
         $srcHash = Get-Sha256Hex $srcZipPath
+        $setupHash = Get-Sha256Hex $setupPath
 
         # Write individual hash files
         Set-Content -Path (Join-Path $distPath "MDPlus.exe.sha256") -Value "$exeHash  MDPlus.exe"
         Set-Content -Path (Join-Path $distPath "MDPlus-win-x64.zip.sha256") -Value "$zipHash  MDPlus-win-x64.zip"
         Set-Content -Path (Join-Path $distPath "MDPlus-1.0.0-src.zip.sha256") -Value "$srcHash  MDPlus-1.0.0-src.zip"
+        Set-Content -Path (Join-Path $distPath "MDPlus-Setup.exe.sha256") -Value "$setupHash  MDPlus-Setup.exe"
 
         # Write Notepad++ style unified checksum file (npp.<version>.checksums.sha256 standard)
         $checksumContent = @"
 $exeHash  MDPlus.exe
 $zipHash  MDPlus-win-x64.zip
 $srcHash  MDPlus-1.0.0-src.zip
+$setupHash  MDPlus-Setup.exe
 "@
         Set-Content -Path (Join-Path $distPath "SHA256SUMS.txt") -Value $checksumContent
         Set-Content -Path (Join-Path $distPath "MDPlus.1.0.0.checksums.sha256") -Value $checksumContent
@@ -155,6 +271,8 @@ $srcHash  MDPlus-1.0.0-src.zip
         Write-Host "Release Artifacts in '$distPath':" -ForegroundColor White
         Write-Host "  • MDPlus.exe" -ForegroundColor Cyan
         Write-Host "    SHA-256: $exeHash" -ForegroundColor DarkCyan
+        Write-Host "  • MDPlus-Setup.exe (Windows Setup Installer)" -ForegroundColor Cyan
+        Write-Host "    SHA-256: $setupHash" -ForegroundColor DarkCyan
         Write-Host "  • MDPlus-win-x64.zip" -ForegroundColor Cyan
         Write-Host "    SHA-256: $zipHash" -ForegroundColor DarkCyan
         Write-Host "  • MDPlus-1.0.0-src.zip (Source Code Archive)" -ForegroundColor Cyan
@@ -164,7 +282,7 @@ $srcHash  MDPlus-1.0.0-src.zip
         Write-Host ""
         Write-Host "To verify download integrity, run:" -ForegroundColor Gray
         Write-Host "  .\build.ps1 -Action Verify" -ForegroundColor Yellow
-        Write-Host "  Get-FileHash dist\MDPlus.exe -Algorithm SHA256" -ForegroundColor Yellow
+        Write-Host "  Get-FileHash dist\MDPlus-Setup.exe -Algorithm SHA256" -ForegroundColor Yellow
     }
 
     "Verify" {
