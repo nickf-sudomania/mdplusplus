@@ -64,7 +64,9 @@
                             Padding="3" 
                             CornerRadius="4"
                             SnapsToDevicePixels="True">
-                        <ScrollViewer x:Name="SubMenuScrollViewer" CanContentScroll="True">
+                        <ScrollViewer x:Name="SubMenuScrollViewer" CanContentScroll="True"
+                                      VerticalScrollBarVisibility="Disabled"
+                                      HorizontalScrollBarVisibility="Disabled">
                             <ItemsPresenter x:Name="ItemsPresenter" 
                                             KeyboardNavigation.DirectionalNavigation="Cycle" 
                                             KeyboardNavigation.TabNavigation="Cycle" 
@@ -222,7 +224,9 @@
                             Padding="3" 
                             CornerRadius="4"
                             SnapsToDevicePixels="True">
-                        <ScrollViewer x:Name="SubMenuScrollViewer" CanContentScroll="True">
+                        <ScrollViewer x:Name="SubMenuScrollViewer" CanContentScroll="True"
+                                      VerticalScrollBarVisibility="Disabled"
+                                      HorizontalScrollBarVisibility="Disabled">
                             <ItemsPresenter x:Name="ItemsPresenter" 
                                             KeyboardNavigation.DirectionalNavigation="Cycle" 
                                             KeyboardNavigation.TabNavigation="Cycle" 
@@ -291,7 +295,9 @@
                                 Padding="{TemplateBinding Padding}"
                                 CornerRadius="4"
                                 SnapsToDevicePixels="True">
-                            <ScrollViewer CanContentScroll="True">
+                            <ScrollViewer x:Name="SubMenuScrollViewer" CanContentScroll="True"
+                                          VerticalScrollBarVisibility="Disabled"
+                                          HorizontalScrollBarVisibility="Disabled">
                                 <ItemsPresenter KeyboardNavigation.DirectionalNavigation="Cycle" 
                                                 SnapsToDevicePixels="True"/>
                             </ScrollViewer>

@@ -15,6 +15,7 @@
         Drop="Window_Drop"
         DragOver="Window_DragOver"
         KeyDown="Window_KeyDown"
+        KeyUp="Window_KeyUp"
         Closing="Window_Closing">
 
     <Grid Name="RootGrid" Background="#1e1e1e">
@@ -32,7 +33,7 @@
         </Grid.RowDefinitions>
 
         <!-- 1. Menu Bar -->
-        <Menu Grid.Row="0" Name="MainMenu" Background="#2d2d30" Foreground="#cccccc" Padding="4,2,4,2" BorderThickness="0,0,0,1" BorderBrush="#3f3f46">
+        <Menu Grid.Row="0" Name="MainMenu" Visibility="Collapsed" Background="{DynamicResource MenuBackgroundBrush}" Foreground="{DynamicResource MenuForegroundBrush}" Padding="4,2,4,2" BorderThickness="0,0,0,1" BorderBrush="{DynamicResource BorderBrush}">
             <MenuItem Header="_File">
                 <MenuItem Header="_New Tab" InputGestureText="Ctrl+N" Click="NewTab_Click" />
                 <MenuItem Header="_Open File..." InputGestureText="Ctrl+O" Click="OpenFile_Click" />
@@ -67,6 +68,7 @@
                 <MenuItem Header="Zoom _Out" InputGestureText="Ctrl+-" Click="ZoomOut_Click" />
                 <MenuItem Header="_Reset Zoom" InputGestureText="Ctrl+0" Click="ResetZoom_Click" />
                 <Separator />
+                <MenuItem Header="Toggle _Menu Bar" InputGestureText="Ctrl+M" IsCheckable="True" Name="ToggleMenuBarMenuItem" Click="ToggleMenuBar_Click" />
                 <MenuItem Header="Table of _Contents" InputGestureText="Ctrl+T" IsCheckable="True" Name="TocMenuItem" Click="ToggleToc_Click" />
                 <Separator />
                 <MenuItem Header="View Mode">
@@ -104,15 +106,119 @@
 
         <!-- 2. Tab Bar -->
         <Border Grid.Row="1" Name="TabBarBorder" Background="#252526" BorderThickness="0,0,0,1" BorderBrush="#3f3f46">
-            <ScrollViewer HorizontalScrollBarVisibility="Auto" VerticalScrollBarVisibility="Disabled" Focusable="False">
-                <StackPanel Name="TabStripPanel" Orientation="Horizontal">
-                    <!-- Dynamic Document Tabs added in code -->
-                    <Button Name="NewTabButton" Content="+" Width="30" Height="28" Margin="4,2,4,2" 
-                            Click="NewTab_Click" ToolTip="New Tab (Ctrl+N)"
-                            Background="Transparent" Foreground="#888888" BorderThickness="0" 
-                            FontSize="16" FontWeight="Bold" Cursor="Hand"/>
-                </StackPanel>
-            </ScrollViewer>
+            <Grid>
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="Auto" />
+                    <ColumnDefinition Width="*" />
+                </Grid.ColumnDefinitions>
+
+                <Button Grid.Column="0" Name="HamburgerMenuButton" Content="☰" Width="30" Height="26" Margin="4,2,2,2" 
+                        Click="HamburgerMenu_Click" ToolTip="Menu (Alt or Ctrl+M)"
+                        Background="Transparent" Foreground="{DynamicResource MutedForegroundBrush}" BorderThickness="0" 
+                        FontSize="15" Cursor="Hand" Focusable="False">
+                    <Button.Template>
+                        <ControlTemplate TargetType="Button">
+                            <Border x:Name="BtnBorder" Background="{TemplateBinding Background}" CornerRadius="3" Padding="4,2,4,2" SnapsToDevicePixels="True">
+                                <ContentPresenter x:Name="BtnContent" HorizontalAlignment="Center" VerticalAlignment="Center" RecognizesAccessKey="True"/>
+                            </Border>
+                            <ControlTemplate.Triggers>
+                                <Trigger Property="IsMouseOver" Value="True">
+                                    <Setter TargetName="BtnBorder" Property="Background" Value="{DynamicResource MenuHoverBackgroundBrush}"/>
+                                    <Setter TargetName="BtnContent" Property="TextElement.Foreground" Value="{DynamicResource MenuHoverForegroundBrush}"/>
+                                </Trigger>
+                                <Trigger Property="IsPressed" Value="True">
+                                    <Setter TargetName="BtnBorder" Property="Background" Value="{DynamicResource MenuHoverBackgroundBrush}"/>
+                                </Trigger>
+                            </ControlTemplate.Triggers>
+                        </ControlTemplate>
+                    </Button.Template>
+                    <Button.ContextMenu>
+                        <ContextMenu x:Name="HamburgerContextMenu" Placement="Bottom">
+                            <MenuItem Header="_File">
+                                <MenuItem Header="_New Tab" InputGestureText="Ctrl+N" Click="NewTab_Click" />
+                                <MenuItem Header="_Open File..." InputGestureText="Ctrl+O" Click="OpenFile_Click" />
+                                <MenuItem Header="_Save" InputGestureText="Ctrl+S" Click="SaveFile_Click" />
+                                <MenuItem Header="Save _As..." InputGestureText="Ctrl+Shift+S" Click="SaveAsFile_Click" />
+                                <MenuItem Header="Open _Containing Folder" Click="OpenFolder_Click" />
+                                <Separator />
+                                <MenuItem Header="_Reload" InputGestureText="F5" Click="Reload_Click" />
+                                <MenuItem Header="_Close Tab" InputGestureText="Ctrl+W" Click="CloseTab_Click" />
+                                <MenuItem Header="Close _All Tabs" Click="CloseAllTabs_Click" />
+                                <Separator />
+                                <MenuItem Header="Export as _HTML..." InputGestureText="Ctrl+Shift+E" Click="ExportHtml_Click" />
+                                <MenuItem Header="Copy as HTML" InputGestureText="Ctrl+Shift+H" Click="CopyHtml_Click" />
+                                <MenuItem Header="_Print..." InputGestureText="Ctrl+P" Click="Print_Click" />
+                                <Separator />
+                                <MenuItem Header="_Recent Files" Name="HamburgerRecentFilesMenu" />
+                                <Separator />
+                                <MenuItem Header="E_xit" InputGestureText="Alt+F4" Click="Exit_Click" />
+                            </MenuItem>
+
+                            <MenuItem Header="_Edit">
+                                <MenuItem Header="_Copy" InputGestureText="Ctrl+C" Click="Copy_Click" />
+                                <MenuItem Header="Select _All" InputGestureText="Ctrl+A" Click="SelectAll_Click" />
+                                <Separator />
+                                <MenuItem Header="_Find..." InputGestureText="Ctrl+F" Click="Find_Click" />
+                                <MenuItem Header="Find _Next" InputGestureText="F3" Click="FindNext_Click" />
+                                <MenuItem Header="Find _Previous" InputGestureText="Shift+F3" Click="FindPrevious_Click" />
+                            </MenuItem>
+
+                            <MenuItem Header="_View">
+                                <MenuItem Header="Zoom _In" InputGestureText="Ctrl++" Click="ZoomIn_Click" />
+                                <MenuItem Header="Zoom _Out" InputGestureText="Ctrl+-" Click="ZoomOut_Click" />
+                                <MenuItem Header="_Reset Zoom" InputGestureText="Ctrl+0" Click="ResetZoom_Click" />
+                                <Separator />
+                                <MenuItem Header="Toggle _Menu Bar" InputGestureText="Ctrl+M" IsCheckable="True" Name="HamburgerViewToggleMenuBarItem" Click="ToggleMenuBar_Click" />
+                                <MenuItem Header="Table of _Contents" InputGestureText="Ctrl+T" IsCheckable="True" Name="HamburgerTocMenuItem" Click="ToggleToc_Click" />
+                                <Separator />
+                                <MenuItem Header="View Mode">
+                                    <MenuItem Header="_Rendered Only" InputGestureText="Ctrl+1" IsCheckable="True" IsChecked="True" Name="HamburgerViewRenderedItem" Click="ViewRendered_Click" />
+                                    <MenuItem Header="_Split View (Rendered + Raw)" InputGestureText="Ctrl+2" IsCheckable="True" Name="HamburgerViewSplitItem" Click="ViewSplit_Click" />
+                                    <MenuItem Header="_Raw Markdown Only" InputGestureText="Ctrl+3" IsCheckable="True" Name="HamburgerViewRawItem" Click="ViewRaw_Click" />
+                                </MenuItem>
+                                <MenuItem Header="_Word Wrap" IsCheckable="True" Name="HamburgerWordWrapMenuItem" Click="ToggleWordWrap_Click" />
+                                <Separator />
+                                <MenuItem Header="_Theme" Name="HamburgerThemeMenu">
+                                    <MenuItem Header="_GitHub Dark" Click="ThemePreset_Click" Tag="GitHubDark" IsCheckable="True" Name="HamburgerThemeGitHubDarkItem" />
+                                    <MenuItem Header="GitHub _Light" Click="ThemePreset_Click" Tag="GitHubLight" IsCheckable="True" Name="HamburgerThemeGitHubLightItem" />
+                                    <MenuItem Header="_Nord" Click="ThemePreset_Click" Tag="Nord" IsCheckable="True" Name="HamburgerThemeNordItem" />
+                                    <MenuItem Header="_One Dark" Click="ThemePreset_Click" Tag="OneDark" IsCheckable="True" Name="HamburgerThemeOneDarkItem" />
+                                    <MenuItem Header="_Monokai" Click="ThemePreset_Click" Tag="Monokai" IsCheckable="True" Name="HamburgerThemeMonokaiItem" />
+                                    <Separator />
+                                    <MenuItem Header="_Cycle Next Theme" InputGestureText="F8" Click="CycleTheme_Click" />
+                                </MenuItem>
+                                <MenuItem Header="Full _Screen" InputGestureText="F11" Click="ToggleFullscreen_Click" />
+                            </MenuItem>
+
+                            <MenuItem Header="_Tools">
+                                <MenuItem Header="Verify File _Integrity (SHA-256)..." Click="ToolsVerifyIntegrity_Click" />
+                            </MenuItem>
+
+                            <MenuItem Header="_Help">
+                                <MenuItem Header="Markdown _Reference" Click="HelpMarkdownRef_Click" />
+                                <MenuItem Header="_Keyboard Shortcuts" Click="HelpShortcuts_Click" />
+                                <Separator />
+                                <MenuItem Header="Verify _Release Integrity (SHA-256)..." Click="ToolsVerifyIntegrity_Click" />
+                                <Separator />
+                                <MenuItem Header="_About MDPlus" Click="HelpAbout_Click" />
+                            </MenuItem>
+
+                            <Separator />
+                            <MenuItem Header="Toggle _Menu Bar" InputGestureText="Ctrl+M" IsCheckable="True" Name="HamburgerToggleMenuBarItem" Click="ToggleMenuBar_Click" />
+                        </ContextMenu>
+                    </Button.ContextMenu>
+                </Button>
+
+                <ScrollViewer Grid.Column="1" HorizontalScrollBarVisibility="Auto" VerticalScrollBarVisibility="Disabled" Focusable="False">
+                    <StackPanel Name="TabStripPanel" Orientation="Horizontal">
+                        <!-- Dynamic Document Tabs added in code -->
+                        <Button Name="NewTabButton" Content="+" Width="30" Height="28" Margin="4,2,4,2" 
+                                Click="NewTab_Click" ToolTip="New Tab (Ctrl+N)"
+                                Background="Transparent" Foreground="#888888" BorderThickness="0" 
+                                FontSize="16" FontWeight="Bold" Cursor="Hand"/>
+                    </StackPanel>
+                </ScrollViewer>
+            </Grid>
         </Border>
 
         <!-- 3. Find Bar (Docked) -->

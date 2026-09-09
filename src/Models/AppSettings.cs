@@ -18,6 +18,7 @@ namespace MDPlus.Models
         [JsonConverter(typeof(JsonStringEnumConverter))]
         public ThemePreset Theme { get; set; } = ThemePreset.GitHubDark;
 
+        public bool ShowMenuBar { get; set; } = false;
         public bool ShowToc { get; set; } = true;
         public bool ShowLineNumbers { get; set; } = true;
         public bool AutoReload { get; set; } = true;

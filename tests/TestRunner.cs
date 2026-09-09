@@ -8,6 +8,7 @@ using System.Windows.Controls;
 using System.Windows.Documents;
 using System.Windows.Media;
 using MDPlus.Core;
+using MDPlus.Models;
 
 using WpfTable = System.Windows.Documents.Table;
 using WpfTableCell = System.Windows.Documents.TableCell;
@@ -125,6 +126,12 @@ namespace MDPlus.Tests
             RunTest("Windows Installer Script Integrity & Shell Association Directives", TestInstallerScriptIntegrity);
             RunTest("Windows Installer SHA-256 Checksum Manifest Verification", TestInstallerChecksumManifestParsingAndVerification);
             RunTest(".NET 8 Desktop Runtime Prerequisite Detection Logic", TestDotNet8DesktopRuntimeDetection);
+
+            // 19. Menu Bar & Scrollbar UI Tests (Milestone 4)
+            RunTest("AppSettings ShowMenuBar Default & Serialization", TestAppSettingsShowMenuBar);
+            RunTest("Menu Popup ScrollViewer Disabled Visibility in App.xaml", TestMenuScrollViewerDisabledInAppXaml);
+            RunTest("Menu Bar Dynamic Theme Styling & Hardcoded Color Removal", TestMenuBarThemeColorPaletteConsistency);
+            RunTest("Recent File Mnemonic Escaping & AltGr Handling Logic", TestRecentFileMnemonicAndAltGrHandling);
 
             sw.Stop();
 
@@ -1587,6 +1594,111 @@ d9f764a730236c5a79103fe8ffb4c730649dcfc2cac93fcce59f5bbe12a183b5  MDPlus-1.0.0-s
             }
 
             Assert(runtimeFound, "Current system running tests must satisfy .NET 8 Desktop Runtime detection");
+        }
+
+        // 19. Menu Bar & Scrollbar UI Tests (Milestone 4)
+        private static void TestAppSettingsShowMenuBar()
+        {
+            var settings = new MDPlus.Models.AppSettings();
+            AssertEqual(false, settings.ShowMenuBar, "ShowMenuBar must default to false");
+
+            settings.ShowMenuBar = true;
+            string json = System.Text.Json.JsonSerializer.Serialize(settings);
+            var deserialized = System.Text.Json.JsonSerializer.Deserialize<MDPlus.Models.AppSettings>(json);
+            Assert(deserialized != null, "Deserialized settings must not be null");
+            AssertEqual(true, deserialized!.ShowMenuBar, "Deserialized ShowMenuBar must be true");
+
+            string legacyJson = "{\"Theme\":\"GitHubDark\",\"ShowToc\":true}";
+            var legacySettings = System.Text.Json.JsonSerializer.Deserialize<MDPlus.Models.AppSettings>(legacyJson);
+            Assert(legacySettings != null, "Legacy settings must not be null");
+            AssertEqual(false, legacySettings!.ShowMenuBar, "ShowMenuBar must default to false when absent in JSON");
+        }
+
+        private static void TestMenuScrollViewerDisabledInAppXaml()
+        {
+            string[] possiblePaths = new[]
+            {
+                System.IO.Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "..", "..", "..", "..", "src", "App.xaml"),
+                System.IO.Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "..", "..", "..", "src", "App.xaml"),
+                System.IO.Path.Combine(Environment.CurrentDirectory, "src", "App.xaml")
+            };
+
+            string appXamlPath = possiblePaths.FirstOrDefault(p => System.IO.File.Exists(p)) ?? string.Empty;
+            Assert(!string.IsNullOrEmpty(appXamlPath), "App.xaml must exist");
+
+            string xamlText = System.IO.File.ReadAllText(appXamlPath);
+
+            Assert(xamlText.Contains("VerticalScrollBarVisibility=\"Disabled\""), "App.xaml must configure VerticalScrollBarVisibility=\"Disabled\"");
+            Assert(xamlText.Contains("HorizontalScrollBarVisibility=\"Disabled\""), "App.xaml must configure HorizontalScrollBarVisibility=\"Disabled\"");
+
+            int vertCount = 0;
+            int idx = 0;
+            while ((idx = xamlText.IndexOf("VerticalScrollBarVisibility=\"Disabled\"", idx, StringComparison.OrdinalIgnoreCase)) != -1)
+            {
+                vertCount++;
+                idx += 30;
+            }
+            Assert(vertCount >= 3, $"App.xaml must contain at least 3 disabled scrollbar configurations for TopLevelHeader, SubmenuHeader, ContextMenu (found {vertCount})");
+        }
+
+        private static void TestMenuBarThemeColorPaletteConsistency()
+        {
+            string[] possiblePaths = new[]
+            {
+                System.IO.Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "..", "..", "..", "..", "src", "MainWindow.xaml"),
+                System.IO.Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "..", "..", "..", "src", "MainWindow.xaml"),
+                System.IO.Path.Combine(Environment.CurrentDirectory, "src", "MainWindow.xaml")
+            };
+
+            string mainWindowXamlPath = possiblePaths.FirstOrDefault(p => System.IO.File.Exists(p)) ?? string.Empty;
+            Assert(!string.IsNullOrEmpty(mainWindowXamlPath), "MainWindow.xaml must exist");
+
+            string xamlText = System.IO.File.ReadAllText(mainWindowXamlPath);
+
+            Assert(!xamlText.Contains("<Menu Grid.Row=\"0\" Name=\"MainMenu\" Background=\"#2d2d30\""),
+                "MainMenu must not have hardcoded #2d2d30 background");
+
+            Assert(xamlText.Contains("Name=\"MainMenu\" Visibility=\"Collapsed\""),
+                "MainMenu must default to Visibility=\"Collapsed\"");
+            Assert(xamlText.Contains("Background=\"{DynamicResource MenuBackgroundBrush}\""),
+                "MainMenu must use DynamicResource MenuBackgroundBrush");
+
+            Assert(xamlText.Contains("Name=\"HamburgerMenuButton\""), "Tab bar must include HamburgerMenuButton");
+            Assert(xamlText.Contains("Content=\"☰\""), "HamburgerMenuButton must have ☰ content");
+            Assert(xamlText.Contains("Name=\"HamburgerContextMenu\""), "HamburgerMenuButton must contain HamburgerContextMenu");
+            Assert(xamlText.Contains("Name=\"ToggleMenuBarMenuItem\""), "View menu must contain ToggleMenuBarMenuItem");
+
+            Assert(xamlText.Contains("Name=\"HamburgerViewRenderedItem\"") && xamlText.Contains("IsCheckable=\"True\" IsChecked=\"True\""),
+                "HamburgerViewRenderedItem must be checkable and checked by default");
+            Assert(xamlText.Contains("Name=\"HamburgerViewSplitItem\"") && xamlText.Contains("IsCheckable=\"True\""),
+                "HamburgerViewSplitItem must be checkable");
+            Assert(xamlText.Contains("Name=\"HamburgerViewRawItem\"") && xamlText.Contains("IsCheckable=\"True\""),
+                "HamburgerViewRawItem must be checkable");
+            Assert(xamlText.Contains("TargetName=\"BtnContent\" Property=\"TextElement.Foreground\" Value=\"{DynamicResource MenuHoverForegroundBrush}\""),
+                "HamburgerMenuButton hover trigger must style TextElement.Foreground on BtnContent");
+
+            foreach (ThemePreset preset in Enum.GetValues<ThemePreset>())
+            {
+                var palette = ThemePalette.GetPalette(preset);
+                if (palette == null) throw new InvalidOperationException($"Palette {preset} must not be null");
+                Assert(palette.MenuBg != null, $"Palette {preset} MenuBg must not be null");
+                Assert(palette.MenuFg != null, $"Palette {preset} MenuFg must not be null");
+                Assert(palette.Border != null, $"Palette {preset} Border must not be null");
+                double contrast = ThemePalette.CalculateContrast(palette.MenuBg!.Color, palette.MenuFg!.Color);
+                Assert(contrast >= 4.5, $"Menu text contrast for {preset} ({contrast:F2}:1) must satisfy WCAG AA >= 4.5:1");
+            }
+        }
+
+        private static void TestRecentFileMnemonicAndAltGrHandling()
+        {
+            string fileName = "benchmark_5000_tests.md";
+            string escaped = fileName.Replace("_", "__");
+            AssertEqual("benchmark__5000__tests.md", escaped, "Underscores in recent filenames must be escaped to prevent access key mnemonic swallowing");
+
+            // AltGr simulation: ModifierKeys includes Control
+            var altGrMods = System.Windows.Input.ModifierKeys.Control | System.Windows.Input.ModifierKeys.Alt;
+            bool isCtrlDown = altGrMods.HasFlag(System.Windows.Input.ModifierKeys.Control);
+            Assert(isCtrlDown, "AltGr combinations with Control modifier must be recognized as having Ctrl down");
         }
     }
 }

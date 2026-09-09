@@ -30,10 +30,13 @@ namespace MDPlus
         private bool _isSyncingScroll = false;
         private bool _suppressDirtyTracking = false;
         private int _untitledIndex = 1;
+        private bool _altKeyCandidate = false;
+        private DateTime _lastHamburgerClosedTime = DateTime.MinValue;
 
         public MainWindow()
         {
             InitializeComponent();
+            Deactivated += (s, e) => _altKeyCandidate = false;
 
             _settings = AppSettings.Load();
             ThemeManager.Instance.SetPreset(_settings.Theme);
@@ -54,10 +57,18 @@ namespace MDPlus
             ApplyTheme();
             BuildRecentFilesMenu();
 
+            SetMenuBarVisibility(_settings.ShowMenuBar);
+            if (HamburgerContextMenu != null)
+            {
+                HamburgerContextMenu.Closed += (s, e) => _lastHamburgerClosedTime = DateTime.UtcNow;
+            }
+
             TocMenuItem.IsChecked = _settings.ShowToc;
+            if (HamburgerTocMenuItem != null) HamburgerTocMenuItem.IsChecked = _settings.ShowToc;
             SetSidebarVisibility(_settings.ShowToc);
 
             WordWrapMenuItem.IsChecked = _settings.WordWrap;
+            if (HamburgerWordWrapMenuItem != null) HamburgerWordWrapMenuItem.IsChecked = _settings.WordWrap;
             RawMarkdownTextBox.TextWrapping = _settings.WordWrap ? TextWrapping.Wrap : TextWrapping.NoWrap;
 
             Width = _settings.WindowWidth;
@@ -731,6 +742,9 @@ Console.WriteLine($""Parsed {doc.Blocks.Count} blocks in 2ms!"");
                     ViewRenderedItem.IsChecked = true;
                     ViewSplitItem.IsChecked = false;
                     ViewRawItem.IsChecked = false;
+                    if (HamburgerViewRenderedItem != null) HamburgerViewRenderedItem.IsChecked = true;
+                    if (HamburgerViewSplitItem != null) HamburgerViewSplitItem.IsChecked = false;
+                    if (HamburgerViewRawItem != null) HamburgerViewRawItem.IsChecked = false;
                     break;
 
                 case ViewDisplayMode.Split:
@@ -743,6 +757,9 @@ Console.WriteLine($""Parsed {doc.Blocks.Count} blocks in 2ms!"");
                     ViewRenderedItem.IsChecked = false;
                     ViewSplitItem.IsChecked = true;
                     ViewRawItem.IsChecked = false;
+                    if (HamburgerViewRenderedItem != null) HamburgerViewRenderedItem.IsChecked = false;
+                    if (HamburgerViewSplitItem != null) HamburgerViewSplitItem.IsChecked = true;
+                    if (HamburgerViewRawItem != null) HamburgerViewRawItem.IsChecked = false;
                     break;
 
                 case ViewDisplayMode.Raw:
@@ -755,6 +772,9 @@ Console.WriteLine($""Parsed {doc.Blocks.Count} blocks in 2ms!"");
                     ViewRenderedItem.IsChecked = false;
                     ViewSplitItem.IsChecked = false;
                     ViewRawItem.IsChecked = true;
+                    if (HamburgerViewRenderedItem != null) HamburgerViewRenderedItem.IsChecked = false;
+                    if (HamburgerViewSplitItem != null) HamburgerViewSplitItem.IsChecked = false;
+                    if (HamburgerViewRawItem != null) HamburgerViewRawItem.IsChecked = true;
                     break;
             }
 
@@ -770,6 +790,7 @@ Console.WriteLine($""Parsed {doc.Blocks.Count} blocks in 2ms!"");
                 SidebarBorder.Visibility = Visibility.Visible;
                 SidebarSplitter.Visibility = Visibility.Visible;
                 TocMenuItem.IsChecked = true;
+                if (HamburgerTocMenuItem != null) HamburgerTocMenuItem.IsChecked = true;
             }
             else
             {
@@ -778,6 +799,7 @@ Console.WriteLine($""Parsed {doc.Blocks.Count} blocks in 2ms!"");
                 SidebarBorder.Visibility = Visibility.Collapsed;
                 SidebarSplitter.Visibility = Visibility.Collapsed;
                 TocMenuItem.IsChecked = false;
+                if (HamburgerTocMenuItem != null) HamburgerTocMenuItem.IsChecked = false;
             }
         }
 
@@ -793,6 +815,7 @@ Console.WriteLine($""Parsed {doc.Blocks.Count} blocks in 2ms!"");
 
             TabBarBorder.Background = palette.SidebarBg;
             TabBarBorder.BorderBrush = palette.Border;
+            if (NewTabButton != null) NewTabButton.Foreground = palette.MutedFg;
 
             SidebarBorder.Background = palette.SidebarBg;
             SidebarBorder.BorderBrush = palette.Border;
@@ -829,18 +852,29 @@ Console.WriteLine($""Parsed {doc.Blocks.Count} blocks in 2ms!"");
 
         private void BuildRecentFilesMenu()
         {
-            RecentFilesMenu.Items.Clear();
+            PopulateRecentMenu(RecentFilesMenu);
+            if (HamburgerRecentFilesMenu != null)
+            {
+                PopulateRecentMenu(HamburgerRecentFilesMenu);
+            }
+        }
+
+        private void PopulateRecentMenu(MenuItem menu)
+        {
+            if (menu == null) return;
+            menu.Items.Clear();
 
             if (_settings.RecentFiles.Count == 0)
             {
                 var emptyItem = new MenuItem { Header = "No recent files", IsEnabled = false };
-                RecentFilesMenu.Items.Add(emptyItem);
+                menu.Items.Add(emptyItem);
                 return;
             }
 
             foreach (var file in _settings.RecentFiles)
             {
-                var item = new MenuItem { Header = Path.GetFileName(file), ToolTip = file };
+                string headerText = Path.GetFileName(file)?.Replace("_", "__") ?? file;
+                var item = new MenuItem { Header = headerText, ToolTip = file };
                 string target = file;
                 item.Click += (s, e) =>
                 {
@@ -856,10 +890,10 @@ Console.WriteLine($""Parsed {doc.Blocks.Count} blocks in 2ms!"");
                         BuildRecentFilesMenu();
                     }
                 };
-                RecentFilesMenu.Items.Add(item);
+                menu.Items.Add(item);
             }
 
-            RecentFilesMenu.Items.Add(new Separator());
+            menu.Items.Add(new Separator());
             var clearItem = new MenuItem { Header = "Clear Recent Files" };
             clearItem.Click += (s, e) =>
             {
@@ -867,7 +901,7 @@ Console.WriteLine($""Parsed {doc.Blocks.Count} blocks in 2ms!"");
                 _settings.Save();
                 BuildRecentFilesMenu();
             };
-            RecentFilesMenu.Items.Add(clearItem);
+            menu.Items.Add(clearItem);
         }
 
         // --- Event Handlers & Actions ---
@@ -1287,7 +1321,9 @@ Console.WriteLine($""Parsed {doc.Blocks.Count} blocks in 2ms!"");
         {
             _settings.WordWrap = !_settings.WordWrap;
             WordWrapMenuItem.IsChecked = _settings.WordWrap;
+            if (HamburgerWordWrapMenuItem != null) HamburgerWordWrapMenuItem.IsChecked = _settings.WordWrap;
             RawMarkdownTextBox.TextWrapping = _settings.WordWrap ? TextWrapping.Wrap : TextWrapping.NoWrap;
+            _settings.Save();
         }
 
         private void UpdateThemeMenuChecks()
@@ -1298,6 +1334,60 @@ Console.WriteLine($""Parsed {doc.Blocks.Count} blocks in 2ms!"");
             if (ThemeNordItem != null) ThemeNordItem.IsChecked = preset == ThemePreset.Nord;
             if (ThemeOneDarkItem != null) ThemeOneDarkItem.IsChecked = preset == ThemePreset.OneDark;
             if (ThemeMonokaiItem != null) ThemeMonokaiItem.IsChecked = preset == ThemePreset.Monokai;
+
+            if (HamburgerThemeGitHubDarkItem != null) HamburgerThemeGitHubDarkItem.IsChecked = preset == ThemePreset.GitHubDark;
+            if (HamburgerThemeGitHubLightItem != null) HamburgerThemeGitHubLightItem.IsChecked = preset == ThemePreset.GitHubLight;
+            if (HamburgerThemeNordItem != null) HamburgerThemeNordItem.IsChecked = preset == ThemePreset.Nord;
+            if (HamburgerThemeOneDarkItem != null) HamburgerThemeOneDarkItem.IsChecked = preset == ThemePreset.OneDark;
+            if (HamburgerThemeMonokaiItem != null) HamburgerThemeMonokaiItem.IsChecked = preset == ThemePreset.Monokai;
+        }
+
+        private void ToggleMenuBar_Click(object sender, RoutedEventArgs e)
+        {
+            ToggleMenuBar();
+        }
+
+        public void ToggleMenuBar()
+        {
+            bool isVisible = MainMenu.Visibility == Visibility.Visible;
+            SetMenuBarVisibility(!isVisible);
+            _settings.ShowMenuBar = !isVisible;
+            _settings.Save();
+
+            if (!isVisible)
+            {
+                if (MainMenu.Items.Count > 0 && MainMenu.Items[0] is MenuItem firstItem)
+                {
+                    firstItem.Focus();
+                }
+                else
+                {
+                    MainMenu.Focus();
+                }
+            }
+        }
+
+        public void SetMenuBarVisibility(bool visible)
+        {
+            MainMenu.Visibility = visible ? Visibility.Visible : Visibility.Collapsed;
+            if (ToggleMenuBarMenuItem != null) ToggleMenuBarMenuItem.IsChecked = visible;
+            if (HamburgerToggleMenuBarItem != null) HamburgerToggleMenuBarItem.IsChecked = visible;
+            if (HamburgerViewToggleMenuBarItem != null) HamburgerViewToggleMenuBarItem.IsChecked = visible;
+        }
+
+        private void HamburgerMenu_Click(object sender, RoutedEventArgs e)
+        {
+            if ((DateTime.UtcNow - _lastHamburgerClosedTime).TotalMilliseconds < 200)
+            {
+                return;
+            }
+
+            if (HamburgerContextMenu != null)
+            {
+                HamburgerContextMenu.PlacementTarget = HamburgerMenuButton;
+                HamburgerContextMenu.Placement = System.Windows.Controls.Primitives.PlacementMode.Bottom;
+                HamburgerContextMenu.IsOpen = true;
+            }
         }
 
         private void ThemePreset_Click(object sender, RoutedEventArgs e)
@@ -1425,6 +1515,7 @@ Console.WriteLine($""Parsed {doc.Blocks.Count} blocks in 2ms!"");
 | **Ctrl + F** | Find in Document |
 | **F3** / **Shift + F3** | Find Next / Previous |
 | **Ctrl + T** | Toggle Table of Contents Outline |
+| **Alt** or **Ctrl + M** | Toggle Menu Bar |
 | **Ctrl + 1** | Rendered View Only |
 | **Ctrl + 2** | Split View (Rendered + Raw) |
 | **Ctrl + 3** | Raw Markdown View Only |
@@ -1633,6 +1724,10 @@ Console.WriteLine($""Parsed {doc.Blocks.Count} blocks in 2ms!"");
                         ZoomOut_Click(this, new RoutedEventArgs());
                         e.Handled = true;
                         break;
+                    case Key.M:
+                        ToggleMenuBar();
+                        e.Handled = true;
+                        break;
                     case Key.D0:
                     case Key.NumPad0:
                         ResetZoom_Click(this, new RoutedEventArgs());
@@ -1670,6 +1765,10 @@ Console.WriteLine($""Parsed {doc.Blocks.Count} blocks in 2ms!"");
                         ToggleTheme_Click(this, new RoutedEventArgs());
                         e.Handled = true;
                         break;
+                    case Key.F10:
+                        ToggleMenuBar();
+                        e.Handled = true;
+                        break;
                     case Key.F11:
                         ToggleFullscreen_Click(this, new RoutedEventArgs());
                         e.Handled = true;
@@ -1685,6 +1784,39 @@ Console.WriteLine($""Parsed {doc.Blocks.Count} blocks in 2ms!"");
                 FindPrevious_Click(this, new RoutedEventArgs());
                 e.Handled = true;
             }
+
+            bool isCtrlDown = Keyboard.Modifiers.HasFlag(ModifierKeys.Control) ||
+                              Keyboard.IsKeyDown(Key.LeftCtrl) ||
+                              Keyboard.IsKeyDown(Key.RightCtrl);
+
+            if (!isCtrlDown &&
+                ((e.Key == Key.System && (e.SystemKey == Key.LeftAlt || e.SystemKey == Key.RightAlt)) ||
+                 e.Key == Key.LeftAlt || e.Key == Key.RightAlt))
+            {
+                _altKeyCandidate = true;
+            }
+            else
+            {
+                _altKeyCandidate = false;
+            }
+        }
+
+        private void Window_KeyUp(object sender, KeyEventArgs e)
+        {
+            bool isCtrlDown = Keyboard.Modifiers.HasFlag(ModifierKeys.Control) ||
+                              Keyboard.IsKeyDown(Key.LeftCtrl) ||
+                              Keyboard.IsKeyDown(Key.RightCtrl);
+
+            if (_altKeyCandidate && !isCtrlDown &&
+                ((e.Key == Key.System && (e.SystemKey == Key.LeftAlt || e.SystemKey == Key.RightAlt)) ||
+                 e.Key == Key.LeftAlt || e.Key == Key.RightAlt))
+            {
+                _altKeyCandidate = false;
+                ToggleMenuBar();
+                e.Handled = true;
+                return;
+            }
+            _altKeyCandidate = false;
         }
 
         private void MarkdownViewer_ScrollChanged(object sender, ScrollChangedEventArgs e)
