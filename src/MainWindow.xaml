@@ -102,6 +102,7 @@
                 <MenuItem Header="Markdown _Reference" Click="HelpMarkdownRef_Click" />
                 <MenuItem Header="_Keyboard Shortcuts" Click="HelpShortcuts_Click" />
                 <Separator />
+                <MenuItem Header="Check for _Updates..." Click="CheckForUpdates_Click" />
                 <MenuItem Header="Verify _Release Integrity (SHA-256)..." Click="ToolsVerifyIntegrity_Click" />
                 <Separator />
                 <MenuItem Header="_About MDPlus" Click="HelpAbout_Click" />
@@ -206,6 +207,7 @@
                                 <MenuItem Header="Markdown _Reference" Click="HelpMarkdownRef_Click" />
                                 <MenuItem Header="_Keyboard Shortcuts" Click="HelpShortcuts_Click" />
                                 <Separator />
+                                <MenuItem Header="Check for _Updates..." Click="CheckForUpdates_Click" />
                                 <MenuItem Header="Verify _Release Integrity (SHA-256)..." Click="ToolsVerifyIntegrity_Click" />
                                 <Separator />
                                 <MenuItem Header="_About MDPlus" Click="HelpAbout_Click" />

@@ -4,6 +4,7 @@ using System.Collections.ObjectModel;
 using System.IO;
 using System.Linq;
 using System.Text;
+using System.Threading.Tasks;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Documents;
@@ -32,11 +33,16 @@ namespace MDPlus
         private int _untitledIndex = 1;
         private bool _altKeyCandidate = false;
         private DateTime _lastHamburgerClosedTime = DateTime.MinValue;
+        private readonly UpdateService _updateService = new UpdateService();
 
         public MainWindow()
         {
             InitializeComponent();
             Deactivated += (s, e) => _altKeyCandidate = false;
+            SourceInitialized += (s, e) =>
+            {
+                DwmHelper.ApplyTitleBarTheme(this, ThemeManager.Instance.CurrentPalette);
+            };
 
             _settings = AppSettings.Load();
             ThemeManager.Instance.SetPreset(_settings.Theme);
@@ -152,6 +158,36 @@ namespace MDPlus
                 {
                     SetActiveTab(null);
                 }
+            }
+
+            if (UpdateService.ShouldCheckOnStartup(_settings, DateTime.UtcNow))
+            {
+                _ = Task.Run(async () =>
+                {
+                    try
+                    {
+                        await Task.Delay(2000).ConfigureAwait(false);
+                        var updateResult = await _updateService.CheckForUpdatesAsync().ConfigureAwait(false);
+                        if (updateResult != null)
+                        {
+                            _settings.LastUpdateCheckUtc = DateTime.UtcNow;
+                            _settings.Save();
+
+                            if (updateResult.IsSuccess && updateResult.IsUpdateAvailable)
+                            {
+                                await Dispatcher.InvokeAsync(() =>
+                                {
+                                    var dlg = new UpdateDialog(updateResult, _updateService) { Owner = this };
+                                    dlg.ShowDialog();
+                                });
+                            }
+                        }
+                    }
+                    catch
+                    {
+                        // Background check must never disturb startup or crash
+                    }
+                });
             }
         }
 
@@ -912,6 +948,7 @@ Console.WriteLine($""Parsed {doc.Blocks.Count} blocks in 2ms!"");
             }
 
             RebuildTabStrip();
+            DwmHelper.ApplyTitleBarTheme(this, palette);
         }
 
         private void OnThemeChanged(object? sender, EventArgs e)
@@ -1651,6 +1688,52 @@ Console.WriteLine($""Parsed {doc.Blocks.Count} blocks in 2ms!"");
             }
             var dlg = new VerifyIntegrityWindow(currentFile) { Owner = this };
             dlg.ShowDialog();
+        }
+
+        private async void CheckForUpdates_Click(object sender, RoutedEventArgs e)
+        {
+            string originalStatus = StatusFileText.Text;
+            StatusFileText.Text = "Checking for updates...";
+            var previousCursor = Mouse.OverrideCursor;
+            Mouse.OverrideCursor = Cursors.Wait;
+
+            try
+            {
+                var result = await _updateService.CheckForUpdatesAsync();
+                _settings.LastUpdateCheckUtc = DateTime.UtcNow;
+                _settings.Save();
+
+                if (!result.IsSuccess)
+                {
+                    MessageBox.Show(this,
+                        $"Unable to check for updates:\n{result.ErrorMessage}\n\nPlease check your network connection and try again.",
+                        "Check for Updates", MessageBoxButton.OK, MessageBoxImage.Warning);
+                    return;
+                }
+
+                if (result.IsUpdateAvailable)
+                {
+                    var dlg = new UpdateDialog(result, _updateService) { Owner = this };
+                    dlg.ShowDialog();
+                }
+                else
+                {
+                    MessageBox.Show(this,
+                        $"You are running the latest version of MDPlus (v{result.CurrentVersion}).\nNo updates are currently available.",
+                        "Check for Updates", MessageBoxButton.OK, MessageBoxImage.Information);
+                }
+            }
+            catch (Exception ex)
+            {
+                MessageBox.Show(this,
+                    $"An error occurred while checking for updates:\n{ex.Message}",
+                    "Check for Updates", MessageBoxButton.OK, MessageBoxImage.Error);
+            }
+            finally
+            {
+                Mouse.OverrideCursor = previousCursor;
+                StatusFileText.Text = originalStatus;
+            }
         }
 
         private void HelpAbout_Click(object sender, RoutedEventArgs e)

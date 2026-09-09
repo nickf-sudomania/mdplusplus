@@ -1,0 +1,81 @@
+<Window x:Class="MDPlus.Controls.UpdateDialog"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="Software Update - MDPlus"
+        Icon="pack://application:,,,/Resources/AppIcon.ico"
+        Height="480" Width="600"
+        MinHeight="400" MinWidth="500"
+        WindowStartupLocation="CenterOwner"
+        ShowInTaskbar="False"
+        ResizeMode="CanResizeWithGrip">
+
+    <Grid Background="#1e1e1e" Name="RootGrid">
+        <Grid.RowDefinitions>
+            <!-- Row 0: Header Banner -->
+            <RowDefinition Height="Auto" />
+            <!-- Row 1: Release Highlights Content -->
+            <RowDefinition Height="*" />
+            <!-- Row 2: Progress & Status -->
+            <RowDefinition Height="Auto" />
+            <!-- Row 3: Action Buttons -->
+            <RowDefinition Height="Auto" />
+        </Grid.RowDefinitions>
+
+        <!-- Header -->
+        <Border Grid.Row="0" Name="HeaderBorder" Background="#252526" Padding="20,16,20,16" BorderBrush="#3f3f46" BorderThickness="0,0,0,1">
+            <Grid>
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="Auto" />
+                    <ColumnDefinition Width="*" />
+                </Grid.ColumnDefinitions>
+                <TextBlock Grid.Column="0" Text="🚀" FontSize="28" Margin="0,0,16,0" VerticalAlignment="Center" />
+                <StackPanel Grid.Column="1" VerticalAlignment="Center">
+                    <TextBlock Name="TitleTextBlock" Text="A New Version of MDPlus is Available!" FontSize="16" FontWeight="Bold" Foreground="#f0f6fc" Margin="0,0,0,4"/>
+                    <TextBlock Name="VersionSubtext" Text="Version v1.1.0 is now available (current: 1.0.0)." FontSize="12" Foreground="#8b949e"/>
+                </StackPanel>
+            </Grid>
+        </Border>
+
+        <!-- Highlights / Release Notes -->
+        <Grid Grid.Row="1" Margin="20,16,20,12">
+            <Grid.RowDefinitions>
+                <RowDefinition Height="Auto" />
+                <RowDefinition Height="*" />
+            </Grid.RowDefinitions>
+            <TextBlock Grid.Row="0" Name="HighlightsLabel" Text="Release Highlights:" FontWeight="SemiBold" FontSize="12" Foreground="#c9d1d9" Margin="0,0,0,6"/>
+            <Border Grid.Row="1" Name="HighlightsBorder" Background="#161b22" BorderBrush="#30363d" BorderThickness="1" CornerRadius="4">
+                <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled" Padding="12">
+                    <TextBox Name="HighlightsTextBox" TextWrapping="Wrap" IsReadOnly="True" BorderThickness="0" Background="Transparent" 
+                             Foreground="#e6edf3" FontFamily="Segoe UI, Cascadia Code, Consolas" FontSize="12" SelectionBrush="#264f78"/>
+                </ScrollViewer>
+            </Border>
+        </Grid>
+
+        <!-- Progress & Status -->
+        <StackPanel Grid.Row="2" Margin="20,0,20,12" Name="ProgressPanel" Visibility="Collapsed">
+            <ProgressBar Name="DownloadProgressBar" Height="6" Minimum="0" Maximum="100" IsIndeterminate="False" Margin="0,0,0,6" Foreground="#238636" Background="#30363d"/>
+            <TextBlock Name="StatusTextBlock" Text="Downloading update..." FontSize="11" Foreground="#8b949e" TextWrapping="Wrap"/>
+        </StackPanel>
+
+        <!-- Action Buttons -->
+        <Border Grid.Row="3" Name="FooterBorder" Background="#252526" Padding="20,14,20,14" BorderBrush="#3f3f46" BorderThickness="0,1,0,0">
+            <Grid>
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="Auto" />
+                    <ColumnDefinition Width="*" />
+                    <ColumnDefinition Width="Auto" />
+                </Grid.ColumnDefinitions>
+
+                <Button Grid.Column="0" Name="ReleaseNotesButton" Content="Release Notes" Padding="12,6,12,6" 
+                        Background="#30363d" Foreground="#c9d1d9" BorderBrush="#484f58" Cursor="Hand" Click="ReleaseNotes_Click"/>
+
+                <StackPanel Grid.Column="2" Orientation="Horizontal">
+                    <Button Name="LaterButton" Content="Later" Width="80" Margin="0,0,8,0" Padding="0,6,0,6"
+                            Background="#30363d" Foreground="#c9d1d9" BorderBrush="#484f58" Cursor="Hand" Click="Later_Click"/>
+                    <Button Name="UpdateNowButton" Content="Update Now" Width="100" Padding="0,6,0,6" FontWeight="SemiBold"
+                            Background="#238636" Foreground="#ffffff" BorderBrush="#2ea043" Cursor="Hand" Click="UpdateNow_Click"/>
+                </StackPanel>
+            </Grid>
+        </Border>
+    </Grid>
+</Window>

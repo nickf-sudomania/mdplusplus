@@ -16,6 +16,10 @@ namespace MDPlus.Controls
         {
             InitializeComponent();
             ApplyTheme();
+            SourceInitialized += (s, e) =>
+            {
+                DwmHelper.ApplyTitleBarTheme(this, ThemeManager.Instance.CurrentPalette);
+            };
         }
 
         public VerifyIntegrityWindow(string initialFilePath) : this()
@@ -30,6 +34,7 @@ namespace MDPlus.Controls
         {
             bool isDark = ThemeManager.Instance.IsDark;
             RootGrid.Background = isDark ? new SolidColorBrush(Color.FromRgb(30, 30, 30)) : new SolidColorBrush(Color.FromRgb(250, 250, 250));
+            DwmHelper.ApplyTitleBarTheme(this, ThemeManager.Instance.CurrentPalette);
         }
 
         private void BrowseFile_Click(object sender, RoutedEventArgs e)

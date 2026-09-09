@@ -30,6 +30,16 @@ namespace MDPlus.Models
         public List<string> RecentFiles { get; set; } = new List<string>();
 
         /// <summary>
+        /// Whether to automatically check for updates on startup (at most once every 24 hours).
+        /// </summary>
+        public bool CheckForUpdatesOnStartup { get; set; } = true;
+
+        /// <summary>
+        /// Timestamp in UTC when the last automated or manual update check was performed.
+        /// </summary>
+        public DateTime? LastUpdateCheckUtc { get; set; }
+
+        /// <summary>
         /// Whether to restore previously open files on startup (default: true).
         /// If false, the application starts fresh without reopening previous files.
         /// </summary>

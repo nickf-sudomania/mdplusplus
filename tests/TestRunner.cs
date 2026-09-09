@@ -3,6 +3,8 @@ using System.Collections.Generic;
 using System.Diagnostics;
 using System.Linq;
 using System.Text;
+using System.Threading;
+using System.Threading.Tasks;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Documents;
@@ -137,6 +139,15 @@ namespace MDPlus.Tests
             RunTest("Session Restore & Startup Preference in AppSettings", TestAppSettingsSessionRestoreProperties);
             RunTest("Startup File Resolution & Mode Routing in App.xaml.cs", TestAppResolveStartupFilesLogic);
             RunTest("Single-Click Tab Close & Empty State Shell Integrity", TestTabClosingSingleClickAndEmptyState);
+
+            // 21. Title Bar DWM & Update Service Tests
+            RunTest("DWM Color Conversion to Win32 COLORREF", TestDwmColorConversionToWin32ColorRef);
+            RunTest("GitHub Release Semantic Version Comparison & Prefix Handling", TestUpdateServiceVersionComparison);
+            RunTest("Update Service 24-Hour Startup Debouncing Logic", TestUpdateServiceStartupDebouncing);
+            RunTest("Update Service Checksum Manifest Parsing & Target Extraction", TestUpdateServiceChecksumExtraction);
+            RunTest("AppSettings Update Preference & Timestamp Serialization", TestAppSettingsUpdateSettingsPersistence);
+            RunTest("Window Title Bar & Help Menu Update Action Integrity", TestWindowTitleBarAndHelpMenuIntegrity);
+            RunTest("Update Service GitHub API Mock & Cryptographic Verification", TestUpdateServiceCheckAndVerificationWithMock);
 
             sw.Stop();
 
@@ -1902,6 +1913,331 @@ d9f764a730236c5a79103fe8ffb4c730649dcfc2cac93fcce59f5bbe12a183b5  MDPlus-1.0.0-s
             AssertEqual(0, tabs.Count, "Tabs count must be 0 after closing final tab");
             DocumentTabItem? activeTab = tabs.Count > 0 ? tabs[0] : null;
             Assert(activeTab == null, "Active tab must be null when all tabs are closed");
+        }
+
+        // 21. Title Bar DWM & Update Service Tests
+        private static void TestDwmColorConversionToWin32ColorRef()
+        {
+            // Pure colors: 0x00BBGGRR
+            AssertEqual(0x000000FF, DwmHelper.ColorToColorRef(Color.FromRgb(255, 0, 0)), "Red COLORREF (0x000000FF)");
+            AssertEqual(0x0000FF00, DwmHelper.ColorToColorRef(Color.FromRgb(0, 255, 0)), "Green COLORREF (0x0000FF00)");
+            AssertEqual(0x00FF0000, DwmHelper.ColorToColorRef(Color.FromRgb(0, 0, 255)), "Blue COLORREF (0x00FF0000)");
+            AssertEqual(0, DwmHelper.ColorToColorRef(Color.FromRgb(0, 0, 0)), "Black COLORREF (0)");
+            AssertEqual(0x00FFFFFF, DwmHelper.ColorToColorRef(Color.FromRgb(255, 255, 255)), "White COLORREF (0x00FFFFFF)");
+
+            // Byte overload
+            AssertEqual(0x00221B16, DwmHelper.ColorToColorRef(0x16, 0x1B, 0x22), "Byte overload #161B22");
+
+            // Theme palette header/chrome colors
+            // GitHub Dark: MenuBg #161B22 -> 0x00221B16, MenuFg #E6EDF3 -> 0x00F3EDE6
+            AssertEqual(0x00221B16, DwmHelper.ColorToColorRef(ThemePalette.GitHubDark.MenuBackgroundColor), "GitHub Dark header bg COLORREF");
+            AssertEqual(0x00F3EDE6, DwmHelper.ColorToColorRef(ThemePalette.GitHubDark.MenuForegroundColor), "GitHub Dark header fg COLORREF");
+
+            // GitHub Light: MenuBg #F6F8FA -> 0x00FAF8F6, MenuFg #24292F -> 0x002F2924
+            AssertEqual(0x00FAF8F6, DwmHelper.ColorToColorRef(ThemePalette.GitHubLight.MenuBackgroundColor), "GitHub Light header bg COLORREF");
+            AssertEqual(0x002F2924, DwmHelper.ColorToColorRef(ThemePalette.GitHubLight.MenuForegroundColor), "GitHub Light header fg COLORREF");
+
+            // Nord: MenuBg #3B4252 -> 0x0052423B
+            AssertEqual(0x0052423B, DwmHelper.ColorToColorRef(ThemePalette.Nord.MenuBackgroundColor), "Nord header bg COLORREF");
+
+            // One Dark: MenuBg #21252B -> 0x002B2521
+            AssertEqual(0x002B2521, DwmHelper.ColorToColorRef(ThemePalette.OneDark.MenuBackgroundColor), "One Dark header bg COLORREF");
+
+            // Monokai: MenuBg #1E1F1C -> 0x001C1F1E
+            AssertEqual(0x001C1F1E, DwmHelper.ColorToColorRef(ThemePalette.Monokai.MenuBackgroundColor), "Monokai header bg COLORREF");
+
+            // Safe fallback with IntPtr.Zero
+            Assert(!DwmHelper.ApplyTitleBarTheme(IntPtr.Zero, ThemePalette.GitHubDark), "ApplyTitleBarTheme with IntPtr.Zero returns false gracefully");
+        }
+
+        private static void TestUpdateServiceVersionComparison()
+        {
+            // Equal versions
+            AssertEqual(0, UpdateService.CompareVersions("1.0.0", "1.0.0"), "1.0.0 == 1.0.0");
+            AssertEqual(0, UpdateService.CompareVersions("v1.0.0", "1.0.0"), "v1.0.0 == 1.0.0");
+            AssertEqual(0, UpdateService.CompareVersions("V1.0.0", "v1.0.0"), "V1.0.0 == v1.0.0");
+            AssertEqual(0, UpdateService.CompareVersions("1.0", "1.0.0"), "1.0 == 1.0.0");
+            AssertEqual(0, UpdateService.CompareVersions("1.0.0.0", "1.0.0"), "1.0.0.0 == 1.0.0");
+            Assert(!UpdateService.IsNewerVersion("1.0.0", "1.0.0"), "Same version is not newer");
+            Assert(!UpdateService.IsNewerVersion("1.0.0", "v1.0.0"), "v prefix same version is not newer");
+
+            // Newer versions
+            Assert(UpdateService.IsNewerVersion("1.0.0", "1.0.1"), "1.0.1 is newer than 1.0.0");
+            Assert(UpdateService.IsNewerVersion("1.0.0", "v1.1.0"), "v1.1.0 is newer than 1.0.0");
+            Assert(UpdateService.IsNewerVersion("1.0.0", "v2.0.0"), "v2.0.0 is newer than 1.0.0");
+            Assert(UpdateService.IsNewerVersion("v1.0.0", "v1.0.1"), "v1.0.1 is newer than v1.0.0");
+            Assert(UpdateService.IsNewerVersion("1.2.0", "1.10.0"), "1.10.0 is newer than 1.2.0 (numeric order)");
+            Assert(UpdateService.IsNewerVersion("0.9.9", "1.0.0"), "1.0.0 is newer than 0.9.9");
+
+            // Older / Not newer versions
+            Assert(!UpdateService.IsNewerVersion("1.0.0", "0.9.9"), "0.9.9 is not newer than 1.0.0");
+            Assert(!UpdateService.IsNewerVersion("2.0.0", "1.9.9"), "1.9.9 is not newer than 2.0.0");
+            Assert(!UpdateService.IsNewerVersion("1.10.0", "1.2.0"), "1.2.0 is not newer than 1.10.0");
+
+            // Prerelease / build metadata
+            Assert(UpdateService.IsNewerVersion("1.0.0", "v1.0.1-rc1"), "v1.0.1-rc1 is newer than 1.0.0");
+            Assert(!UpdateService.IsNewerVersion("1.0.0", "v1.0.0+build.42"), "v1.0.0+build.42 is not newer than 1.0.0");
+
+            // Component parsing
+            var parts = UpdateService.ParseVersionComponents("v2.14.7");
+            Assert(parts != null && parts.Length == 3, "Parsed 3 components");
+            AssertEqual(2, parts![0], "Major 2");
+            AssertEqual(14, parts[1], "Minor 14");
+            AssertEqual(7, parts[2], "Patch 7");
+
+            // Null / empty edge cases
+            Assert(!UpdateService.IsNewerVersion("1.0.0", null), "Null candidate is not newer");
+            Assert(!UpdateService.IsNewerVersion("1.0.0", ""), "Empty candidate is not newer");
+            Assert(UpdateService.IsNewerVersion(null, "1.0.0"), "Valid candidate is newer than null");
+        }
+
+        private static void TestUpdateServiceStartupDebouncing()
+        {
+            var now = new DateTime(2026, 9, 9, 12, 0, 0, DateTimeKind.Utc);
+
+            // Null settings -> false
+            Assert(!UpdateService.ShouldCheckOnStartup(null, now), "Null settings should not check");
+
+            // CheckForUpdatesOnStartup == false -> false
+            var disabledSettings = new AppSettings { CheckForUpdatesOnStartup = false, LastUpdateCheckUtc = null };
+            Assert(!UpdateService.ShouldCheckOnStartup(disabledSettings, now), "Disabled CheckForUpdatesOnStartup should not check");
+
+            // First run / never checked before (LastUpdateCheckUtc == null) -> true
+            var freshSettings = new AppSettings { CheckForUpdatesOnStartup = true, LastUpdateCheckUtc = null };
+            Assert(UpdateService.ShouldCheckOnStartup(freshSettings, now), "Never checked before should check on startup");
+
+            // Checked 25 hours ago -> true
+            var oldCheckSettings = new AppSettings
+            {
+                CheckForUpdatesOnStartup = true,
+                LastUpdateCheckUtc = now.AddHours(-25)
+            };
+            Assert(UpdateService.ShouldCheckOnStartup(oldCheckSettings, now), "Checked 25 hours ago should check on startup");
+
+            // Checked exactly 24 hours ago -> true
+            var exactCheckSettings = new AppSettings
+            {
+                CheckForUpdatesOnStartup = true,
+                LastUpdateCheckUtc = now.AddHours(-24)
+            };
+            Assert(UpdateService.ShouldCheckOnStartup(exactCheckSettings, now), "Checked exactly 24 hours ago should check on startup");
+
+            // Checked 23 hours ago -> false (debounced!)
+            var debouncedSettings = new AppSettings
+            {
+                CheckForUpdatesOnStartup = true,
+                LastUpdateCheckUtc = now.AddHours(-23)
+            };
+            Assert(!UpdateService.ShouldCheckOnStartup(debouncedSettings, now), "Checked 23 hours ago should be debounced");
+
+            // Checked 1 hour ago -> false (debounced!)
+            var recentCheckSettings = new AppSettings
+            {
+                CheckForUpdatesOnStartup = true,
+                LastUpdateCheckUtc = now.AddHours(-1)
+            };
+            Assert(!UpdateService.ShouldCheckOnStartup(recentCheckSettings, now), "Checked 1 hour ago should be debounced");
+
+            // Clock skew (timestamp in the future) -> true (safe recovery)
+            var futureCheckSettings = new AppSettings
+            {
+                CheckForUpdatesOnStartup = true,
+                LastUpdateCheckUtc = now.AddHours(2)
+            };
+            Assert(UpdateService.ShouldCheckOnStartup(futureCheckSettings, now), "Future timestamp (clock skew) should allow check");
+        }
+
+        private static void TestUpdateServiceChecksumExtraction()
+        {
+            string manifest = @"# Official SHA-256 Checksums
+18c57ed3518728fd97ca17fc34374230fa9da4d2ed65998dc52169e0cb3d1177  MDPlus.exe
+b4f2e7af3a2e26456be05a236d8fa5f6750069fe45f8cf16197ea9934ee53b0a  MDPlus-win-x64.zip
+78851d9f7915119e7e95d0ac08e51ccb1f91cfa70058216fc9f234916d421a14  MDPlus-1.0.0-src.zip
+13092c6c1b93405e99d000f98ae8bd02a4ab04a413609e6d9fe9294e769ea522  MDPlus-Setup.exe";
+
+            string? hash = UpdateService.ExtractExpectedHash(manifest, "MDPlus-Setup.exe");
+            Assert(!string.IsNullOrEmpty(hash), "Hash found for MDPlus-Setup.exe");
+            AssertEqual("13092c6c1b93405e99d000f98ae8bd02a4ab04a413609e6d9fe9294e769ea522", hash, "Extracted setup hash");
+
+            // Case-insensitive match
+            string? hashCase = UpdateService.ExtractExpectedHash(manifest, "mdplus-setup.exe");
+            AssertEqual("13092c6c1b93405e99d000f98ae8bd02a4ab04a413609e6d9fe9294e769ea522", hashCase, "Case-insensitive extracted hash");
+
+            // BSD style
+            string bsd = "SHA256 (MDPlus-Setup.exe) = 13092c6c1b93405e99d000f98ae8bd02a4ab04a413609e6d9fe9294e769ea522";
+            string? bsdHash = UpdateService.ExtractExpectedHash(bsd, "MDPlus-Setup.exe");
+            AssertEqual("13092c6c1b93405e99d000f98ae8bd02a4ab04a413609e6d9fe9294e769ea522", bsdHash, "BSD extracted hash");
+
+            // Bare hash file
+            string bare = "13092c6c1b93405e99d000f98ae8bd02a4ab04a413609e6d9fe9294e769ea522";
+            string? bareHash = UpdateService.ExtractExpectedHash(bare, "MDPlus-Setup.exe");
+            AssertEqual("13092c6c1b93405e99d000f98ae8bd02a4ab04a413609e6d9fe9294e769ea522", bareHash, "Bare extracted hash");
+        }
+
+        private static void TestAppSettingsUpdateSettingsPersistence()
+        {
+            // Verify default settings
+            var settings = new AppSettings();
+            Assert(settings.CheckForUpdatesOnStartup, "CheckForUpdatesOnStartup defaults to true");
+            Assert(settings.LastUpdateCheckUtc == null, "LastUpdateCheckUtc defaults to null");
+
+            // Serialize & deserialize
+            var checkTime = new DateTime(2026, 9, 9, 15, 30, 0, DateTimeKind.Utc);
+            settings.CheckForUpdatesOnStartup = false;
+            settings.LastUpdateCheckUtc = checkTime;
+
+            string json = System.Text.Json.JsonSerializer.Serialize(settings);
+            Assert(json.Contains("CheckForUpdatesOnStartup"), "JSON contains CheckForUpdatesOnStartup");
+            Assert(json.Contains("LastUpdateCheckUtc"), "JSON contains LastUpdateCheckUtc");
+
+            var deserialized = System.Text.Json.JsonSerializer.Deserialize<AppSettings>(json);
+            Assert(deserialized != null, "Deserialized settings must not be null");
+            Assert(!deserialized!.CheckForUpdatesOnStartup, "CheckForUpdatesOnStartup roundtrip preserved");
+            Assert(deserialized.LastUpdateCheckUtc.HasValue, "LastUpdateCheckUtc has value");
+            AssertEqual(checkTime, deserialized.LastUpdateCheckUtc!.Value, "LastUpdateCheckUtc roundtrip preserved");
+        }
+
+        private static void TestWindowTitleBarAndHelpMenuIntegrity()
+        {
+            // Verify XAML layout contains Check for Updates in MainMenu and HamburgerContextMenu
+            string[] possiblePaths = new[]
+            {
+                System.IO.Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "..", "..", "..", "..", "src", "MainWindow.xaml"),
+                System.IO.Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "..", "..", "..", "src", "MainWindow.xaml"),
+                System.IO.Path.Combine(Environment.CurrentDirectory, "src", "MainWindow.xaml")
+            };
+            string mainWindowXamlPath = possiblePaths.FirstOrDefault(p => System.IO.File.Exists(p)) ?? string.Empty;
+            Assert(!string.IsNullOrEmpty(mainWindowXamlPath), "MainWindow.xaml must exist");
+
+            string xamlText = System.IO.File.ReadAllText(mainWindowXamlPath);
+            Assert(xamlText.Contains("Header=\"Check for _Updates...\""), "MainWindow.xaml must contain Check for Updates menu item");
+            Assert(xamlText.Contains("Click=\"CheckForUpdates_Click\""), "MainWindow.xaml must bind CheckForUpdates_Click");
+        }
+
+        private static void TestUpdateServiceCheckAndVerificationWithMock()
+        {
+            // Mock payload for a newer release v1.2.0
+            string fakeInstallerContent = "FAKE_INSTALLER_BINARY_DATA_FOR_TESTING";
+            byte[] installerBytes = System.Text.Encoding.UTF8.GetBytes(fakeInstallerContent);
+            string realHash = HashService.ComputeSha256(installerBytes);
+
+            string checksumsText = $"{realHash}  MDPlus-Setup.exe\n";
+
+            string releaseJson = $@"{{
+                ""tag_name"": ""v1.2.0"",
+                ""name"": ""MDPlus Release 1.2.0"",
+                ""body"": ""- Added DWM Title Bar Theming\n- Added GitHub Auto-Updater"",
+                ""html_url"": ""https://github.com/nickf-sudomania/mdplusplus/releases/tag/v1.2.0"",
+                ""assets"": [
+                    {{
+                        ""name"": ""MDPlus-Setup.exe"",
+                        ""browser_download_url"": ""https://mock.download/MDPlus-Setup.exe"",
+                        ""size"": {installerBytes.Length}
+                    }},
+                    {{
+                        ""name"": ""SHA256SUMS.txt"",
+                        ""browser_download_url"": ""https://mock.download/SHA256SUMS.txt"",
+                        ""size"": {checksumsText.Length}
+                    }}
+                ]
+            }}";
+
+            var handler = new MockHttpMessageHandler(request =>
+            {
+                string url = request.RequestUri?.ToString() ?? string.Empty;
+                if (url.Contains("/releases/latest"))
+                {
+                    return new System.Net.Http.HttpResponseMessage(System.Net.HttpStatusCode.OK)
+                    {
+                        Content = new System.Net.Http.StringContent(releaseJson, System.Text.Encoding.UTF8, "application/json")
+                    };
+                }
+                if (url.EndsWith("SHA256SUMS.txt"))
+                {
+                    return new System.Net.Http.HttpResponseMessage(System.Net.HttpStatusCode.OK)
+                    {
+                        Content = new System.Net.Http.StringContent(checksumsText, System.Text.Encoding.UTF8, "text/plain")
+                    };
+                }
+                if (url.EndsWith("MDPlus-Setup.exe"))
+                {
+                    return new System.Net.Http.HttpResponseMessage(System.Net.HttpStatusCode.OK)
+                    {
+                        Content = new System.Net.Http.ByteArrayContent(installerBytes)
+                    };
+                }
+                return new System.Net.Http.HttpResponseMessage(System.Net.HttpStatusCode.NotFound);
+            });
+
+            using var httpClient = new System.Net.Http.HttpClient(handler);
+            var updateService = new UpdateService(httpClient, "https://mock.api/releases/latest");
+
+            // 1. Check for updates with running version 1.0.0 -> update available!
+            var checkTask = updateService.CheckForUpdatesAsync("1.0.0");
+            checkTask.Wait();
+            var checkResult = checkTask.Result;
+
+            Assert(checkResult.IsSuccess, "Check for updates success");
+            Assert(checkResult.IsUpdateAvailable, "Update should be available (v1.2.0 > 1.0.0)");
+            AssertEqual("v1.2.0", checkResult.LatestVersion, "Latest version tag");
+            AssertEqual("1.0.0", checkResult.CurrentVersion, "Current version");
+            Assert(checkResult.ReleaseHighlights.Contains("DWM Title Bar"), "Highlights extracted");
+            Assert(!string.IsNullOrEmpty(checkResult.SetupDownloadUrl), "Setup download URL found");
+            Assert(!string.IsNullOrEmpty(checkResult.ChecksumsDownloadUrl), "Checksums download URL found");
+
+            // 2. Check for updates with running version 1.2.0 -> already up to date
+            var checkUpToDateTask = updateService.CheckForUpdatesAsync("1.2.0");
+            checkUpToDateTask.Wait();
+            Assert(!checkUpToDateTask.Result.IsUpdateAvailable, "Already up to date (1.2.0 == v1.2.0)");
+
+            // 3. Download and cryptographically verify installer with MATCHING hash
+            var installTask = updateService.DownloadAndVerifyUpdateAsync(checkResult);
+            installTask.Wait();
+            var installResult = installTask.Result;
+
+            Assert(installResult.Success, "Download & verify with valid SHA-256 hash must succeed");
+            Assert(!string.IsNullOrEmpty(installResult.InstallerPath), "InstallerPath must be populated");
+            Assert(System.IO.File.Exists(installResult.InstallerPath), "Downloaded installer file must exist");
+            AssertEqual(realHash, installResult.ActualHash, "Actual hash matches computed hash");
+
+            // Clean up downloaded test file
+            if (!string.IsNullOrEmpty(installResult.InstallerPath))
+            {
+                try { System.IO.File.Delete(installResult.InstallerPath); } catch { }
+            }
+
+            // 4. Download and cryptographically verify installer with TAMPERED / MISMATCHING hash
+            var tamperedCheckResult = new UpdateCheckResult
+            {
+                IsSuccess = true,
+                IsUpdateAvailable = true,
+                SetupDownloadUrl = "https://mock.download/MDPlus-Setup.exe",
+                ChecksumsDownloadUrl = null,
+                // Provide a corrupted/tampered expected hash
+                ReleaseHighlights = "0000000000000000000000000000000000000000000000000000000000000000  MDPlus-Setup.exe"
+            };
+
+            var tamperedInstallTask = updateService.DownloadAndVerifyUpdateAsync(tamperedCheckResult);
+            tamperedInstallTask.Wait();
+            var tamperedResult = tamperedInstallTask.Result;
+
+            Assert(!tamperedResult.Success, "Download & verify with corrupted/mismatching SHA-256 hash must fail");
+            Assert(tamperedResult.ErrorMessage != null && tamperedResult.ErrorMessage.Contains("verification failed"), "Error message explains verification failure");
+        }
+
+        private class MockHttpMessageHandler : System.Net.Http.HttpMessageHandler
+        {
+            private readonly Func<System.Net.Http.HttpRequestMessage, System.Net.Http.HttpResponseMessage> _handler;
+
+            public MockHttpMessageHandler(Func<System.Net.Http.HttpRequestMessage, System.Net.Http.HttpResponseMessage> handler)
+            {
+                _handler = handler;
+            }
+
+            protected override Task<System.Net.Http.HttpResponseMessage> SendAsync(System.Net.Http.HttpRequestMessage request, System.Threading.CancellationToken cancellationToken)
+            {
+                return Task.FromResult(_handler(request));
+            }
         }
     }
 }
