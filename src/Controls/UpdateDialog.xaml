@@ -44,10 +44,9 @@
             </Grid.RowDefinitions>
             <TextBlock Grid.Row="0" Name="HighlightsLabel" Text="Release Highlights:" FontWeight="SemiBold" FontSize="12" Foreground="#c9d1d9" Margin="0,0,0,6"/>
             <Border Grid.Row="1" Name="HighlightsBorder" Background="#161b22" BorderBrush="#30363d" BorderThickness="1" CornerRadius="4">
-                <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled" Padding="12">
-                    <TextBox Name="HighlightsTextBox" TextWrapping="Wrap" IsReadOnly="True" BorderThickness="0" Background="Transparent" 
-                             Foreground="#e6edf3" FontFamily="Segoe UI, Cascadia Code, Consolas" FontSize="12" SelectionBrush="#264f78"/>
-                </ScrollViewer>
+                <TextBox Name="HighlightsTextBox" TextWrapping="Wrap" IsReadOnly="True" BorderThickness="0" Background="Transparent" 
+                         VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled" Padding="12"
+                         Foreground="#e6edf3" FontFamily="Segoe UI, Cascadia Code, Consolas" FontSize="12" SelectionBrush="#264f78"/>
             </Border>
         </Grid>
 
@@ -71,8 +70,10 @@
 
                 <StackPanel Grid.Column="2" Orientation="Horizontal">
                     <Button Name="LaterButton" Content="Later" Width="80" Margin="0,0,8,0" Padding="0,6,0,6"
+                            IsCancel="True"
                             Background="#30363d" Foreground="#c9d1d9" BorderBrush="#484f58" Cursor="Hand" Click="Later_Click"/>
                     <Button Name="UpdateNowButton" Content="Update Now" Width="100" Padding="0,6,0,6" FontWeight="SemiBold"
+                            IsDefault="True"
                             Background="#238636" Foreground="#ffffff" BorderBrush="#2ea043" Cursor="Hand" Click="UpdateNow_Click"/>
                 </StackPanel>
             </Grid>

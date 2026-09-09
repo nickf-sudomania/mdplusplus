@@ -22,6 +22,7 @@ namespace MDPlus.Core
         public string ReleaseHighlights { get; set; } = string.Empty;
         public string ReleaseUrl { get; set; } = string.Empty;
         public string? SetupDownloadUrl { get; set; }
+        public string? SetupFileName { get; set; }
         public string? ChecksumsDownloadUrl { get; set; }
         public string? ErrorMessage { get; set; }
     }
@@ -210,6 +211,23 @@ namespace MDPlus.Core
                 }
             }
 
+            // 2b. If targetFileName is or contains "MDPlus" and "Setup", match versioned setup assets (e.g. "MDPlus-v1.3.0-Setup.exe")
+            string targetBaseName = Path.GetFileNameWithoutExtension(targetFileName);
+            if (targetBaseName.Contains("MDPlus", StringComparison.OrdinalIgnoreCase) && targetBaseName.Contains("Setup", StringComparison.OrdinalIgnoreCase))
+            {
+                foreach (var kvp in checksums)
+                {
+                    string cleanKey = kvp.Key.TrimStart('*', '?', ' ', '\t');
+                    string keyFileName = Path.GetFileName(cleanKey.Replace('/', '\\'));
+                    if (keyFileName.Contains("MDPlus", StringComparison.OrdinalIgnoreCase) &&
+                        keyFileName.EndsWith("Setup.exe", StringComparison.OrdinalIgnoreCase) &&
+                        kvp.Value.Length == 64)
+                    {
+                        return kvp.Value;
+                    }
+                }
+            }
+
             // 3. Line-by-line target file association matching (for Markdown lists, tables, bullets, and multi-asset release notes)
             string escapedTarget = Regex.Escape(targetFileName);
             string targetPattern = $@"(?<![\w\.-]){escapedTarget}(?![\w\.-])";
@@ -227,10 +245,19 @@ namespace MDPlus.Core
                         return lineMatch.Groups[1].Value.ToLowerInvariant();
                     }
 
-                    // Check if next non-empty line contains the hash (e.g. header line followed by hash line)
-                    if (i + 1 < lines.Length)
+                    // Scan subsequent lines (up to 4) until next section or hash is found
+                    for (int k = i + 1; k < Math.Min(lines.Length, i + 5); k++)
                     {
-                        var nextLineMatch = Regex.Match(lines[i + 1], @"\b([a-fA-F0-9]{64})\b");
+                        string nextLine = lines[k].Trim();
+                        if (string.IsNullOrEmpty(nextLine)) continue;
+
+                        // Stop if entering another header or different binary asset
+                        if (nextLine.StartsWith("#") || (k > i + 1 && (nextLine.EndsWith(".exe") || nextLine.EndsWith(".zip") || nextLine.EndsWith(".tar.gz") || nextLine.EndsWith(".msi"))))
+                        {
+                            break;
+                        }
+
+                        var nextLineMatch = Regex.Match(nextLine, @"\b([a-fA-F0-9]{64})\b");
                         if (nextLineMatch.Success)
                         {
                             return nextLineMatch.Groups[1].Value.ToLowerInvariant();
@@ -239,24 +266,38 @@ namespace MDPlus.Core
                 }
             }
 
-            // 4. Check for hash labels (e.g. "sha256", "sha-256", "MDPlus-Setup.exe SHA-256")
+            // 4. Check for target-associated hash labels (e.g. "MDPlus-Setup.exe SHA-256", "sha256: MDPlus-Setup.exe")
+            string targetLower = targetFileName.ToLowerInvariant();
+            string targetBaseLower = targetBaseName.ToLowerInvariant();
             foreach (var kvp in checksums)
             {
                 string cleanKey = kvp.Key.Trim().ToLowerInvariant();
-                if ((cleanKey == "sha256" || cleanKey == "sha-256" || cleanKey.Contains("sha256") || cleanKey.Contains("sha-256") || cleanKey.Contains("checksum")) &&
-                    kvp.Value.Length == 64)
+                bool matchesTarget = cleanKey.Contains(targetLower) || cleanKey.Contains(targetBaseLower);
+                if (matchesTarget && kvp.Value.Length == 64)
                 {
                     return kvp.Value;
                 }
             }
 
-            // 5. Bare hash (single hash file)
+            // 5. If manifest contains exactly one entry, allow generic hash labels (e.g. "sha256", "sha-256", "checksum")
+            if (checksums.Count == 1)
+            {
+                var single = System.Linq.Enumerable.First(checksums);
+                string cleanKey = single.Key.Trim().ToLowerInvariant();
+                if ((string.IsNullOrEmpty(cleanKey) || cleanKey == "sha256" || cleanKey == "sha-256" || cleanKey.Contains("sha256") || cleanKey.Contains("checksum")) &&
+                    single.Value.Length == 64)
+                {
+                    return single.Value;
+                }
+            }
+
+            // 6. Bare hash (single hash file)
             if (checksums.TryGetValue(string.Empty, out var bareHash) && bareHash.Length == 64)
             {
                 return bareHash;
             }
 
-            // 6. Fallback regex search for any standalone 64-hex string in the content
+            // 7. Fallback regex search for any standalone 64-hex string in the content
             var hashMatches = Regex.Matches(checksumsContent, @"\b([a-fA-F0-9]{64})\b");
             if (hashMatches.Count == 1)
             {
@@ -332,9 +373,11 @@ namespace MDPlus.Core
                 string htmlUrl = root.TryGetProperty("html_url", out var urlProp) ? urlProp.GetString() ?? string.Empty : string.Empty;
 
                 string? setupUrl = null;
-                bool exactSetupMatch = false;
+                string? setupFileName = null;
+                int bestSetupPriority = 0;
+
                 string? checksumsUrl = null;
-                bool exactChecksumMatch = false;
+                int bestChecksumsPriority = 0;
 
                 if (root.TryGetProperty("assets", out var assetsProp) && assetsProp.ValueKind == JsonValueKind.Array)
                 {
@@ -343,26 +386,67 @@ namespace MDPlus.Core
                         string assetName = asset.TryGetProperty("name", out var an) ? an.GetString() ?? string.Empty : string.Empty;
                         string dlUrl = asset.TryGetProperty("browser_download_url", out var du) ? du.GetString() ?? string.Empty : string.Empty;
 
+                        // Setup priority: 4 = exact "MDPlus-Setup.exe", 3 = starts with "MDPlus" and ends with "Setup.exe",
+                        // 2 = contains "MDPlus" and ends with "Setup.exe", 1 = ends with "Setup.exe"
+                        int setupPriority = 0;
                         if (assetName.Equals(SetupFileName, StringComparison.OrdinalIgnoreCase))
                         {
-                            setupUrl = dlUrl;
-                            exactSetupMatch = true;
+                            setupPriority = 4;
                         }
-                        else if (!exactSetupMatch && (assetName.EndsWith("Setup.exe", StringComparison.OrdinalIgnoreCase) ||
-                                                      assetName.EndsWith("-setup.exe", StringComparison.OrdinalIgnoreCase)))
+                        else if (assetName.StartsWith("MDPlus", StringComparison.OrdinalIgnoreCase) &&
+                                 assetName.EndsWith("Setup.exe", StringComparison.OrdinalIgnoreCase))
                         {
-                            setupUrl = dlUrl;
+                            setupPriority = 3;
+                        }
+                        else if (assetName.Contains("MDPlus", StringComparison.OrdinalIgnoreCase) &&
+                                 assetName.EndsWith("Setup.exe", StringComparison.OrdinalIgnoreCase))
+                        {
+                            setupPriority = 2;
+                        }
+                        else if (assetName.EndsWith("Setup.exe", StringComparison.OrdinalIgnoreCase) ||
+                                 assetName.EndsWith("-setup.exe", StringComparison.OrdinalIgnoreCase))
+                        {
+                            setupPriority = 1;
                         }
 
+                        if (setupPriority > bestSetupPriority)
+                        {
+                            bestSetupPriority = setupPriority;
+                            setupUrl = dlUrl;
+                            setupFileName = assetName;
+                        }
+
+                        // Checksums priority: 4 = exact "SHA256SUMS.txt", 3 = starts with "MDPlus" & checksums ext,
+                        // 2 = contains "MDPlus" & checksums ext, 1 = generic checksums ext
+                        int checksumsPriority = 0;
                         if (assetName.Equals(ChecksumsFileName, StringComparison.OrdinalIgnoreCase))
                         {
-                            checksumsUrl = dlUrl;
-                            exactChecksumMatch = true;
+                            checksumsPriority = 4;
                         }
-                        else if (!exactChecksumMatch && (assetName.EndsWith(".checksums.sha256", StringComparison.OrdinalIgnoreCase) ||
-                                                         assetName.EndsWith(".sha256", StringComparison.OrdinalIgnoreCase) ||
-                                                         assetName.EndsWith("sums.txt", StringComparison.OrdinalIgnoreCase)))
+                        else if (assetName.StartsWith("MDPlus", StringComparison.OrdinalIgnoreCase) &&
+                                 (assetName.EndsWith("sums.txt", StringComparison.OrdinalIgnoreCase) ||
+                                  assetName.EndsWith(".sha256", StringComparison.OrdinalIgnoreCase) ||
+                                  assetName.EndsWith(".checksums.sha256", StringComparison.OrdinalIgnoreCase)))
                         {
+                            checksumsPriority = 3;
+                        }
+                        else if (assetName.Contains("MDPlus", StringComparison.OrdinalIgnoreCase) &&
+                                 (assetName.EndsWith("sums.txt", StringComparison.OrdinalIgnoreCase) ||
+                                  assetName.EndsWith(".sha256", StringComparison.OrdinalIgnoreCase) ||
+                                  assetName.EndsWith(".checksums.sha256", StringComparison.OrdinalIgnoreCase)))
+                        {
+                            checksumsPriority = 2;
+                        }
+                        else if (assetName.EndsWith(".checksums.sha256", StringComparison.OrdinalIgnoreCase) ||
+                                 assetName.EndsWith(".sha256", StringComparison.OrdinalIgnoreCase) ||
+                                 assetName.EndsWith("sums.txt", StringComparison.OrdinalIgnoreCase))
+                        {
+                            checksumsPriority = 1;
+                        }
+
+                        if (checksumsPriority > bestChecksumsPriority)
+                        {
+                            bestChecksumsPriority = checksumsPriority;
                             checksumsUrl = dlUrl;
                         }
                     }
@@ -379,6 +463,7 @@ namespace MDPlus.Core
                     ReleaseHighlights = !string.IsNullOrWhiteSpace(body) ? body : name,
                     ReleaseUrl = htmlUrl,
                     SetupDownloadUrl = setupUrl,
+                    SetupFileName = setupFileName,
                     ChecksumsDownloadUrl = checksumsUrl
                 };
             }
@@ -411,8 +496,15 @@ namespace MDPlus.Core
                 };
             }
 
+            string targetFileName = updateInfo.SetupFileName ?? string.Empty;
+            if (string.IsNullOrWhiteSpace(targetFileName) && !string.IsNullOrEmpty(updateInfo.SetupDownloadUrl))
+            {
+                try { targetFileName = Path.GetFileName(new Uri(updateInfo.SetupDownloadUrl).LocalPath); } catch { }
+            }
+            if (string.IsNullOrWhiteSpace(targetFileName)) targetFileName = SetupFileName;
+
             string tempDir = Path.Combine(Path.GetTempPath(), "MDPlusUpdate");
-            string destinationExe = Path.Combine(tempDir, SetupFileName);
+            string destinationExe = Path.Combine(tempDir, targetFileName);
 
             try
             {
@@ -423,7 +515,11 @@ namespace MDPlus.Core
                     try
                     {
                         string checksumsContent = await _httpClient.GetStringAsync(updateInfo.ChecksumsDownloadUrl, cancellationToken).ConfigureAwait(false);
-                        expectedHash = ExtractExpectedHash(checksumsContent, SetupFileName);
+                        expectedHash = ExtractExpectedHash(checksumsContent, targetFileName);
+                        if (string.IsNullOrEmpty(expectedHash) && !targetFileName.Equals(SetupFileName, StringComparison.OrdinalIgnoreCase))
+                        {
+                            expectedHash = ExtractExpectedHash(checksumsContent, SetupFileName);
+                        }
                     }
                     catch (OperationCanceledException)
                     {
@@ -437,7 +533,11 @@ namespace MDPlus.Core
 
                 if (string.IsNullOrEmpty(expectedHash) && !string.IsNullOrEmpty(updateInfo.ReleaseHighlights))
                 {
-                    expectedHash = ExtractExpectedHash(updateInfo.ReleaseHighlights, SetupFileName);
+                    expectedHash = ExtractExpectedHash(updateInfo.ReleaseHighlights, targetFileName);
+                    if (string.IsNullOrEmpty(expectedHash) && !targetFileName.Equals(SetupFileName, StringComparison.OrdinalIgnoreCase))
+                    {
+                        expectedHash = ExtractExpectedHash(updateInfo.ReleaseHighlights, SetupFileName);
+                    }
                 }
 
                 if (string.IsNullOrEmpty(expectedHash))
@@ -457,7 +557,17 @@ namespace MDPlus.Core
 
                 if (File.Exists(destinationExe))
                 {
-                    try { File.Delete(destinationExe); } catch { }
+                    try
+                    {
+                        File.SetAttributes(destinationExe, FileAttributes.Normal);
+                        File.Delete(destinationExe);
+                    }
+                    catch
+                    {
+                        // If file is locked or in use, create a collision-free unique executable name
+                        string uniqueName = $"{Path.GetFileNameWithoutExtension(targetFileName)}_{Guid.NewGuid().ToString("N")[..8]}{Path.GetExtension(targetFileName)}";
+                        destinationExe = Path.Combine(tempDir, uniqueName);
+                    }
                 }
 
                 using (var response = await _httpClient.GetAsync(updateInfo.SetupDownloadUrl, HttpCompletionOption.ResponseHeadersRead, cancellationToken).ConfigureAwait(false))

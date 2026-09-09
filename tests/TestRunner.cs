@@ -160,6 +160,12 @@ namespace MDPlus.Tests
             RunTest("Update Service Installer Process Start & Exit Hooks", TestUpdateServiceInstallerProcessLaunchAndExitHooks);
             RunTest("DWM Helper High Contrast & Win10 1809 Fallback Integrity", TestDwmHelperHighContrastAndWin10Fallback);
             RunTest("Verify Integrity Window Dynamic Palette Theming", TestVerifyIntegrityWindowPaletteDynamicTheming);
+            RunTest("Update Service Versioned Asset Priority over Unrelated Setups", TestUpdateServiceVersionedAssetPriorityOverOtherSetups);
+            RunTest("Update Service Multi-Asset Manifest False Positive Avoidance", TestUpdateServiceMultiAssetManifestFalsePositiveAvoidance);
+            RunTest("Update Service Multi-Line Release Notes with Description Lines", TestUpdateServiceMultiLineReleaseNotesWithDescriptionLines);
+            RunTest("Update Service Versioned Target Manifest Resolution", TestUpdateServiceVersionedTargetManifestMatching);
+            RunTest("Update Service Locked Destination File Recovery", TestUpdateServiceLockedDestinationFileFallback);
+            RunTest("DWM Window Reset & Update Dialog Keyboard Accessibility", TestDwmHelperResetWindowAndFullscreenLifecycle);
 
             sw.Stop();
 
@@ -2628,6 +2634,170 @@ SHA-256: 8888888888888888888888888888888888888888888888888888888888888888
             Assert(updateXaml.Contains("Name=\"UpdateNowButton\""), "UpdateDialog.xaml has UpdateNowButton");
             Assert(updateXaml.Contains("Name=\"LaterButton\""), "UpdateDialog.xaml has LaterButton");
             Assert(updateXaml.Contains("Name=\"ReleaseNotesButton\""), "UpdateDialog.xaml has ReleaseNotesButton");
+        }
+
+        private static void TestUpdateServiceVersionedAssetPriorityOverOtherSetups()
+        {
+            // MDPlus-v1.3.0-Setup.exe followed by Other-Setup.exe: MDPlus must take priority despite being earlier
+            string releaseJson = @"{
+                ""tag_name"": ""v1.3.0"",
+                ""name"": ""Release 1.3.0"",
+                ""body"": ""Release notes"",
+                ""assets"": [
+                    {
+                        ""name"": ""MDPlus-v1.3.0-Setup.exe"",
+                        ""browser_download_url"": ""https://download/mdplus/MDPlus-v1.3.0-Setup.exe""
+                    },
+                    {
+                        ""name"": ""Other-Setup.exe"",
+                        ""browser_download_url"": ""https://download/other/Other-Setup.exe""
+                    },
+                    {
+                        ""name"": ""MDPlus-v1.3.0-SHA256SUMS.txt"",
+                        ""browser_download_url"": ""https://download/mdplus/MDPlus-v1.3.0-SHA256SUMS.txt""
+                    },
+                    {
+                        ""name"": ""other-sums.txt"",
+                        ""browser_download_url"": ""https://download/other/other-sums.txt""
+                    }
+                ]
+            }";
+
+            var handler = new MockHttpMessageHandler(req =>
+            {
+                return new System.Net.Http.HttpResponseMessage(System.Net.HttpStatusCode.OK)
+                {
+                    Content = new System.Net.Http.StringContent(releaseJson, System.Text.Encoding.UTF8, "application/json")
+                };
+            });
+
+            using var client = new System.Net.Http.HttpClient(handler);
+            var service = new UpdateService(client, "https://mock.api/latest");
+
+            var task = service.CheckForUpdatesAsync("1.0.0");
+            task.Wait();
+            var res = task.Result;
+
+            AssertEqual("https://download/mdplus/MDPlus-v1.3.0-Setup.exe", res.SetupDownloadUrl!, "MDPlus-v1.3.0-Setup.exe must take priority over Other-Setup.exe");
+            AssertEqual("MDPlus-v1.3.0-Setup.exe", res.SetupFileName!, "SetupFileName must be recorded as MDPlus-v1.3.0-Setup.exe");
+            AssertEqual("https://download/mdplus/MDPlus-v1.3.0-SHA256SUMS.txt", res.ChecksumsDownloadUrl!, "MDPlus checksums must take priority over other-sums.txt");
+        }
+
+        private static void TestUpdateServiceMultiAssetManifestFalsePositiveAvoidance()
+        {
+            // Manifest with an unrelated entry that contains 'checksum' in key
+            string manifest = @"
+zip checksum: 1111111111111111111111111111111111111111111111111111111111111111
+MDPlus-Setup.exe checksum: 2222222222222222222222222222222222222222222222222222222222222222
+";
+            string? hash = UpdateService.ExtractExpectedHash(manifest, "MDPlus-Setup.exe");
+            AssertEqual("2222222222222222222222222222222222222222222222222222222222222222", hash, "Must NOT falsely match zip checksum when searching for MDPlus-Setup.exe");
+        }
+
+        private static void TestUpdateServiceMultiLineReleaseNotesWithDescriptionLines()
+        {
+            // Target heading followed by descriptive text before the hash line
+            string notes = @"
+### MDPlus-Setup.exe
+Windows 64-bit installer for Windows 10 & 11.
+Includes desktop shortcut and shell context menu integration.
+SHA-256: 3333333333333333333333333333333333333333333333333333333333333333
+
+### MDPlus-Portable.zip
+Portable archive without installation.
+SHA-256: 4444444444444444444444444444444444444444444444444444444444444444
+";
+            string? hash = UpdateService.ExtractExpectedHash(notes, "MDPlus-Setup.exe");
+            AssertEqual("3333333333333333333333333333333333333333333333333333333333333333", hash, "Multi-line lookahead successfully extracts hash across description lines");
+        }
+
+        private static void TestUpdateServiceVersionedTargetManifestMatching()
+        {
+            // Manifest has versioned filename MDPlus-v1.4.0-Setup.exe, querying with MDPlus-Setup.exe
+            string manifest = @"
+5555555555555555555555555555555555555555555555555555555555555555  MDPlus-v1.4.0-Setup.exe
+6666666666666666666666666666666666666666666666666666666666666666  MDPlus-v1.4.0-win-x64.zip
+";
+            string? hash = UpdateService.ExtractExpectedHash(manifest, "MDPlus-Setup.exe");
+            AssertEqual("5555555555555555555555555555555555555555555555555555555555555555", hash, "Versioned setup name matches when querying with base MDPlus-Setup.exe");
+        }
+
+        private static void TestUpdateServiceLockedDestinationFileFallback()
+        {
+            // Test that DownloadAndVerifyUpdateAsync succeeds even when the target destination file in temp is locked
+            byte[] dummyPayload = new byte[] { 0x4D, 0x5A, 0x90, 0x00, 0x03, 0x00, 0x00, 0x00 }; // Fake DOS header
+            string expectedHash = HashService.ComputeSha256(new System.IO.MemoryStream(dummyPayload));
+
+            var handler = new MockHttpMessageHandler(req =>
+            {
+                if (req.RequestUri!.ToString().Contains("SHA256SUMS.txt"))
+                {
+                    return new System.Net.Http.HttpResponseMessage(System.Net.HttpStatusCode.OK)
+                    {
+                        Content = new System.Net.Http.StringContent($"{expectedHash}  MDPlus-Setup.exe\n")
+                    };
+                }
+                return new System.Net.Http.HttpResponseMessage(System.Net.HttpStatusCode.OK)
+                {
+                    Content = new System.Net.Http.ByteArrayContent(dummyPayload)
+                };
+            });
+
+            using var client = new System.Net.Http.HttpClient(handler);
+            var service = new UpdateService(client);
+
+            string tempDir = System.IO.Path.Combine(System.IO.Path.GetTempPath(), "MDPlusUpdate");
+            if (!System.IO.Directory.Exists(tempDir)) System.IO.Directory.CreateDirectory(tempDir);
+            string lockedFile = System.IO.Path.Combine(tempDir, "MDPlus-Setup.exe");
+
+            // Lock the default file with FileShare.None
+            using (var lockStream = new System.IO.FileStream(lockedFile, System.IO.FileMode.Create, System.IO.FileAccess.ReadWrite, System.IO.FileShare.None))
+            {
+                var updateInfo = new UpdateCheckResult
+                {
+                    IsSuccess = true,
+                    IsUpdateAvailable = true,
+                    SetupDownloadUrl = "https://mock.download/MDPlus-Setup.exe",
+                    SetupFileName = "MDPlus-Setup.exe",
+                    ChecksumsDownloadUrl = "https://mock.download/SHA256SUMS.txt"
+                };
+
+                var task = service.DownloadAndVerifyUpdateAsync(updateInfo);
+                task.Wait();
+                var res = task.Result;
+
+                Assert(res.Success, "Download and verification must succeed even when default destination file is locked");
+                Assert(res.InstallerPath != null && System.IO.File.Exists(res.InstallerPath), "Generated fallback installer file exists");
+                AssertEqual(expectedHash, res.ActualHash!, "Actual hash matches expected hash");
+
+                // Clean up fallback file
+                if (res.InstallerPath != null && res.InstallerPath != lockedFile)
+                {
+                    try { System.IO.File.Delete(res.InstallerPath); } catch { }
+                }
+            }
+
+            try { System.IO.File.Delete(lockedFile); } catch { }
+        }
+
+        private static void TestDwmHelperResetWindowAndFullscreenLifecycle()
+        {
+            // ResetTitleBarTheme((Window)null!) returns false
+            Assert(!DwmHelper.ResetTitleBarTheme((Window)null!), "ResetTitleBarTheme((Window)null!) returns false");
+
+            // Check UpdateDialog.xaml buttons have IsDefault and IsCancel
+            string[] updateDialogPaths = new[]
+            {
+                System.IO.Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "..", "..", "..", "..", "src", "Controls", "UpdateDialog.xaml"),
+                System.IO.Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "..", "..", "..", "src", "Controls", "UpdateDialog.xaml"),
+                System.IO.Path.Combine(Environment.CurrentDirectory, "src", "Controls", "UpdateDialog.xaml")
+            };
+            string updateXamlPath = updateDialogPaths.FirstOrDefault(p => System.IO.File.Exists(p)) ?? string.Empty;
+            Assert(!string.IsNullOrEmpty(updateXamlPath), "UpdateDialog.xaml must exist");
+            string updateXaml = System.IO.File.ReadAllText(updateXamlPath);
+            Assert(updateXaml.Contains("IsDefault=\"True\""), "UpdateNowButton has IsDefault='True'");
+            Assert(updateXaml.Contains("IsCancel=\"True\""), "LaterButton has IsCancel='True'");
+            Assert(updateXaml.Contains("VerticalScrollBarVisibility=\"Auto\""), "HighlightsTextBox has VerticalScrollBarVisibility='Auto'");
         }
 
         private class MockHttpMessageHandler : System.Net.Http.HttpMessageHandler

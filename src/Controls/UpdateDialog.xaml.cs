@@ -14,6 +14,8 @@ namespace MDPlus.Controls
         private readonly UpdateService _updateService;
         private CancellationTokenSource? _downloadCts;
 
+        public string? VerifiedInstallerPath { get; private set; }
+
         public UpdateDialog(UpdateCheckResult updateInfo, UpdateService? updateService = null)
         {
             InitializeComponent();
@@ -117,17 +119,28 @@ namespace MDPlus.Controls
 
         private void Later_Click(object sender, RoutedEventArgs e)
         {
+            if (_downloadCts != null && !_downloadCts.IsCancellationRequested && UpdateNowButton.IsEnabled == false)
+            {
+                // Active download in progress: cancel the download
+                _downloadCts.Cancel();
+                StatusTextBlock.Text = "Canceling download...";
+                LaterButton.IsEnabled = false;
+                return;
+            }
+
             _downloadCts?.Cancel();
+            DialogResult = false;
             Close();
         }
 
         private async void UpdateNow_Click(object sender, RoutedEventArgs e)
         {
             UpdateNowButton.IsEnabled = false;
-            LaterButton.IsEnabled = false;
+            LaterButton.Content = "Cancel";
+            LaterButton.IsEnabled = true;
             ProgressPanel.Visibility = Visibility.Visible;
             DownloadProgressBar.Value = 0;
-            StatusTextBlock.Text = "Downloading installer (MDPlus-Setup.exe)...";
+            StatusTextBlock.Text = "Downloading installer...";
 
             _downloadCts = new CancellationTokenSource();
             var progress = new Progress<double>(p =>
@@ -146,15 +159,27 @@ namespace MDPlus.Controls
                 {
                     StatusTextBlock.Text = "Cryptographic SHA-256 verification passed! Launching installer...";
                     DownloadProgressBar.Value = 100;
+                    LaterButton.IsEnabled = false;
 
-                    await Task.Delay(400);
-                    UpdateService.LaunchInstallerAndExit(result.InstallerPath);
+                    await Task.Delay(300);
+
+                    if (Owner == null)
+                    {
+                        UpdateService.LaunchInstallerAndExit(result.InstallerPath);
+                    }
+                    else
+                    {
+                        VerifiedInstallerPath = result.InstallerPath;
+                        DialogResult = true;
+                        Close();
+                    }
                 }
                 else
                 {
                     StatusTextBlock.Text = "Update failed: " + result.ErrorMessage;
                     MessageBox.Show(this, result.ErrorMessage ?? "Installer verification failed.", "Update Verification Error", MessageBoxButton.OK, MessageBoxImage.Error);
                     UpdateNowButton.IsEnabled = true;
+                    LaterButton.Content = "Later";
                     LaterButton.IsEnabled = true;
                 }
             }
@@ -162,7 +187,9 @@ namespace MDPlus.Controls
             {
                 if (!IsLoaded) return;
                 StatusTextBlock.Text = "Download canceled.";
+                ProgressPanel.Visibility = Visibility.Collapsed;
                 UpdateNowButton.IsEnabled = true;
+                LaterButton.Content = "Later";
                 LaterButton.IsEnabled = true;
             }
             catch (Exception ex)
@@ -171,6 +198,7 @@ namespace MDPlus.Controls
                 StatusTextBlock.Text = "Error: " + ex.Message;
                 MessageBox.Show(this, $"An error occurred during update: {ex.Message}", "Update Error", MessageBoxButton.OK, MessageBoxImage.Error);
                 UpdateNowButton.IsEnabled = true;
+                LaterButton.Content = "Later";
                 LaterButton.IsEnabled = true;
             }
         }

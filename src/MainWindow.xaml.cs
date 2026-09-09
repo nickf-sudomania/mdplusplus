@@ -85,6 +85,14 @@ namespace MDPlus
                 WindowState = WindowState.Maximized;
             }
 
+            StateChanged += (s, e) =>
+            {
+                if (WindowState != WindowState.Minimized && !_isFullScreen)
+                {
+                    DwmHelper.ApplyTitleBarTheme(this, ThemeManager.Instance.CurrentPalette);
+                }
+            };
+
             Loaded += MainWindow_Loaded;
         }
 
@@ -181,7 +189,15 @@ namespace MDPlus
                                     try
                                     {
                                         var dlg = new UpdateDialog(updateResult, _updateService) { Owner = this };
-                                        dlg.ShowDialog();
+                                        if (dlg.ShowDialog() == true && !string.IsNullOrEmpty(dlg.VerifiedInstallerPath))
+                                        {
+                                            string installerPath = dlg.VerifiedInstallerPath;
+                                            Close();
+                                            if (!IsLoaded)
+                                            {
+                                                UpdateService.LaunchInstallerAndExit(installerPath);
+                                            }
+                                        }
                                     }
                                     catch
                                     {
@@ -1573,6 +1589,7 @@ Console.WriteLine($""Parsed {doc.Blocks.Count} blocks in 2ms!"");
                 WindowStyle = _previousWindowStyle;
                 WindowState = _previousWindowState;
                 _isFullScreen = false;
+                DwmHelper.ApplyTitleBarTheme(this, ThemeManager.Instance.CurrentPalette);
             }
         }
 
@@ -1727,7 +1744,15 @@ Console.WriteLine($""Parsed {doc.Blocks.Count} blocks in 2ms!"");
                 if (result.IsUpdateAvailable)
                 {
                     var dlg = new UpdateDialog(result, _updateService) { Owner = this };
-                    dlg.ShowDialog();
+                    if (dlg.ShowDialog() == true && !string.IsNullOrEmpty(dlg.VerifiedInstallerPath))
+                    {
+                        string installerPath = dlg.VerifiedInstallerPath;
+                        Close();
+                        if (!IsLoaded)
+                        {
+                            UpdateService.LaunchInstallerAndExit(installerPath);
+                        }
+                    }
                 }
                 else
                 {

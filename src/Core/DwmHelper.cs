@@ -169,5 +169,42 @@ namespace MDPlus.Core
                 return false;
             }
         }
+
+        /// <summary>
+        /// Resets title bar DWM attributes of a WPF Window back to OS defaults.
+        /// </summary>
+        public static bool ResetTitleBarTheme(Window window)
+        {
+            if (window == null) return false;
+
+            try
+            {
+                if (window.Dispatcher != null && !window.Dispatcher.CheckAccess())
+                {
+                    return window.Dispatcher.Invoke(() => ResetTitleBarTheme(window));
+                }
+
+                var helper = new WindowInteropHelper(window);
+                IntPtr hwnd = helper.Handle;
+                if (hwnd == IntPtr.Zero)
+                {
+                    try
+                    {
+                        hwnd = helper.EnsureHandle();
+                    }
+                    catch
+                    {
+                        // Window handle not yet available
+                    }
+                }
+
+                if (hwnd == IntPtr.Zero) return false;
+                return ResetTitleBarTheme(hwnd);
+            }
+            catch
+            {
+                return false;
+            }
+        }
     }
 }
