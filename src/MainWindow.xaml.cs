@@ -56,6 +56,7 @@ namespace MDPlus
 
             ApplyTheme();
             BuildRecentFilesMenu();
+            UpdateStartupModeMenu();
 
             SetMenuBarVisibility(_settings.ShowMenuBar);
             if (HamburgerContextMenu != null)
@@ -83,39 +84,60 @@ namespace MDPlus
 
         private void MainWindow_Loaded(object sender, RoutedEventArgs e)
         {
-            string[] args = Environment.GetCommandLineArgs();
+            string[] rawArgs = Environment.GetCommandLineArgs();
+            string[] args = rawArgs.Length > 1 ? rawArgs.Skip(1).ToArray() : Array.Empty<string>();
             bool loadedAny = false;
 
-            if (args.Length > 1)
+            if (args.Length > 0 && (args[0].Equals("--verify-integrity", StringComparison.OrdinalIgnoreCase) ||
+                                    args[0].Equals("--verify", StringComparison.OrdinalIgnoreCase) ||
+                                    args[0].Equals("--hash", StringComparison.OrdinalIgnoreCase)))
             {
-                if (args[1].Equals("--verify-integrity", StringComparison.OrdinalIgnoreCase) ||
-                    args[1].Equals("--verify", StringComparison.OrdinalIgnoreCase) ||
-                    args[1].Equals("--hash", StringComparison.OrdinalIgnoreCase))
+                string target = args.Length > 1 ? args[1] : string.Empty;
+                var dlg = new VerifyIntegrityWindow(target) { Owner = this };
+                dlg.ShowDialog();
+                return;
+            }
+
+            var startupFiles = App.ResolveStartupFiles(_settings, args);
+
+            if (startupFiles.Count > 0)
+            {
+                string? desiredActiveFile = _settings.ActiveFile;
+
+                for (int i = 0; i < startupFiles.Count; i++)
                 {
-                    string target = args.Length > 2 ? args[2] : string.Empty;
-                    var dlg = new VerifyIntegrityWindow(target) { Owner = this };
-                    dlg.ShowDialog();
+                    OpenDocument(startupFiles[i], activate: false, saveSession: false);
                     loadedAny = true;
+                }
+
+                BuildRecentFilesMenu();
+
+                DocumentTabItem? targetTab = null;
+                if (!string.IsNullOrEmpty(desiredActiveFile))
+                {
+                    targetTab = _tabs.FirstOrDefault(t => t.FilePath.Equals(desiredActiveFile, StringComparison.OrdinalIgnoreCase));
+                }
+                targetTab ??= _tabs.FirstOrDefault();
+
+                if (targetTab != null)
+                {
+                    SetActiveTab(targetTab);
                 }
                 else
                 {
-                    for (int i = 1; i < args.Length; i++)
-                    {
-                        string path = args[i];
-                        if (File.Exists(path))
-                        {
-                            OpenDocument(path);
-                            loadedAny = true;
-                        }
-                    }
+                    SetActiveTab(null);
                 }
+
+                SaveSessionState();
             }
 
             if (!loadedAny)
             {
-                Dispatcher.BeginInvoke(DispatcherPriority.Background, new Action(() =>
+                if (_settings.IsFirstRun)
                 {
-                    // Look for sample docs or welcome doc
+                    _settings.FirstRunCompleted = true;
+                    _settings.Save();
+
                     string samplePath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "sample_docs", "welcome.md");
                     if (File.Exists(samplePath))
                     {
@@ -125,11 +147,15 @@ namespace MDPlus
                     {
                         ShowWelcomeDocument();
                     }
-                }));
+                }
+                else
+                {
+                    SetActiveTab(null);
+                }
             }
         }
 
-        public void OpenDocument(string filePath, string? anchor = null)
+        public void OpenDocument(string filePath, string? anchor = null, bool activate = true, bool saveSession = true)
         {
             if (string.IsNullOrEmpty(filePath) || !File.Exists(filePath)) return;
 
@@ -139,7 +165,10 @@ namespace MDPlus
             var existing = _tabs.FirstOrDefault(t => t.FilePath.Equals(fullPath, StringComparison.OrdinalIgnoreCase));
             if (existing != null)
             {
-                SetActiveTab(existing);
+                if (activate)
+                {
+                    SetActiveTab(existing);
+                }
                 if (!string.IsNullOrEmpty(anchor))
                 {
                     MarkdownViewer.ScrollToAnchor(anchor);
@@ -168,8 +197,11 @@ namespace MDPlus
 
                 _tabs.Add(tab);
                 _settings.AddRecentFile(fullPath);
-                _settings.Save();
-                BuildRecentFilesMenu();
+                if (saveSession)
+                {
+                    _settings.Save();
+                    BuildRecentFilesMenu();
+                }
 
                 if (_settings.AutoReload)
                 {
@@ -177,7 +209,14 @@ namespace MDPlus
                 }
 
                 RebuildTabStrip();
-                SetActiveTab(tab);
+                if (activate)
+                {
+                    SetActiveTab(tab);
+                }
+                if (saveSession)
+                {
+                    SaveSessionState();
+                }
 
                 if (!string.IsNullOrEmpty(anchor))
                 {
@@ -292,7 +331,7 @@ Console.WriteLine($""Parsed {doc.Blocks.Count} blocks in 2ms!"");
             return list;
         }
 
-        private void SetActiveTab(DocumentTabItem tab)
+        private void SetActiveTab(DocumentTabItem? tab)
         {
             _activeTab = tab;
 
@@ -303,8 +342,8 @@ Console.WriteLine($""Parsed {doc.Blocks.Count} blocks in 2ms!"");
                 RawMarkdownTextBox.Text = string.Empty;
                 TocListBox.ItemsSource = null;
                 Title = "MDPlus";
-                StatusFileText.Text = "Ready";
-                StatusStatsText.Text = string.Empty;
+                UpdateStatusBar();
+                RebuildTabStrip();
                 return;
             }
 
@@ -333,11 +372,11 @@ Console.WriteLine($""Parsed {doc.Blocks.Count} blocks in 2ms!"");
             UpdateViewDisplayMode(tab.ViewMode);
 
             Title = $"{tab.DisplayTitle} - MDPlus";
-            StatusFileText.Text = string.IsNullOrEmpty(tab.FilePath) ? tab.Title : tab.FilePath;
-            StatusStatsText.Text = tab.StatsText;
-            StatusZoomText.Text = tab.ZoomText;
-            StatusEncodingText.Text = $"{tab.EncodingName} • {tab.LineEndingName}";
-            StatusViewModeText.Text = tab.ViewMode.ToString();
+            if (!string.IsNullOrEmpty(tab.FilePath))
+            {
+                _settings.ActiveFile = tab.FilePath;
+            }
+            UpdateStatusBar();
 
             if (DocumentFindBar.Visibility == Visibility.Visible)
             {
@@ -388,18 +427,42 @@ Console.WriteLine($""Parsed {doc.Blocks.Count} blocks in 2ms!"");
                 var closeBtn = new Button
                 {
                     Content = "✕",
-                    Width = 16,
-                    Height = 16,
+                    Width = 18,
+                    Height = 18,
                     Background = Brushes.Transparent,
                     Foreground = palette.MutedFg,
                     BorderThickness = new Thickness(0),
                     FontSize = 10,
                     FontWeight = FontWeights.Bold,
                     Cursor = Cursors.Hand,
-                    VerticalAlignment = VerticalAlignment.Center
+                    ToolTip = "Close Tab (Ctrl+W)",
+                    VerticalAlignment = VerticalAlignment.Center,
+                    Focusable = false
                 };
 
+                var closeBtnTemplate = new ControlTemplate(typeof(Button));
+                var borderFactory = new FrameworkElementFactory(typeof(Border), "border");
+                borderFactory.SetValue(Border.CornerRadiusProperty, new CornerRadius(2));
+                borderFactory.SetValue(Border.BackgroundProperty, Brushes.Transparent);
+                var contentFactory = new FrameworkElementFactory(typeof(ContentPresenter));
+                contentFactory.SetValue(ContentPresenter.HorizontalAlignmentProperty, HorizontalAlignment.Center);
+                contentFactory.SetValue(ContentPresenter.VerticalAlignmentProperty, VerticalAlignment.Center);
+                borderFactory.AppendChild(contentFactory);
+                closeBtnTemplate.VisualTree = borderFactory;
+
+                var hoverTrigger = new Trigger { Property = Button.IsMouseOverProperty, Value = true };
+                hoverTrigger.Setters.Add(new Setter(Border.BackgroundProperty, palette.MenuHoverBg, "border"));
+                hoverTrigger.Setters.Add(new Setter(Button.ForegroundProperty, palette.MenuHoverFg));
+                closeBtnTemplate.Triggers.Add(hoverTrigger);
+
+                closeBtn.Template = closeBtnTemplate;
+
                 var currentTab = tab;
+                closeBtn.PreviewMouseLeftButtonDown += (s, e) =>
+                {
+                    e.Handled = true;
+                    CloseTab(currentTab);
+                };
                 closeBtn.Click += (s, e) =>
                 {
                     e.Handled = true;
@@ -456,7 +519,11 @@ Console.WriteLine($""Parsed {doc.Blocks.Count} blocks in 2ms!"");
             }
 
             int index = _tabs.IndexOf(tab);
-            _tabs.Remove(tab);
+            if (index < 0)
+            {
+                return false;
+            }
+            _tabs.RemoveAt(index);
 
             if (_activeTab == tab)
             {
@@ -467,7 +534,7 @@ Console.WriteLine($""Parsed {doc.Blocks.Count} blocks in 2ms!"");
                 }
                 else
                 {
-                    SetActiveTab(null!);
+                    SetActiveTab(null);
                 }
             }
             else
@@ -475,6 +542,7 @@ Console.WriteLine($""Parsed {doc.Blocks.Count} blocks in 2ms!"");
                 RebuildTabStrip();
             }
 
+            SaveSessionState();
             return true;
         }
 
@@ -821,6 +889,7 @@ Console.WriteLine($""Parsed {doc.Blocks.Count} blocks in 2ms!"");
             SidebarBorder.BorderBrush = palette.Border;
 
             ContentGrid.Background = palette.EditorBg;
+            WelcomeScreen.Background = palette.EditorBg;
 
             RawMarkdownTextBox.Background = palette.EditorBg;
             RawMarkdownTextBox.Foreground = palette.EditorFg;
@@ -902,6 +971,37 @@ Console.WriteLine($""Parsed {doc.Blocks.Count} blocks in 2ms!"");
                 BuildRecentFilesMenu();
             };
             menu.Items.Add(clearItem);
+        }
+
+        private void SaveSessionState()
+        {
+            _settings.UpdateOpenFiles(
+                _tabs.Where(t => !string.IsNullOrEmpty(t.FilePath)).Select(t => t.FilePath),
+                _activeTab?.FilePath);
+            _settings.Save();
+        }
+
+        private void UpdateStartupModeMenu()
+        {
+            bool resume = _settings.ResumeSession;
+            if (StartupResumeItem != null) StartupResumeItem.IsChecked = resume;
+            if (StartupFreshItem != null) StartupFreshItem.IsChecked = !resume;
+            if (HamburgerStartupResumeItem != null) HamburgerStartupResumeItem.IsChecked = resume;
+            if (HamburgerStartupFreshItem != null) HamburgerStartupFreshItem.IsChecked = !resume;
+        }
+
+        private void StartupResume_Click(object sender, RoutedEventArgs e)
+        {
+            _settings.ResumeSession = true;
+            _settings.Save();
+            UpdateStartupModeMenu();
+        }
+
+        private void StartupFresh_Click(object sender, RoutedEventArgs e)
+        {
+            _settings.ResumeSession = false;
+            _settings.Save();
+            UpdateStartupModeMenu();
         }
 
         // --- Event Handlers & Actions ---
@@ -1060,6 +1160,7 @@ Console.WriteLine($""Parsed {doc.Blocks.Count} blocks in 2ms!"");
                 _settings.AddRecentFile(tab.FilePath);
                 _settings.Save();
                 BuildRecentFilesMenu();
+                SaveSessionState();
 
                 return true;
             }
@@ -1916,6 +2017,7 @@ Console.WriteLine($""Parsed {doc.Blocks.Count} blocks in 2ms!"");
                 _settings.WindowWidth = Width;
                 _settings.WindowHeight = Height;
             }
+            SaveSessionState();
             _settings.Save();
         }
     }

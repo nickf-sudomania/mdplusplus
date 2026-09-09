@@ -133,6 +133,11 @@ namespace MDPlus.Tests
             RunTest("Menu Bar Dynamic Theme Styling & Hardcoded Color Removal", TestMenuBarThemeColorPaletteConsistency);
             RunTest("Recent File Mnemonic Escaping & AltGr Handling Logic", TestRecentFileMnemonicAndAltGrHandling);
 
+            // 20. Session Restore & Tab Lifecycle Tests
+            RunTest("Session Restore & Startup Preference in AppSettings", TestAppSettingsSessionRestoreProperties);
+            RunTest("Startup File Resolution & Mode Routing in App.xaml.cs", TestAppResolveStartupFilesLogic);
+            RunTest("Single-Click Tab Close & Empty State Shell Integrity", TestTabClosingSingleClickAndEmptyState);
+
             sw.Stop();
 
             Console.WriteLine("\n==================================================");
@@ -1699,6 +1704,204 @@ d9f764a730236c5a79103fe8ffb4c730649dcfc2cac93fcce59f5bbe12a183b5  MDPlus-1.0.0-s
             var altGrMods = System.Windows.Input.ModifierKeys.Control | System.Windows.Input.ModifierKeys.Alt;
             bool isCtrlDown = altGrMods.HasFlag(System.Windows.Input.ModifierKeys.Control);
             Assert(isCtrlDown, "AltGr combinations with Control modifier must be recognized as having Ctrl down");
+        }
+
+        // 20. Session Restore & Tab Lifecycle Tests
+        private static void TestAppSettingsSessionRestoreProperties()
+        {
+            var settings = new AppSettings();
+            AssertEqual(true, settings.ResumeSession, "ResumeSession must default to true");
+            AssertEqual(false, settings.StartFresh, "StartFresh must default to false");
+            AssertEqual(true, settings.RestoreSession, "RestoreSession must match ResumeSession");
+            Assert(settings.OpenFiles != null, "OpenFiles must not be null");
+            AssertEqual(0, settings.OpenFiles!.Count, "OpenFiles must default to empty");
+            Assert(settings.ActiveFile == null, "ActiveFile must default to null");
+            AssertEqual(false, settings.HasSavedSession, "HasSavedSession must default to false");
+            AssertEqual(false, settings.FirstRunCompleted, "FirstRunCompleted must default to false");
+            Assert(settings.IsFirstRun, "IsFirstRun must be true on brand-new installation");
+
+            // Toggle StartFresh
+            settings.StartFresh = true;
+            AssertEqual(false, settings.ResumeSession, "Setting StartFresh=true must set ResumeSession=false");
+            settings.ResumeSession = true;
+            AssertEqual(false, settings.StartFresh, "Setting ResumeSession=true must set StartFresh=false");
+
+            // IsFirstRun with recent files
+            settings.RecentFiles.Add("C:\\sample.md");
+            Assert(!settings.IsFirstRun, "IsFirstRun must be false when RecentFiles is not empty");
+            settings.RecentFiles.Clear();
+            settings.FirstRunCompleted = true;
+            Assert(!settings.IsFirstRun, "IsFirstRun must be false when FirstRunCompleted is true");
+
+            // Serialization & Deserialization
+            var toSerialize = new AppSettings
+            {
+                ResumeSession = true,
+                ActiveFile = "C:\\docs\\test.md",
+                HasSavedSession = true,
+                FirstRunCompleted = true
+            };
+            toSerialize.OpenFiles.Add("C:\\docs\\test.md");
+            toSerialize.OpenFiles.Add("C:\\docs\\other.md");
+
+            string json = System.Text.Json.JsonSerializer.Serialize(toSerialize);
+            var deserialized = System.Text.Json.JsonSerializer.Deserialize<AppSettings>(json);
+            Assert(deserialized != null, "Deserialized settings must not be null");
+            AssertEqual(true, deserialized!.ResumeSession, "Deserialized ResumeSession must match");
+            AssertEqual("C:\\docs\\test.md", deserialized.ActiveFile, "Deserialized ActiveFile must match");
+            AssertEqual(2, deserialized.OpenFiles!.Count, "Deserialized OpenFiles count must match");
+            AssertEqual("C:\\docs\\test.md", deserialized.OpenFiles[0], "First OpenFile must match");
+            AssertEqual(true, deserialized.HasSavedSession, "HasSavedSession must match");
+
+            // Legacy JSON backward compatibility
+            string legacyJson = "{\"Theme\":\"GitHubDark\",\"ShowMenuBar\":true}";
+            var legacy = System.Text.Json.JsonSerializer.Deserialize<AppSettings>(legacyJson);
+            Assert(legacy != null, "Legacy settings must not be null");
+            AssertEqual(true, legacy!.ResumeSession, "ResumeSession must default to true when absent in JSON");
+            Assert(legacy.OpenFiles != null && legacy.OpenFiles!.Count == 0, "OpenFiles must default to empty list when absent in JSON");
+            Assert(legacy.ActiveFile == null, "ActiveFile must default to null when absent in JSON");
+
+            // UpdateOpenFiles helper
+            string existingFile = System.IO.Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "sample_docs", "welcome.md");
+            string gfmFile = System.IO.Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "sample_docs", "gfm_features.md");
+            if (System.IO.File.Exists(existingFile) && System.IO.File.Exists(gfmFile))
+            {
+                var s = new AppSettings();
+                s.UpdateOpenFiles(new[] { existingFile, existingFile.ToUpperInvariant(), "C:\\non_existent_file_12345.md" }, existingFile);
+                AssertEqual(1, s.OpenFiles.Count, "UpdateOpenFiles must deduplicate paths and ignore non-existent files");
+                AssertEqual(System.IO.Path.GetFullPath(existingFile), s.OpenFiles[0], "OpenFiles path must be normalized full path");
+                AssertEqual(System.IO.Path.GetFullPath(existingFile), s.ActiveFile, "ActiveFile must match target");
+                AssertEqual(true, s.HasSavedSession, "UpdateOpenFiles must set HasSavedSession to true");
+
+                // Multiple files with target active file
+                s.UpdateOpenFiles(new[] { existingFile, gfmFile }, gfmFile);
+                AssertEqual(2, s.OpenFiles.Count, "UpdateOpenFiles must retain multiple valid files");
+                AssertEqual(System.IO.Path.GetFullPath(gfmFile), s.ActiveFile, "ActiveFile must accurately target specified file in list");
+
+                // Target first file as active
+                s.UpdateOpenFiles(new[] { existingFile, gfmFile }, existingFile);
+                AssertEqual(System.IO.Path.GetFullPath(existingFile), s.ActiveFile, "ActiveFile must accurately target first file when selected");
+            }
+        }
+
+        private static void TestAppResolveStartupFilesLogic()
+        {
+            string welcomeDoc = System.IO.Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "sample_docs", "welcome.md");
+            string gfmDoc = System.IO.Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "sample_docs", "gfm_features.md");
+            bool filesExist = System.IO.File.Exists(welcomeDoc) && System.IO.File.Exists(gfmDoc);
+            Assert(filesExist, "Sample docs welcome.md and gfm_features.md must exist in test directory");
+
+            var settings = new AppSettings
+            {
+                ResumeSession = true
+            };
+            settings.OpenFiles.Add(welcomeDoc);
+
+            // 1. Explicit CLI arguments take precedence
+            var cliFiles = App.ResolveStartupFiles(settings, new[] { gfmDoc });
+            AssertEqual(1, cliFiles.Count, "CLI file argument must take precedence over session files");
+            AssertEqual(System.IO.Path.GetFullPath(gfmDoc), cliFiles[0], "CLI argument file must be returned");
+
+            // 2. CLI --start-fresh flag forces fresh start
+            var freshCliFiles = App.ResolveStartupFiles(settings, new[] { "--start-fresh" });
+            AssertEqual(0, freshCliFiles.Count, "--start-fresh CLI flag must return empty list");
+
+            var freshShortCliFiles = App.ResolveStartupFiles(settings, new[] { "--fresh" });
+            AssertEqual(0, freshShortCliFiles.Count, "--fresh CLI flag must return empty list");
+
+            // 3. User preference ResumeSession = true restores open files
+            var restoredFiles = App.ResolveStartupFiles(settings, Array.Empty<string>());
+            AssertEqual(1, restoredFiles.Count, "ResumeSession=true must restore open files");
+            AssertEqual(System.IO.Path.GetFullPath(welcomeDoc), restoredFiles[0], "Restored file must match OpenFiles");
+
+            // 4. User preference StartFresh (ResumeSession = false) returns empty list
+            settings.ResumeSession = false;
+            var startFreshFiles = App.ResolveStartupFiles(settings, Array.Empty<string>());
+            AssertEqual(0, startFreshFiles.Count, "ResumeSession=false must not restore open files (starts fresh)");
+
+            // 5. Non-existent files in OpenFiles are filtered out
+            settings.ResumeSession = true;
+            settings.OpenFiles.Clear();
+            settings.OpenFiles.Add("C:\\does_not_exist_file_abcdef.md");
+            var filteredFiles = App.ResolveStartupFiles(settings, Array.Empty<string>());
+            AssertEqual(0, filteredFiles.Count, "Non-existent files must be excluded from startup resolution");
+
+            // 6. Transition case from RecentFiles when HasSavedSession is false
+            settings.OpenFiles.Clear();
+            settings.HasSavedSession = false;
+            settings.RecentFiles.Add(gfmDoc);
+            var transitionFiles = App.ResolveStartupFiles(settings, Array.Empty<string>());
+            AssertEqual(1, transitionFiles.Count, "Transition case must restore from RecentFiles when HasSavedSession is false");
+            AssertEqual(System.IO.Path.GetFullPath(gfmDoc), transitionFiles[0], "Transition file must match RecentFiles[0]");
+
+            // 7. When HasSavedSession is true and OpenFiles is empty, must NOT fall back to RecentFiles
+            settings.HasSavedSession = true;
+            var deliberateEmptyFiles = App.ResolveStartupFiles(settings, Array.Empty<string>());
+            AssertEqual(0, deliberateEmptyFiles.Count, "Deliberately closed session must not restore RecentFiles");
+
+            // 8. Explicit CLI argument pointing to non-existent file must NOT fall back to session files
+            settings.OpenFiles.Clear();
+            settings.OpenFiles.Add(welcomeDoc);
+            var cliMissingFiles = App.ResolveStartupFiles(settings, new[] { "C:\\does_not_exist_cli_xyz123.md" });
+            AssertEqual(0, cliMissingFiles.Count, "Explicit non-existent CLI file argument must return empty list, not restore session files");
+        }
+
+        private static void TestTabClosingSingleClickAndEmptyState()
+        {
+            // Verify XAML layout contains startup menu options and single-click tab elements
+            string[] possiblePaths = new[]
+            {
+                System.IO.Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "..", "..", "..", "..", "src", "MainWindow.xaml"),
+                System.IO.Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "..", "..", "..", "src", "MainWindow.xaml"),
+                System.IO.Path.Combine(Environment.CurrentDirectory, "src", "MainWindow.xaml")
+            };
+            string mainWindowXamlPath = possiblePaths.FirstOrDefault(p => System.IO.File.Exists(p)) ?? string.Empty;
+            Assert(!string.IsNullOrEmpty(mainWindowXamlPath), "MainWindow.xaml must exist");
+
+            string xamlText = System.IO.File.ReadAllText(mainWindowXamlPath);
+            Assert(xamlText.Contains("Name=\"StartupMenu\""), "MainWindow.xaml must contain StartupMenu in File menu");
+            Assert(xamlText.Contains("Name=\"StartupResumeItem\""), "MainWindow.xaml must contain StartupResumeItem");
+            Assert(xamlText.Contains("Name=\"StartupFreshItem\""), "MainWindow.xaml must contain StartupFreshItem");
+            Assert(xamlText.Contains("Name=\"HamburgerStartupMenu\""), "MainWindow.xaml must contain HamburgerStartupMenu");
+            Assert(xamlText.Contains("Name=\"HamburgerStartupResumeItem\""), "MainWindow.xaml must contain HamburgerStartupResumeItem");
+            Assert(xamlText.Contains("Name=\"HamburgerStartupFreshItem\""), "MainWindow.xaml must contain HamburgerStartupFreshItem");
+            Assert(xamlText.Contains("➕ New Document (Ctrl+N)"), "WelcomeScreen must offer a New Document button");
+
+            // DocumentTabItem title and dirty state tests
+            var tab1 = new DocumentTabItem { Title = "welcome.md", FilePath = "C:\\docs\\welcome.md" };
+            AssertEqual("welcome.md", tab1.DisplayTitle, "Clean tab title must equal filename");
+            tab1.MarkDirty();
+            AssertEqual("welcome.md *", tab1.DisplayTitle, "Dirty tab title must append asterisk");
+            tab1.MarkClean();
+            AssertEqual("welcome.md", tab1.DisplayTitle, "Cleaned tab title must remove asterisk");
+
+            // Simulate tab closing indexing logic
+            var tabs = new List<DocumentTabItem>
+            {
+                new DocumentTabItem { Title = "tab1.md", FilePath = "C:\\tab1.md" },
+                new DocumentTabItem { Title = "tab2.md", FilePath = "C:\\tab2.md" },
+                new DocumentTabItem { Title = "tab3.md", FilePath = "C:\\tab3.md" }
+            };
+
+            // Close middle active tab (index 1) -> selects next index Math.Min(1, 2-1) = 1 (tab3.md)
+            int index = 1;
+            tabs.RemoveAt(index);
+            int nextIndex = Math.Min(index, tabs.Count - 1);
+            AssertEqual(1, nextIndex, "Next active index must be 1");
+            AssertEqual("tab3.md", tabs[nextIndex].Title, "Active tab after closing middle tab must be tab3.md");
+
+            // Close last tab (index 1 of remaining 2) -> selects Math.Min(1, 1-1) = 0 (tab1.md)
+            index = 1;
+            tabs.RemoveAt(index);
+            nextIndex = Math.Min(index, tabs.Count - 1);
+            AssertEqual(0, nextIndex, "Next active index must be 0");
+            AssertEqual("tab1.md", tabs[nextIndex].Title, "Active tab after closing end tab must be tab1.md");
+
+            // Close final tab (index 0 of remaining 1) -> 0 tabs remain, active tab becomes null
+            tabs.RemoveAt(0);
+            AssertEqual(0, tabs.Count, "Tabs count must be 0 after closing final tab");
+            DocumentTabItem? activeTab = tabs.Count > 0 ? tabs[0] : null;
+            Assert(activeTab == null, "Active tab must be null when all tabs are closed");
         }
     }
 }

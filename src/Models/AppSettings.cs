@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.IO;
+using System.Linq;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using MDPlus.Core;
@@ -27,6 +28,72 @@ namespace MDPlus.Models
         public double WindowHeight { get; set; } = 750;
         public bool WindowMaximized { get; set; } = false;
         public List<string> RecentFiles { get; set; } = new List<string>();
+
+        /// <summary>
+        /// Whether to restore previously open files on startup (default: true).
+        /// If false, the application starts fresh without reopening previous files.
+        /// </summary>
+        public bool ResumeSession { get; set; } = true;
+
+        [JsonIgnore]
+        public bool StartFresh
+        {
+            get => !ResumeSession;
+            set => ResumeSession = !value;
+        }
+
+        [JsonIgnore]
+        public bool RestoreSession
+        {
+            get => ResumeSession;
+            set => ResumeSession = value;
+        }
+
+        /// <summary>
+        /// List of file paths that were open in tabs when the application last closed.
+        /// </summary>
+        public List<string> OpenFiles { get; set; } = new List<string>();
+
+        /// <summary>
+        /// The file path of the tab that was active when the application last closed.
+        /// </summary>
+        public string? ActiveFile { get; set; }
+
+        /// <summary>
+        /// Indicates whether a session has ever been saved by the application.
+        /// </summary>
+        public bool HasSavedSession { get; set; } = false;
+
+        /// <summary>
+        /// Tracks whether the first run experience has completed.
+        /// </summary>
+        public bool FirstRunCompleted { get; set; } = false;
+
+        [JsonIgnore]
+        public bool IsFirstRun => !FirstRunCompleted && (RecentFiles == null || RecentFiles.Count == 0) && (OpenFiles == null || OpenFiles.Count == 0);
+
+        public void UpdateOpenFiles(IEnumerable<string> filePaths, string? activeFile = null)
+        {
+            OpenFiles.Clear();
+            if (filePaths != null)
+            {
+                foreach (var path in filePaths)
+                {
+                    if (!string.IsNullOrWhiteSpace(path) && File.Exists(path))
+                    {
+                        string full = Path.GetFullPath(path);
+                        if (!OpenFiles.Any(f => f.Equals(full, StringComparison.OrdinalIgnoreCase)))
+                        {
+                            OpenFiles.Add(full);
+                        }
+                    }
+                }
+            }
+            ActiveFile = !string.IsNullOrWhiteSpace(activeFile) && File.Exists(activeFile)
+                ? Path.GetFullPath(activeFile)
+                : OpenFiles.Count > 0 ? OpenFiles[0] : null;
+            HasSavedSession = true;
+        }
 
         public void AddRecentFile(string path)
         {
