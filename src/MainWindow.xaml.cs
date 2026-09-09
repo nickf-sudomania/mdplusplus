@@ -68,13 +68,25 @@ namespace MDPlus
 
             if (args.Length > 1)
             {
-                for (int i = 1; i < args.Length; i++)
+                if (args[1].Equals("--verify-integrity", StringComparison.OrdinalIgnoreCase) ||
+                    args[1].Equals("--verify", StringComparison.OrdinalIgnoreCase) ||
+                    args[1].Equals("--hash", StringComparison.OrdinalIgnoreCase))
                 {
-                    string path = args[i];
-                    if (File.Exists(path))
+                    string target = args.Length > 2 ? args[2] : string.Empty;
+                    var dlg = new VerifyIntegrityWindow(target) { Owner = this };
+                    dlg.ShowDialog();
+                    loadedAny = true;
+                }
+                else
+                {
+                    for (int i = 1; i < args.Length; i++)
                     {
-                        OpenDocument(path);
-                        loadedAny = true;
+                        string path = args[i];
+                        if (File.Exists(path))
+                        {
+                            OpenDocument(path);
+                            loadedAny = true;
+                        }
                     }
                 }
             }
@@ -273,6 +285,7 @@ Console.WriteLine($""Parsed {doc.Blocks.Count} blocks in 2ms!"");
 
             MarkdownViewer.Document = tab.FlowDocument;
             MarkdownViewer.Zoom = tab.Zoom;
+            RawMarkdownTextBox.FontSize = 13.0 * (tab.Zoom / 100.0);
             RawMarkdownTextBox.Text = tab.RawMarkdown;
             TocListBox.ItemsSource = tab.Headings;
 
@@ -388,14 +401,40 @@ Console.WriteLine($""Parsed {doc.Blocks.Count} blocks in 2ms!"");
 
         private void OnExternalFileChanged(object? sender, string filePath)
         {
-            Dispatcher.Invoke(() =>
+            Dispatcher.Invoke(async () =>
             {
                 var tab = _tabs.FirstOrDefault(t => t.FilePath.Equals(filePath, StringComparison.OrdinalIgnoreCase));
                 if (tab != null)
                 {
+                    string text = string.Empty;
+                    bool success = false;
+
+                    // Editors often lock or write atomically. Retry reading up to 5 times.
+                    for (int attempt = 0; attempt < 5; attempt++)
+                    {
+                        try
+                        {
+                            if (File.Exists(filePath))
+                            {
+                                text = File.ReadAllText(filePath);
+                                success = true;
+                                break;
+                            }
+                        }
+                        catch (IOException)
+                        {
+                            await System.Threading.Tasks.Task.Delay(50);
+                        }
+                        catch
+                        {
+                            break;
+                        }
+                    }
+
+                    if (!success) return;
+
                     try
                     {
-                        string text = File.ReadAllText(filePath);
                         tab.RawMarkdown = text;
                         tab.Document = _parser.Parse(text);
                         tab.Headings = ExtractHeadings(tab.Document);
@@ -411,7 +450,7 @@ Console.WriteLine($""Parsed {doc.Blocks.Count} blocks in 2ms!"");
                     }
                     catch
                     {
-                        // File may be locked momentarily by writing editor, next event will catch it
+                        // Handle parse/render error gracefully
                     }
                 }
             });
@@ -667,15 +706,14 @@ Console.WriteLine($""Parsed {doc.Blocks.Count} blocks in 2ms!"");
         {
             if (_activeTab == null) return;
 
-            try
+            string html = HtmlExporter.ExportBodyHtml(_activeTab.Document);
+            if (ClipboardHelper.SetText(html))
             {
-                string html = HtmlExporter.ExportBodyHtml(_activeTab.Document);
-                Clipboard.SetText(html);
                 MessageBox.Show("HTML snippet copied to clipboard!", "MDPlus", MessageBoxButton.OK, MessageBoxImage.Information);
             }
-            catch (Exception ex)
+            else
             {
-                MessageBox.Show($"Clipboard copy failed:\n{ex.Message}", "Error", MessageBoxButton.OK, MessageBoxImage.Warning);
+                MessageBox.Show("Clipboard is busy or could not be accessed.", "Error", MessageBoxButton.OK, MessageBoxImage.Warning);
             }
         }
 
@@ -750,34 +788,30 @@ Console.WriteLine($""Parsed {doc.Blocks.Count} blocks in 2ms!"");
             }
         }
 
-        private void ZoomIn_Click(object sender, RoutedEventArgs e)
+        private void UpdateZoom(double newZoom)
         {
             if (_activeTab != null)
             {
-                _activeTab.Zoom += 10;
+                _activeTab.Zoom = newZoom;
                 MarkdownViewer.Zoom = _activeTab.Zoom;
+                RawMarkdownTextBox.FontSize = 13.0 * (_activeTab.Zoom / 100.0);
                 StatusZoomText.Text = _activeTab.ZoomText;
             }
+        }
+
+        private void ZoomIn_Click(object sender, RoutedEventArgs e)
+        {
+            if (_activeTab != null) UpdateZoom(_activeTab.Zoom + 10);
         }
 
         private void ZoomOut_Click(object sender, RoutedEventArgs e)
         {
-            if (_activeTab != null)
-            {
-                _activeTab.Zoom -= 10;
-                MarkdownViewer.Zoom = _activeTab.Zoom;
-                StatusZoomText.Text = _activeTab.ZoomText;
-            }
+            if (_activeTab != null) UpdateZoom(_activeTab.Zoom - 10);
         }
 
         private void ResetZoom_Click(object sender, RoutedEventArgs e)
         {
-            if (_activeTab != null)
-            {
-                _activeTab.Zoom = 100;
-                MarkdownViewer.Zoom = 100;
-                StatusZoomText.Text = _activeTab.ZoomText;
-            }
+            if (_activeTab != null) UpdateZoom(100);
         }
 
         private void ToggleToc_Click(object sender, RoutedEventArgs e)
@@ -949,12 +983,30 @@ Console.WriteLine($""Parsed {doc.Blocks.Count} blocks in 2ms!"");
             SetActiveTab(tab);
         }
 
+        private void ToolsVerifyIntegrity_Click(object sender, RoutedEventArgs e)
+        {
+            string? currentFile = _activeTab?.FilePath;
+            if (string.IsNullOrEmpty(currentFile))
+            {
+                currentFile = Environment.ProcessPath ?? string.Empty;
+            }
+            var dlg = new VerifyIntegrityWindow(currentFile) { Owner = this };
+            dlg.ShowDialog();
+        }
+
         private void HelpAbout_Click(object sender, RoutedEventArgs e)
         {
+            string? currentExe = Environment.ProcessPath;
+            string sha256 = !string.IsNullOrEmpty(currentExe) && File.Exists(currentExe)
+                ? HashService.ComputeSha256(currentExe)
+                : "Development Build";
+
             MessageBox.Show(
                 "MDPlus - Native Windows Markdown Viewer\nVersion 1.0.0\n\n" +
                 "A fast, lightweight desktop Markdown display application designed with the simplicity and performance of Notepad and Notepad++.\n\n" +
-                "Engineered with zero Electron bloat.",
+                $"Current Executable SHA-256 Digest:\n{sha256}\n\n" +
+                "Project & Release Hashes:\nhttps://github.com/nickf-sudomania/mdplusplus\n\n" +
+                "Zero Electron. Zero Chromium. Instant launch.",
                 "About MDPlus",
                 MessageBoxButton.OK,
                 MessageBoxImage.Information);
@@ -964,7 +1016,20 @@ Console.WriteLine($""Parsed {doc.Blocks.Count} blocks in 2ms!"");
         {
             if (TocListBox.SelectedItem is HeadingItem heading)
             {
-                MarkdownViewer.ScrollToAnchor(heading.Anchor);
+                if (_activeTab?.ViewMode == ViewDisplayMode.Raw)
+                {
+                    int lineIdx = RawMarkdownTextBox.Text.IndexOf(heading.Text, StringComparison.OrdinalIgnoreCase);
+                    if (lineIdx >= 0)
+                    {
+                        RawMarkdownTextBox.Select(lineIdx, heading.Text.Length);
+                        int line = RawMarkdownTextBox.GetLineIndexFromCharacterIndex(lineIdx);
+                        RawMarkdownTextBox.ScrollToLine(line);
+                    }
+                }
+                else
+                {
+                    MarkdownViewer.ScrollToAnchor(heading.Anchor);
+                }
                 Dispatcher.BeginInvoke(new Action(() => TocListBox.SelectedItem = null));
             }
         }

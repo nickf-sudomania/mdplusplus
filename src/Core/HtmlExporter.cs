@@ -111,15 +111,21 @@ namespace MDPlus.Core
                     break;
 
                 case TableBlock table:
+                    int colCount = Math.Max(table.Header.Cells.Count, table.Alignments.Count);
+                    if (colCount == 0) colCount = 1;
+
                     sb.AppendLine("<table>");
                     sb.AppendLine("  <thead><tr>");
-                    for (int i = 0; i < table.Header.Cells.Count; i++)
+                    for (int i = 0; i < colCount; i++)
                     {
                         string align = GetAlignAttr(table.Alignments, i);
                         sb.Append($"    <th{align}>");
-                        foreach (var inline in table.Header.Cells[i].Inlines)
+                        if (i < table.Header.Cells.Count)
                         {
-                            ConvertInlineToHtml(inline, sb);
+                            foreach (var inline in table.Header.Cells[i].Inlines)
+                            {
+                                ConvertInlineToHtml(inline, sb);
+                            }
                         }
                         sb.AppendLine("</th>");
                     }
@@ -130,13 +136,16 @@ namespace MDPlus.Core
                         foreach (var row in table.Rows)
                         {
                             sb.AppendLine("    <tr>");
-                            for (int i = 0; i < row.Cells.Count; i++)
+                            for (int i = 0; i < colCount; i++)
                             {
                                 string align = GetAlignAttr(table.Alignments, i);
                                 sb.Append($"      <td{align}>");
-                                foreach (var inline in row.Cells[i].Inlines)
+                                if (i < row.Cells.Count)
                                 {
-                                    ConvertInlineToHtml(inline, sb);
+                                    foreach (var inline in row.Cells[i].Inlines)
+                                    {
+                                        ConvertInlineToHtml(inline, sb);
+                                    }
                                 }
                                 sb.AppendLine("</td>");
                             }

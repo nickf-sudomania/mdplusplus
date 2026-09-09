@@ -69,6 +69,18 @@ namespace MDPlus.Tests
             RunTest("Email Autolinks & HTML Comments", TestAutolinkEmailAndComment);
             RunTest("Escaped Delimiters in Inline Formatting", TestEscapedDelimitersInFormatting);
 
+            // 14. SHA-256 Release Security & Integrity Tests (Notepad++ Standard)
+            RunTest("SHA-256 Hash Computation & Verification", TestHashServiceSha256);
+            RunTest("SHA-256 Checksum Manifest Parsing & Validation", TestHashServiceManifest);
+
+            // 15. Deep Bug Fix Regression Tests
+            RunTest("Setext Heading Does Not Capture Lists Or Quotes", TestSetextHeadingNotCapturingListsOrQuotes);
+            RunTest("Callouts Preserve Child Blocks (Lists, Code, Tables)", TestCalloutPreservesChildBlocks);
+            RunTest("Escaped Backslash at Line End Preserved", TestEscapedBackslashBeforeNewline);
+            RunTest("Multi-Backtick Code Spans", TestMultiBacktickCodeSpans);
+            RunTest("Angle Bracket URLs in Links & Images", TestAngleBracketUrls);
+            RunTest("HTML Exporter Table Column Harmonization", TestTableColumnConsistency);
+
             sw.Stop();
 
             Console.WriteLine("\n==================================================");
@@ -533,6 +545,168 @@ def foo():
 
             var bold = inlines.OfType<BoldInline>().FirstOrDefault();
             Assert(bold != null, "Should parse BoldInline");
+        }
+
+        private static void TestHashServiceSha256()
+        {
+            byte[] testData = Encoding.UTF8.GetBytes("MDPlus Native Windows Markdown Viewer");
+            string hash = HashService.ComputeSha256(testData);
+
+            AssertEqual(64, hash.Length, "SHA-256 length must be 64 characters");
+
+            // Verify known vector
+            byte[] helloBytes = Encoding.UTF8.GetBytes("hello world");
+            string helloHash = HashService.ComputeSha256(helloBytes);
+            // SHA-256("hello world") = b94d27b9934d3e08a52e52d7da7dabfac484efe37a5380ee9088f7ace2efcde9
+            AssertEqual("b94d27b9934d3e08a52e52d7da7dabfac484efe37a5380ee9088f7ace2efcde9", helloHash, "Known SHA-256 vector");
+
+            // Temporary file test
+            string tempFile = System.IO.Path.GetTempFileName();
+            try
+            {
+                System.IO.File.WriteAllText(tempFile, "hello world", new UTF8Encoding(false));
+                string fileHash = HashService.ComputeSha256(tempFile);
+                AssertEqual(helloHash, fileHash, "File SHA-256 must match byte SHA-256");
+
+                Assert(HashService.VerifyFileSha256(tempFile, helloHash), "Verification succeeds with lowercase");
+                Assert(HashService.VerifyFileSha256(tempFile, helloHash.ToUpperInvariant()), "Verification succeeds with uppercase");
+                Assert(HashService.VerifyFileSha256(tempFile, "  " + helloHash + "  "), "Verification succeeds with whitespace");
+                Assert(!HashService.VerifyFileSha256(tempFile, "0000000000000000000000000000000000000000000000000000000000000000"), "Verification fails on mismatch");
+            }
+            finally
+            {
+                if (System.IO.File.Exists(tempFile)) System.IO.File.Delete(tempFile);
+            }
+        }
+
+        private static void TestHashServiceManifest()
+        {
+            string manifest = @"# MDPlus Checksums Manifest (Notepad++ Standard)
+b94d27b9934d3e08a52e52d7da7dabfac484efe37a5380ee9088f7ace2efcde9  MDPlus.exe
+e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855 *MDPlus-win-x64.zip
+";
+            var parsed = HashService.ParseChecksums(manifest);
+            AssertEqual(2, parsed.Count, "Must parse 2 entries from manifest");
+            Assert(parsed.ContainsKey("MDPlus.exe"), "Contains MDPlus.exe");
+            Assert(parsed.ContainsKey("MDPlus-win-x64.zip"), "Contains MDPlus-win-x64.zip (asterisk stripped)");
+            AssertEqual("b94d27b9934d3e08a52e52d7da7dabfac484efe37a5380ee9088f7ace2efcde9", parsed["MDPlus.exe"], "MDPlus.exe hash");
+
+            string entry = HashService.FormatChecksumEntry("file.txt", "abc123def");
+            AssertEqual("abc123def  file.txt", entry, "Format checksum entry");
+        }
+
+        private static void TestSetextHeadingNotCapturingListsOrQuotes()
+        {
+            var parser = new MarkdownParser();
+            string md = @"- List item 1
+- List item 2
+---
+Next paragraph";
+
+            var doc = parser.Parse(md);
+            AssertEqual(3, doc.Blocks.Count, "Should produce 3 blocks (List, ThematicBreak, Paragraph)");
+            var list = doc.Blocks[0] as ListBlock;
+            Assert(list != null, "First block must remain ListBlock");
+            AssertEqual(2, list!.Items.Count, "List must retain both items");
+
+            var thematic = doc.Blocks[1] as ThematicBreakBlock;
+            Assert(thematic != null, "Second block must remain ThematicBreakBlock, not consumed as underline");
+
+            var para = doc.Blocks[2] as ParagraphBlock;
+            Assert(para != null, "Third block must be ParagraphBlock");
+
+            // Also test quote followed by ---
+            string mdQuote = @"> Blockquote text
+---
+Following text";
+            var docQuote = parser.Parse(mdQuote);
+            AssertEqual(3, docQuote.Blocks.Count, "Should produce 3 blocks for quote followed by thematic break");
+            Assert(docQuote.Blocks[0] is BlockquoteBlock, "First block must remain BlockquoteBlock");
+            Assert(docQuote.Blocks[1] is ThematicBreakBlock, "Second block must remain ThematicBreakBlock");
+        }
+
+        private static void TestCalloutPreservesChildBlocks()
+        {
+            var parser = new MarkdownParser();
+            string md = @"> [!NOTE]
+> Here are items:
+> - Item Alpha
+> - Item Beta
+> ```csharp
+> int x = 100;
+> ```";
+
+            var doc = parser.Parse(md);
+            AssertEqual(1, doc.Blocks.Count, "Block count");
+            var callout = doc.Blocks[0] as BlockquoteBlock;
+            Assert(callout != null, "Must be BlockquoteBlock");
+            AssertEqual(CalloutType.Note, callout!.Callout, "Note callout type");
+
+            // Child blocks must contain Paragraph, List, and CodeBlock
+            Assert(callout.Blocks.Any(b => b is ParagraphBlock), "Callout contains paragraph");
+            Assert(callout.Blocks.Any(b => b is ListBlock), "Callout contains ListBlock");
+            Assert(callout.Blocks.Any(b => b is CodeBlock), "Callout contains CodeBlock");
+        }
+
+        private static void TestEscapedBackslashBeforeNewline()
+        {
+            var parser = new MarkdownParser();
+            string md = "First line with backslash\\\\\nSecond line";
+            var inlines = parser.ParseInlines(md);
+
+            var texts = inlines.OfType<TextInline>().ToList();
+            string combined = string.Join("", texts.Select(t => t.Text));
+            Assert(combined.Contains("\\"), "Should preserve literal backslash from escaped '\\\\'");
+
+            // The line break should be soft, not hard
+            var br = inlines.OfType<LineBreakInline>().FirstOrDefault();
+            Assert(br != null, "Should have a line break");
+            Assert(!br!.IsHard, "Break after escaped backslash must be soft, not hard");
+        }
+
+        private static void TestMultiBacktickCodeSpans()
+        {
+            var parser = new MarkdownParser();
+            string md = "Use ``code with ` inside`` and ```three ` ` backticks```";
+            var inlines = parser.ParseInlines(md);
+
+            var codeList = inlines.OfType<CodeInline>().ToList();
+            AssertEqual(2, codeList.Count, "Should parse 2 code spans");
+            AssertEqual("code with ` inside", codeList[0].Code, "First code span with nested backtick");
+            AssertEqual("three ` ` backticks", codeList[1].Code, "Second code span with multiple backticks");
+        }
+
+        private static void TestAngleBracketUrls()
+        {
+            var parser = new MarkdownParser();
+            string md = "[Document](<https://example.com/my document.pdf> \"My Doc\") and ![Photo](<https://example.com/photo (1).png>)";
+            var inlines = parser.ParseInlines(md);
+
+            var link = inlines.OfType<LinkInline>().FirstOrDefault();
+            Assert(link != null, "Should find link with angle bracket URL");
+            AssertEqual("https://example.com/my document.pdf", link!.Url, "Angle bracket link URL with spaces");
+            AssertEqual("My Doc", link.Title, "Link title");
+
+            var img = inlines.OfType<ImageInline>().FirstOrDefault();
+            Assert(img != null, "Should find image with angle bracket URL");
+            AssertEqual("https://example.com/photo (1).png", img!.Url, "Angle bracket image URL with parens");
+        }
+
+        private static void TestTableColumnConsistency()
+        {
+            var parser = new MarkdownParser();
+            string md = @"| Header A | Header B |
+| :--- | :---: |
+| Row 1 Col 1 | Row 1 Col 2 | Row 1 Col 3 Extra |";
+
+            var doc = parser.Parse(md);
+            AssertEqual(1, doc.Blocks.Count, "Should parse TableBlock");
+            var table = (TableBlock)doc.Blocks[0];
+
+            string html = HtmlExporter.ExportBodyHtml(doc);
+            Assert(html.Contains("<table>"), "Contains table tag");
+            Assert(html.Contains("<th"), "Contains th");
+            Assert(html.Contains("<td"), "Contains td");
         }
     }
 }

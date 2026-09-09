@@ -80,8 +80,11 @@ Most popular Markdown viewers today (MarkText, Obsidian, Joplin, VS Code preview
    # Launch MDPlus
    .\build.ps1 -Action Run
 
-   # Publish standalone single-file binary
+   # Publish standalone single-file binary and generate SHA-256 digests
    .\build.ps1 -Action Publish
+
+   # Verify release downloads against SHA-256 digests
+   .\build.ps1 -Action Verify
    ```
 
 4. **Or using standard `dotnet` CLI:**
@@ -89,6 +92,36 @@ Most popular Markdown viewers today (MarkText, Obsidian, Joplin, VS Code preview
    dotnet build MDPlus.sln
    dotnet run --project src\MDPlus.csproj
    ```
+
+---
+
+## 🛡️ Release Integrity & Download Security (Notepad++ Standard)
+
+Inspired by how [Notepad++](https://notepad-plus-plus.org/) manages its releases to protect users from tampered or compromised binaries, **MDPlus** implements end-to-end cryptographic verification:
+
+- **Automated SHA-256 Digests:** Every published build automatically generates cryptographic SHA-256 hash files (`SHA256SUMS.txt`, `MDPlus.exe.sha256`, and `MDPlus-win-x64.zip.sha256`).
+- **Dual Release Distribution:** Standalone single-file binary (`MDPlus.exe`) and portable archive package (`MDPlus-win-x64.zip`).
+- **Build Script Verification:** `.\build.ps1 -Action Verify` checks every local build artifact against the official manifest and detects single-byte corruptions.
+- **CI/CD Integration:** Automated GitHub Actions workflow (`.github/workflows/build-and-release.yml`) builds, tests, verifies, and publishes hashes directly in release manifests.
+
+### How to Verify Your Download
+
+#### Option 1: Using PowerShell
+```powershell
+Get-FileHash MDPlus.exe -Algorithm SHA256
+```
+Compare the output against `dist\SHA256SUMS.txt` or the official GitHub release notes.
+
+#### Option 2: Using Command Prompt (CMD)
+```cmd
+certutil -hashfile MDPlus.exe SHA256
+```
+
+#### Option 3: Built-in MDPlus Integrity Tool (GUI)
+1. Open MDPlus.
+2. Select **Tools** > **Verify File Integrity (SHA-256)...** (or press `Ctrl+Shift+V`).
+3. Select any file or click **Current App** to verify the running executable.
+4. Paste the official expected SHA-256 hash. The tool will instantly validate the authenticity with an interactive status banner.
 
 ---
 
@@ -121,24 +154,31 @@ Most popular Markdown viewers today (MarkText, Obsidian, Joplin, VS Code preview
 
 ```
 mdplus/
+├── .github/
+│   └── workflows/
+│       └── build-and-release.yml   # CI/CD test, build, publish & SHA-256 digest workflow
 ├── MDPlus.sln                      # Visual Studio Solution
-├── build.bat                       # Interactive Windows build & run batch script
-├── build.ps1                       # PowerShell automation script
+├── build.bat                       # Interactive Windows build, run, publish & verify script
+├── build.ps1                       # PowerShell automation & SHA-256 verification script
 ├── README.md                       # Documentation
 ├── src/
 │   ├── MDPlus.csproj               # Application project file (.NET 8 WPF)
 │   ├── App.xaml                    # Application resources and entry
-│   ├── App.xaml.cs                 # Unhandled exception handling & init
+│   ├── App.xaml.cs                 # Unhandled exception handling & CLI args
 │   ├── MainWindow.xaml             # Window layout (Tabs, Menus, Sidebar, Status)
 │   ├── MainWindow.xaml.cs          # Tab management, event routing, viewer actions
 │   ├── Controls/
 │   │   ├── FindBar.xaml            # Docked in-page search bar
 │   │   ├── FindBar.xaml.cs         # Search bar logic & key handling
-│   │   └── MarkdownScrollViewer.cs # FlowDocument viewer with anchor jump & search
+│   │   ├── MarkdownScrollViewer.cs # FlowDocument viewer with anchor jump & search
+│   │   ├── VerifyIntegrityWindow.xaml # SHA-256 verification tool UI
+│   │   └── VerifyIntegrityWindow.xaml.cs # Checksum computation & validation logic
 │   ├── Core/
 │   │   ├── MarkdownDocumentModel.cs # AST nodes (blocks & inlines)
 │   │   ├── MarkdownParser.cs       # Zero-dependency CommonMark + GFM parser
 │   │   ├── MarkdownToWpfConverter.cs # AST to WPF FlowDocument converter
+│   │   ├── HashService.cs          # Cryptographic SHA-256 generation & verification engine
+│   │   ├── ClipboardHelper.cs      # Resilient clipboard operations with lock retry
 │   │   ├── SyntaxHighlighter.cs    # Multi-language code syntax tokenization
 │   │   ├── HtmlExporter.cs         # Standalone HTML generator & clipboard exporter
 │   │   ├── ThemeManager.cs         # Windows registry system theme detection
@@ -146,12 +186,12 @@ mdplus/
 │   ├── Models/
 │   │   ├── DocumentTabItem.cs      # Document tab state & properties
 │   │   ├── HeadingItem.cs          # Table of Contents heading model
-│   │   └── AppSettings.cs          # Settings persistence (%APPDATA%\MDPlus)
+│   │   └── AppSettings.cs          # Atomic settings persistence (%APPDATA%\MDPlus)
 │   └── Properties/
 │       └── AssemblyInfo.cs         # Assembly metadata
 ├── tests/
 │   ├── MDPlus.Tests.csproj         # Unit test project
-│   └── TestRunner.cs               # 18 comprehensive unit test suites covering GFM & edge cases
+│   └── TestRunner.cs               # 32 comprehensive unit test suites covering GFM, edge cases & SHA-256
 └── sample_docs/
     ├── welcome.md                  # Interactive welcome guide
     ├── gfm_features.md             # Complete GFM feature showcase

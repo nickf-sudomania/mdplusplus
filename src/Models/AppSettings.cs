@@ -65,7 +65,9 @@ namespace MDPlus.Models
                     Directory.CreateDirectory(SettingsFolder);
                 }
                 string json = JsonSerializer.Serialize(this, new JsonSerializerOptions { WriteIndented = true });
-                File.WriteAllText(SettingsFile, json);
+                string tempFile = SettingsFile + ".tmp";
+                File.WriteAllText(tempFile, json);
+                File.Move(tempFile, SettingsFile, overwrite: true);
             }
             catch
             {

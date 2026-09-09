@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
+using System.Linq;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Documents;
@@ -323,61 +324,37 @@ namespace MDPlus.Core
                     break;
             }
 
-            var container = new Border
+            var section = new Section
             {
                 BorderBrush = new SolidColorBrush(calloutBorderColor),
                 BorderThickness = new Thickness(4, 0, 0, 0),
                 Background = new SolidColorBrush(calloutBgColor),
-                CornerRadius = new CornerRadius(0, 4, 4, 0),
                 Padding = new Thickness(16, 12, 16, 12),
                 Margin = new Thickness(0, 8, 0, 16)
             };
 
-            var sp = new StackPanel();
-
-            // Header with icon and title
-            var headerSp = new StackPanel { Orientation = Orientation.Horizontal, Margin = new Thickness(0, 0, 0, 6) };
-            var iconTb = new TextBlock
+            // Header paragraph with icon and title
+            var headerPara = new Paragraph
             {
-                Text = icon + " ",
-                FontSize = 14,
-                VerticalAlignment = VerticalAlignment.Center
-            };
-            var titleTb = new TextBlock
-            {
-                Text = quote.CalloutTitle,
+                Margin = new Thickness(0, 0, 0, quote.Blocks.Count > 0 ? 8 : 0),
                 FontWeight = FontWeights.Bold,
                 FontSize = 14,
-                Foreground = new SolidColorBrush(calloutBorderColor),
-                VerticalAlignment = VerticalAlignment.Center
+                Foreground = new SolidColorBrush(calloutBorderColor)
             };
-            headerSp.Children.Add(iconTb);
-            headerSp.Children.Add(titleTb);
-            sp.Children.Add(headerSp);
+            headerPara.Inlines.Add(new Run(icon + " " + quote.CalloutTitle));
+            section.Blocks.Add(headerPara);
 
-            // Body
+            // Render all child blocks (Paragraphs, Lists, Code blocks, Tables, etc.)
             foreach (var childBlock in quote.Blocks)
             {
-                if (childBlock is ParagraphBlock pb)
+                var converted = ConvertBlock(childBlock);
+                if (converted != null)
                 {
-                    var tb = new TextBlock
-                    {
-                        TextWrapping = TextWrapping.Wrap,
-                        LineHeight = 22,
-                        Foreground = _textBrush,
-                        Margin = new Thickness(0, 2, 0, 4)
-                    };
-                    foreach (var inline in pb.Inlines)
-                    {
-                        var wpfInline = ConvertInline(inline);
-                        if (wpfInline != null) tb.Inlines.Add(wpfInline);
-                    }
-                    sp.Children.Add(tb);
+                    section.Blocks.Add(converted);
                 }
             }
 
-            container.Child = sp;
-            return new BlockUIContainer(container);
+            return section;
         }
 
         private Block ConvertCodeBlock(CodeBlock code)
@@ -433,12 +410,8 @@ namespace MDPlus.Core
             string rawCode = code.Code;
             copyBtn.Click += (s, e) =>
             {
-                try
+                if (ClipboardHelper.SetText(rawCode))
                 {
-                    if (!string.IsNullOrEmpty(rawCode))
-                    {
-                        Clipboard.SetText(rawCode);
-                    }
                     copyBtn.Content = "Copied!";
                     var timer = new System.Windows.Threading.DispatcherTimer { Interval = TimeSpan.FromSeconds(2) };
                     timer.Tick += (ts, te) =>
@@ -447,10 +420,6 @@ namespace MDPlus.Core
                         timer.Stop();
                     };
                     timer.Start();
-                }
-                catch
-                {
-                    // Clipboard error handle
                 }
             };
             headerGrid.Children.Add(copyBtn);
@@ -596,9 +565,10 @@ namespace MDPlus.Core
 
         private Block ConvertList(ListBlock list)
         {
+            bool allTasks = list.Items.Count > 0 && list.Items.All(it => it.IsTask);
             var wpfList = new List
             {
-                MarkerStyle = list.IsOrdered ? TextMarkerStyle.Decimal : TextMarkerStyle.Disc,
+                MarkerStyle = allTasks ? TextMarkerStyle.None : (list.IsOrdered ? TextMarkerStyle.Decimal : TextMarkerStyle.Disc),
                 StartIndex = list.StartNumber,
                 Margin = new Thickness(0, 4, 0, 14),
                 Padding = new Thickness(24, 0, 0, 0)
@@ -611,14 +581,13 @@ namespace MDPlus.Core
                 if (item.IsTask)
                 {
                     // Checkbox task item
-                    wpfList.MarkerStyle = TextMarkerStyle.None;
                     var p = new Paragraph { Margin = new Thickness(0, 2, 0, 2) };
 
                     var checkBox = new CheckBox
                     {
                         IsChecked = item.IsChecked,
                         IsEnabled = true,
-                        Margin = new Thickness(-18, 0, 8, 0),
+                        Margin = new Thickness(allTasks ? -18 : 0, 0, 8, 0),
                         VerticalAlignment = VerticalAlignment.Center
                     };
                     p.Inlines.Add(new InlineUIContainer(checkBox) { BaselineAlignment = BaselineAlignment.Center });
@@ -769,9 +738,10 @@ namespace MDPlus.Core
                         }
                     }
 
-                    hyperlink.RequestNavigate += (s, e) =>
+                    void HandleNavigation(string? target)
                     {
-                        string target = e.Uri.OriginalString;
+                        if (string.IsNullOrWhiteSpace(target)) return;
+
                         if (target.StartsWith("#"))
                         {
                             AnchorNavigationRequested?.Invoke(this, target.Substring(1));
@@ -791,26 +761,33 @@ namespace MDPlus.Core
                             {
                                 FileNavigationRequested?.Invoke(this, fullTargetPath);
                             }
-                            else
-                            {
-                                try
-                                {
-                                    Process.Start(new ProcessStartInfo(fullTargetPath) { UseShellExecute = true });
-                                }
-                                catch { }
-                            }
                         }
-                        else
+                        else if (Uri.TryCreate(target, UriKind.Absolute, out Uri? webUri) &&
+                                 (webUri.Scheme == Uri.UriSchemeHttp ||
+                                  webUri.Scheme == Uri.UriSchemeHttps ||
+                                  webUri.Scheme == Uri.UriSchemeMailto))
                         {
                             try
                             {
-                                Process.Start(new ProcessStartInfo(target) { UseShellExecute = true });
+                                Process.Start(new ProcessStartInfo(webUri.AbsoluteUri) { UseShellExecute = true });
                             }
                             catch
                             {
-                                // Fail gracefully if browser fails
+                                // Fail gracefully if browser launch fails
                             }
                         }
+                        // Non-web schemes (e.g. file:, cmd:, powershell:, executables) are strictly blocked for security.
+                    }
+
+                    hyperlink.RequestNavigate += (s, e) =>
+                    {
+                        HandleNavigation(e.Uri?.OriginalString ?? link.Url);
+                        e.Handled = true;
+                    };
+
+                    hyperlink.Click += (s, e) =>
+                    {
+                        HandleNavigation(link.Url);
                         e.Handled = true;
                     };
 

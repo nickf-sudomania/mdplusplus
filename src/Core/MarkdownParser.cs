@@ -117,7 +117,13 @@ namespace MDPlus.Core
                 }
 
                 // C. Setext Heading (Title followed by === or ---)
-                if (currentLine + 1 < lines.Length)
+                bool isNonParagraphLine = UnorderedListRegex.IsMatch(line) ||
+                                          OrderedListRegex.IsMatch(line) ||
+                                          line.TrimStart().StartsWith(">") ||
+                                          CodeFenceRegex.IsMatch(line.TrimStart()) ||
+                                          ThematicBreakRegex.IsMatch(line.Trim());
+
+                if (!isNonParagraphLine && currentLine + 1 < lines.Length)
                 {
                     string nextLine = lines[currentLine + 1];
                     if (Regex.IsMatch(nextLine, @"^={3,}\s*$"))
@@ -527,6 +533,8 @@ namespace MDPlus.Core
                 }
             }
 
+            bool lastCharWasEscapedBackslash = false;
+
             while (i < length)
             {
                 char c = text[i];
@@ -535,9 +543,17 @@ namespace MDPlus.Core
                 if (c == '\\' && i + 1 < length)
                 {
                     char next = text[i + 1];
-                    if ("\\`*_{}[]()#+-.!|~=".IndexOf(next) >= 0)
+                    if (next == '\\')
+                    {
+                        sb.Append('\\');
+                        lastCharWasEscapedBackslash = true;
+                        i += 2;
+                        continue;
+                    }
+                    else if ("`*_{}[]()#+-.!|~=".IndexOf(next) >= 0)
                     {
                         sb.Append(next);
+                        lastCharWasEscapedBackslash = false;
                         i += 2;
                         continue;
                     }
@@ -547,7 +563,7 @@ namespace MDPlus.Core
                 if (c == '\n')
                 {
                     bool isHard = false;
-                    if (sb.Length >= 1 && sb[sb.Length - 1] == '\\')
+                    if (sb.Length >= 1 && sb[sb.Length - 1] == '\\' && !lastCharWasEscapedBackslash)
                     {
                         sb.Remove(sb.Length - 1, 1);
                         isHard = true;
@@ -562,20 +578,46 @@ namespace MDPlus.Core
                     }
                     FlushText();
                     inlines.Add(new LineBreakInline(isHard));
+                    lastCharWasEscapedBackslash = false;
                     i++;
                     continue;
                 }
 
-                // 3. Inline Code: `code`
+                lastCharWasEscapedBackslash = false;
+
+                // 3. Inline Code: `code` or ``code``
                 if (c == '`')
                 {
-                    int end = FindDelimiterEnd(text, "`", i + 1);
+                    int count = 0;
+                    while (i + count < length && text[i + count] == '`') count++;
+                    string fence = new string('`', count);
+
+                    int end = -1;
+                    for (int k = i + count; k <= length - count; k++)
+                    {
+                        if (text[k] == '\\')
+                        {
+                            k++;
+                            continue;
+                        }
+                        if (string.CompareOrdinal(text, k, fence, 0, count) == 0)
+                        {
+                            if (k + count < length && text[k + count] == '`') continue;
+                            end = k;
+                            break;
+                        }
+                    }
+
                     if (end > i)
                     {
                         FlushText();
-                        string codeContent = text.Substring(i + 1, end - i - 1);
+                        string codeContent = text.Substring(i + count, end - (i + count));
+                        if (codeContent.StartsWith(" ") && codeContent.EndsWith(" ") && codeContent.Trim().Length > 0)
+                        {
+                            codeContent = codeContent.Substring(1, codeContent.Length - 2);
+                        }
                         inlines.Add(new CodeInline(codeContent));
-                        i = end + 1;
+                        i = end + count;
                         continue;
                     }
                 }
@@ -595,11 +637,28 @@ namespace MDPlus.Core
                             string url = linkPart;
                             string title = string.Empty;
 
-                            int spaceIdx = linkPart.IndexOf(' ');
-                            if (spaceIdx > 0)
+                            if (url.StartsWith("<"))
                             {
-                                url = linkPart.Substring(0, spaceIdx).Trim();
-                                title = linkPart.Substring(spaceIdx + 1).Trim('"', '\'');
+                                int closeAngle = url.IndexOf('>');
+                                if (closeAngle > 0)
+                                {
+                                    string innerUrl = url.Substring(1, closeAngle - 1);
+                                    string remainder = url.Substring(closeAngle + 1).Trim();
+                                    url = innerUrl;
+                                    if (!string.IsNullOrEmpty(remainder))
+                                    {
+                                        title = remainder.Trim('"', '\'');
+                                    }
+                                }
+                            }
+                            else
+                            {
+                                int spaceIdx = linkPart.IndexOf(' ');
+                                if (spaceIdx > 0)
+                                {
+                                    url = linkPart.Substring(0, spaceIdx).Trim();
+                                    title = linkPart.Substring(spaceIdx + 1).Trim('"', '\'');
+                                }
                             }
 
                             inlines.Add(new ImageInline
@@ -629,11 +688,28 @@ namespace MDPlus.Core
                             string url = linkPart;
                             string title = string.Empty;
 
-                            int spaceIdx = linkPart.IndexOf(' ');
-                            if (spaceIdx > 0)
+                            if (url.StartsWith("<"))
                             {
-                                url = linkPart.Substring(0, spaceIdx).Trim();
-                                title = linkPart.Substring(spaceIdx + 1).Trim('"', '\'');
+                                int closeAngle = url.IndexOf('>');
+                                if (closeAngle > 0)
+                                {
+                                    string innerUrl = url.Substring(1, closeAngle - 1);
+                                    string remainder = url.Substring(closeAngle + 1).Trim();
+                                    url = innerUrl;
+                                    if (!string.IsNullOrEmpty(remainder))
+                                    {
+                                        title = remainder.Trim('"', '\'');
+                                    }
+                                }
+                            }
+                            else
+                            {
+                                int spaceIdx = linkPart.IndexOf(' ');
+                                if (spaceIdx > 0)
+                                {
+                                    url = linkPart.Substring(0, spaceIdx).Trim();
+                                    title = linkPart.Substring(spaceIdx + 1).Trim('"', '\'');
+                                }
                             }
 
                             var linkInline = new LinkInline

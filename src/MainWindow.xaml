@@ -77,9 +77,15 @@
                 <MenuItem Header="Full _Screen" InputGestureText="F11" Click="ToggleFullscreen_Click" />
             </MenuItem>
 
+            <MenuItem Header="_Tools">
+                <MenuItem Header="Verify File _Integrity (SHA-256)..." Click="ToolsVerifyIntegrity_Click" />
+            </MenuItem>
+
             <MenuItem Header="_Help">
                 <MenuItem Header="Markdown _Reference" Click="HelpMarkdownRef_Click" />
                 <MenuItem Header="_Keyboard Shortcuts" Click="HelpShortcuts_Click" />
+                <Separator />
+                <MenuItem Header="Verify _Release Integrity (SHA-256)..." Click="ToolsVerifyIntegrity_Click" />
                 <Separator />
                 <MenuItem Header="_About MDPlus" Click="HelpAbout_Click" />
             </MenuItem>

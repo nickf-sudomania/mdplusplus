@@ -22,10 +22,11 @@ if %errorlevel% neq 0 (
 echo 1. Build Solution (Debug)
 echo 2. Run Comprehensive Unit Tests
 echo 3. Launch MDPlus Viewer
-echo 4. Publish Single-File Release Executable
-echo 5. Clean Artifacts
+echo 4. Publish Release & Generate SHA-256 Hashes (Notepad++ Standard)
+echo 5. Verify Download Checksums (SHA-256)
+echo 6. Clean Artifacts
 echo.
-set /p choice="Select an option (1-5, default=1): "
+set /p choice="Select an option (1-6, default=1): "
 
 if "%choice%"=="" set choice=1
 
@@ -56,17 +57,19 @@ if "%choice%"=="3" (
 
 if "%choice%"=="4" (
     echo.
-    echo [INFO] Publishing single-file release executable...
-    dotnet publish src\MDPlus.csproj -c Release -r win-x64 --self-contained false -p:PublishSingleFile=true -o dist\
-    if %errorlevel% equ 0 (
-        echo.
-        echo [SUCCESS] Single-file executable ready:
-        echo   dist\MDPlus.exe
-    )
+    echo [INFO] Publishing release executable, zip archive, and generating SHA-256 hashes...
+    powershell -NoProfile -ExecutionPolicy Bypass -File "%~dp0build.ps1" -Action Publish
     goto end
 )
 
 if "%choice%"=="5" (
+    echo.
+    echo [INFO] Verifying release download integrity against SHA256SUMS.txt...
+    powershell -NoProfile -ExecutionPolicy Bypass -File "%~dp0build.ps1" -Action Verify
+    goto end
+)
+
+if "%choice%"=="6" (
     echo.
     echo [INFO] Cleaning build artifacts...
     dotnet clean MDPlus.sln

@@ -85,7 +85,17 @@ namespace MDPlus.Controls
 
         private void TriggerFind(bool forward)
         {
-            if (string.IsNullOrEmpty(FindTextBox.Text)) return;
+            if (string.IsNullOrEmpty(FindTextBox.Text))
+            {
+                MatchCountText.Text = string.Empty;
+                FindRequested?.Invoke(this, new FindEventArgs
+                {
+                    SearchText = string.Empty,
+                    MatchCase = MatchCaseCheckBox.IsChecked == true,
+                    Forward = forward
+                });
+                return;
+            }
 
             FindRequested?.Invoke(this, new FindEventArgs
             {
