@@ -20,6 +20,26 @@
 
 ---
 
+## 📥 Quick Downloads & Installer Files
+
+Looking to install or try MDPlus? Download pre-built binaries and installers directly from the repository:
+
+| Asset | File | Size | Description | Direct Download | Repository Link |
+| :--- | :---: | :---: | :--- | :---: | :---: |
+| **Windows Setup Installer** | `MDPlus-Setup.exe` | **2.47 MB** | **Recommended.** Complete Windows installer: auto-detects and installs .NET 8 runtime if missing, registers `.md` file associations, creates Start Menu & Desktop shortcuts, and registers uninstaller. | [⬇️ **Download Setup**](https://github.com/nickf-sudomania/mdplusplus/raw/main/releases/MDPlus-Setup.exe) | [`releases/MDPlus-Setup.exe`](releases/MDPlus-Setup.exe) |
+| **Standalone Portable App** | `MDPlus.exe` | **758 KB** | Single-file zero-install executable. Runs immediately anywhere. *(Requires .NET 8 Desktop Runtime).* | [⬇️ **Download EXE**](https://github.com/nickf-sudomania/mdplusplus/raw/main/releases/MDPlus.exe) | [`releases/MDPlus.exe`](releases/MDPlus.exe) |
+| **Portable Zip Archive** | `MDPlus-win-x64.zip` | **363 KB** | Compressed zip package containing `MDPlus.exe` and sample markdown documents. | [⬇️ **Download ZIP**](https://github.com/nickf-sudomania/mdplusplus/raw/main/releases/MDPlus-win-x64.zip) | [`releases/MDPlus-win-x64.zip`](releases/MDPlus-win-x64.zip) |
+| **Source Code Archive** | `MDPlus-1.0.0-src.zip` | **647 KB** | Full source code archive for offline builds and audits. | [⬇️ **Download Source**](https://github.com/nickf-sudomania/mdplusplus/raw/main/releases/MDPlus-1.0.0-src.zip) | [`releases/MDPlus-1.0.0-src.zip`](releases/MDPlus-1.0.0-src.zip) |
+| **Inno Setup Script** | `MDPlus.iss` | **16 KB** | Source script used to build the Windows Setup installer with WinINet bootstrapper. | [📄 **View Script**](https://github.com/nickf-sudomania/mdplusplus/blob/main/installer/MDPlus.iss) | [`installer/MDPlus.iss`](installer/MDPlus.iss) |
+| **SHA-256 Checksums** | `SHA256SUMS.txt` | **< 1 KB** | Cryptographic hash digests for independent integrity verification. | [🛡️ **View Hashes**](https://github.com/nickf-sudomania/mdplusplus/raw/main/releases/SHA256SUMS.txt) | [`releases/SHA256SUMS.txt`](releases/SHA256SUMS.txt) |
+
+> [!TIP]
+> **Where are the installer and release files in this repository?**
+> - **Ready-to-run binaries & setup installer:** Located in the [`releases/`](releases/) directory (`releases/MDPlus-Setup.exe`, `releases/MDPlus.exe`, `releases/MDPlus-win-x64.zip`).
+> - **Installer packaging source script:** Located in [`installer/MDPlus.iss`](installer/MDPlus.iss). You can compile your own setup installer anytime using Inno Setup 6 or running `.\build.ps1 -Action Installer`.
+
+---
+
 ## ⚡ Overview & Core Philosophy
 
 Most popular Markdown editors and viewers today—such as **MarkText**, **Obsidian**, **Joplin**, and **VS Code preview**—are built upon **Electron / Chromium**. While feature-packed, they come with substantial real-world costs:
@@ -353,7 +373,7 @@ MDPlus includes dual automation scripts for interactive command prompt or headle
 
 ## 📦 Windows Setup Installer & Prerequisite Bootstrapper
 
-MDPlus provides a native, branded Windows Setup Installer (`dist\MDPlus-Setup.exe`) configured with an intelligent .NET 8 prerequisite bootstrapper:
+MDPlus provides a native, branded Windows Setup Installer ([**`releases/MDPlus-Setup.exe`**](releases/MDPlus-Setup.exe) or [Direct Download](https://github.com/nickf-sudomania/mdplusplus/raw/main/releases/MDPlus-Setup.exe)) compiled from the Inno Setup script ([**`installer/MDPlus.iss`**](installer/MDPlus.iss)). It features an intelligent .NET 8 prerequisite bootstrapper:
 
 - **Automatic .NET 8 Runtime Detection:** Setup inspects the Windows Registry, runtime directories, and system paths for `Microsoft.WindowsDesktop.App 8.0.x`.
 - **Zero-Friction Prerequisite Auto-Install:** If the .NET 8 Desktop Runtime is absent, Setup automatically downloads Microsoft's official runtime installer (`https://aka.ms/dotnet/8.0/windowsdesktop-runtime-win-x64.exe`) and executes unattended installation (`/install /quiet /norestart` with UAC elevation support) in both interactive and headless silent (`/SILENT`, `/VERYSILENT`) modes so the user never has to search for dependencies. Setup also detects local copies of the runtime installer placed next to `MDPlus-Setup.exe` for offline deployments.
@@ -368,9 +388,9 @@ MDPlus provides a native, branded Windows Setup Installer (`dist\MDPlus-Setup.ex
 Inspired by the rigorous security and release standards of **Notepad++**, MDPlus publishes official cryptographic **SHA-256** checksums for all distributed assets—including the Windows Setup installer, standalone binaries, zip archives, and full source code distributions. This empowers users and system administrators to independently verify that their downloads have not been corrupted, intercepted, or tampered with.
 
 ### Official Checksum Manifests
-Every release in `dist\` is accompanied by:
-- `SHA256SUMS.txt` — Standard GNU coreutils checksum manifest.
-- `MDPlus.<version>.checksums.sha256` — Notepad++ compatible checksum manifest.
+Every release in [`releases/`](releases/) (and `dist/`) is accompanied by:
+- [`SHA256SUMS.txt`](releases/SHA256SUMS.txt) — Standard GNU coreutils checksum manifest.
+- [`MDPlus.<version>.checksums.sha256`](releases/MDPlus.1.0.0.checksums.sha256) — Notepad++ compatible checksum manifest.
 - `MDPlus-Setup.exe.sha256` — Windows Setup installer SHA-256 digest.
 - `MDPlus.exe.sha256` — Standalone binary SHA-256 digest.
 - `MDPlus-win-x64.zip.sha256` — Portable release zip archive SHA-256 digest.
@@ -424,6 +444,14 @@ mdplus/
 ├── .github/
 │   └── workflows/
 │       └── build-and-release.yml   # CI/CD test, build, publish & SHA-256 release automation
+├── installer/
+│   └── MDPlus.iss                  # Inno Setup script (.NET 8 WinINet bootstrapper & packaging)
+├── releases/                       # Pre-compiled Windows setup installer, binaries & checksums
+│   ├── MDPlus-Setup.exe            # Windows Setup installer (with auto-.NET 8 bootstrapper)
+│   ├── MDPlus.exe                  # Standalone portable zero-install executable
+│   ├── MDPlus-win-x64.zip          # Portable zip distribution archive
+│   ├── MDPlus-1.0.0-src.zip        # Full source distribution archive
+│   └── SHA256SUMS.txt              # Cryptographic SHA-256 integrity checksums
 ├── MDPlus.sln                      # Visual Studio Solution
 ├── build.bat                       # Interactive build, test, run, publish & verify menu
 ├── build.ps1                       # PowerShell automation script with SHA-256 verification
