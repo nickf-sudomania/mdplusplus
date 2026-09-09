@@ -168,15 +168,16 @@ namespace MDPlus
                     {
                         await Task.Delay(2000).ConfigureAwait(false);
                         var updateResult = await _updateService.CheckForUpdatesAsync().ConfigureAwait(false);
-                        if (updateResult != null)
+                        if (updateResult != null && updateResult.IsSuccess)
                         {
                             _settings.LastUpdateCheckUtc = DateTime.UtcNow;
                             _settings.Save();
 
-                            if (updateResult.IsSuccess && updateResult.IsUpdateAvailable)
+                            if (updateResult.IsUpdateAvailable)
                             {
                                 await Dispatcher.InvokeAsync(() =>
                                 {
+                                    if (!IsLoaded || !IsVisible) return;
                                     var dlg = new UpdateDialog(updateResult, _updateService) { Owner = this };
                                     dlg.ShowDialog();
                                 });
@@ -1700,8 +1701,13 @@ Console.WriteLine($""Parsed {doc.Blocks.Count} blocks in 2ms!"");
             try
             {
                 var result = await _updateService.CheckForUpdatesAsync();
-                _settings.LastUpdateCheckUtc = DateTime.UtcNow;
-                _settings.Save();
+                if (!IsLoaded) return;
+
+                if (result.IsSuccess)
+                {
+                    _settings.LastUpdateCheckUtc = DateTime.UtcNow;
+                    _settings.Save();
+                }
 
                 if (!result.IsSuccess)
                 {
@@ -1725,6 +1731,7 @@ Console.WriteLine($""Parsed {doc.Blocks.Count} blocks in 2ms!"");
             }
             catch (Exception ex)
             {
+                if (!IsLoaded) return;
                 MessageBox.Show(this,
                     $"An error occurred while checking for updates:\n{ex.Message}",
                     "Check for Updates", MessageBoxButton.OK, MessageBoxImage.Error);
@@ -1732,7 +1739,10 @@ Console.WriteLine($""Parsed {doc.Blocks.Count} blocks in 2ms!"");
             finally
             {
                 Mouse.OverrideCursor = previousCursor;
-                StatusFileText.Text = originalStatus;
+                if (IsLoaded)
+                {
+                    StatusFileText.Text = originalStatus;
+                }
             }
         }
 

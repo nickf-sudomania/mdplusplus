@@ -173,6 +173,8 @@ namespace MDPlus.Core
 
         /// <summary>
         /// Extracts the expected SHA-256 hash for a given target filename from checksum manifest content.
+        /// Performs path-bounded filename matching to avoid substring collisions, and falls back to
+        /// release note labels (e.g. SHA-256: ...) or bare hashes.
         /// </summary>
         public static string? ExtractExpectedHash(string checksumsContent, string targetFileName = SetupFileName)
         {
@@ -180,23 +182,45 @@ namespace MDPlus.Core
 
             var checksums = HashService.ParseChecksums(checksumsContent);
 
-            if (checksums.TryGetValue(targetFileName, out var exactHash))
+            // 1. Exact match on targetFileName
+            if (checksums.TryGetValue(targetFileName, out var exactHash) && exactHash.Length == 64)
             {
                 return exactHash;
             }
 
+            // 2. Exact match on file name component of path (e.g. "dist/MDPlus-Setup.exe", "*MDPlus-Setup.exe")
             foreach (var kvp in checksums)
             {
-                if (kvp.Key.Equals(targetFileName, StringComparison.OrdinalIgnoreCase) ||
-                    kvp.Key.EndsWith(targetFileName, StringComparison.OrdinalIgnoreCase))
+                string cleanKey = kvp.Key.TrimStart('*', '?', ' ', '\t');
+                string keyFileName = Path.GetFileName(cleanKey.Replace('/', '\\'));
+                if (keyFileName.Equals(targetFileName, StringComparison.OrdinalIgnoreCase) && kvp.Value.Length == 64)
                 {
                     return kvp.Value;
                 }
             }
 
+            // 3. Check for hash labels (e.g. "sha256", "sha-256", "MDPlus-Setup.exe SHA-256")
+            foreach (var kvp in checksums)
+            {
+                string cleanKey = kvp.Key.Trim().ToLowerInvariant();
+                if ((cleanKey == "sha256" || cleanKey == "sha-256" || cleanKey.Contains("sha256") || cleanKey.Contains("sha-256") || cleanKey.Contains("checksum")) &&
+                    kvp.Value.Length == 64)
+                {
+                    return kvp.Value;
+                }
+            }
+
+            // 4. Bare hash (single hash file)
             if (checksums.TryGetValue(string.Empty, out var bareHash) && bareHash.Length == 64)
             {
                 return bareHash;
+            }
+
+            // 5. Fallback regex search for any standalone 64-hex string in the content
+            var hashMatches = Regex.Matches(checksumsContent, @"\b([a-fA-F0-9]{64})\b");
+            if (hashMatches.Count == 1)
+            {
+                return hashMatches[0].Groups[1].Value.ToLowerInvariant();
             }
 
             return null;
@@ -218,11 +242,15 @@ namespace MDPlus.Core
 
                 if (!response.IsSuccessStatusCode)
                 {
+                    string statusMsg = response.StatusCode == System.Net.HttpStatusCode.Forbidden
+                        ? "GitHub API rate limit reached (60 requests/hour for unauthenticated checks). Please try again later."
+                        : $"GitHub API returned {(int)response.StatusCode} ({response.ReasonPhrase})";
+
                     return new UpdateCheckResult
                     {
                         IsSuccess = false,
                         CurrentVersion = currentVer,
-                        ErrorMessage = $"GitHub API returned {(int)response.StatusCode} ({response.ReasonPhrase})"
+                        ErrorMessage = statusMsg
                     };
                 }
 
@@ -236,7 +264,9 @@ namespace MDPlus.Core
                 string htmlUrl = root.TryGetProperty("html_url", out var urlProp) ? urlProp.GetString() ?? string.Empty : string.Empty;
 
                 string? setupUrl = null;
+                bool exactSetupMatch = false;
                 string? checksumsUrl = null;
+                bool exactChecksumMatch = false;
 
                 if (root.TryGetProperty("assets", out var assetsProp) && assetsProp.ValueKind == JsonValueKind.Array)
                 {
@@ -245,14 +275,25 @@ namespace MDPlus.Core
                         string assetName = asset.TryGetProperty("name", out var an) ? an.GetString() ?? string.Empty : string.Empty;
                         string dlUrl = asset.TryGetProperty("browser_download_url", out var du) ? du.GetString() ?? string.Empty : string.Empty;
 
-                        if (assetName.Equals(SetupFileName, StringComparison.OrdinalIgnoreCase) ||
-                            assetName.EndsWith("Setup.exe", StringComparison.OrdinalIgnoreCase))
+                        if (assetName.Equals(SetupFileName, StringComparison.OrdinalIgnoreCase))
+                        {
+                            setupUrl = dlUrl;
+                            exactSetupMatch = true;
+                        }
+                        else if (!exactSetupMatch && (assetName.EndsWith("Setup.exe", StringComparison.OrdinalIgnoreCase) ||
+                                                      assetName.EndsWith("-setup.exe", StringComparison.OrdinalIgnoreCase)))
                         {
                             setupUrl = dlUrl;
                         }
-                        else if (assetName.Equals(ChecksumsFileName, StringComparison.OrdinalIgnoreCase) ||
-                                 assetName.EndsWith(".checksums.sha256", StringComparison.OrdinalIgnoreCase) ||
-                                 assetName.EndsWith(".sha256", StringComparison.OrdinalIgnoreCase))
+
+                        if (assetName.Equals(ChecksumsFileName, StringComparison.OrdinalIgnoreCase))
+                        {
+                            checksumsUrl = dlUrl;
+                            exactChecksumMatch = true;
+                        }
+                        else if (!exactChecksumMatch && (assetName.EndsWith(".checksums.sha256", StringComparison.OrdinalIgnoreCase) ||
+                                                         assetName.EndsWith(".sha256", StringComparison.OrdinalIgnoreCase) ||
+                                                         assetName.EndsWith("sums.txt", StringComparison.OrdinalIgnoreCase)))
                         {
                             checksumsUrl = dlUrl;
                         }
@@ -302,6 +343,9 @@ namespace MDPlus.Core
                 };
             }
 
+            string tempDir = Path.Combine(Path.GetTempPath(), "MDPlusUpdate");
+            string destinationExe = Path.Combine(tempDir, SetupFileName);
+
             try
             {
                 // 1. Download checksum manifest or extract expected hash
@@ -312,6 +356,10 @@ namespace MDPlus.Core
                     {
                         string checksumsContent = await _httpClient.GetStringAsync(updateInfo.ChecksumsDownloadUrl, cancellationToken).ConfigureAwait(false);
                         expectedHash = ExtractExpectedHash(checksumsContent, SetupFileName);
+                    }
+                    catch (OperationCanceledException)
+                    {
+                        throw;
                     }
                     catch
                     {
@@ -334,13 +382,11 @@ namespace MDPlus.Core
                 }
 
                 // 2. Download installer into a temporary directory
-                string tempDir = Path.Combine(Path.GetTempPath(), "MDPlusUpdate");
                 if (!Directory.Exists(tempDir))
                 {
                     Directory.CreateDirectory(tempDir);
                 }
 
-                string destinationExe = Path.Combine(tempDir, SetupFileName);
                 if (File.Exists(destinationExe))
                 {
                     try { File.Delete(destinationExe); } catch { }
@@ -397,8 +443,14 @@ namespace MDPlus.Core
                     ActualHash = actualHash
                 };
             }
+            catch (OperationCanceledException)
+            {
+                try { if (File.Exists(destinationExe)) File.Delete(destinationExe); } catch { }
+                throw;
+            }
             catch (Exception ex)
             {
+                try { if (File.Exists(destinationExe)) File.Delete(destinationExe); } catch { }
                 return new UpdateInstallResult
                 {
                     Success = false,
@@ -408,7 +460,7 @@ namespace MDPlus.Core
         }
 
         /// <summary>
-        /// Safely launches the verified installer and closes MDPlus.
+        /// Safely launches the verified installer and cleanly closes MDPlus.
         /// </summary>
         public static void LaunchInstallerAndExit(string installerPath)
         {
@@ -426,12 +478,14 @@ namespace MDPlus.Core
 
             if (Application.Current != null)
             {
-                Application.Current.Dispatcher.Invoke(() => Application.Current.Shutdown());
+                try
+                {
+                    Application.Current.Dispatcher.Invoke(() => Application.Current.Shutdown());
+                }
+                catch { }
             }
-            else
-            {
-                Environment.Exit(0);
-            }
+
+            Environment.Exit(0);
         }
     }
 }

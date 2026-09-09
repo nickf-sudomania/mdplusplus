@@ -15,6 +15,7 @@ namespace MDPlus.Core
         // DWM attribute constants
         public const int DWMWA_USE_IMMERSIVE_DARK_MODE_BEFORE_20H1 = 19;
         public const int DWMWA_USE_IMMERSIVE_DARK_MODE = 20;
+        public const int DWMWA_BORDER_COLOR = 34;
         public const int DWMWA_CAPTION_COLOR = 35;
         public const int DWMWA_TEXT_COLOR = 36;
         public const uint DWMWA_COLOR_DEFAULT = 0xFFFFFFFF;
@@ -45,14 +46,14 @@ namespace MDPlus.Core
         public static bool ApplyTitleBarTheme(IntPtr hwnd, ThemePalette palette)
         {
             if (palette == null || hwnd == IntPtr.Zero) return false;
-            return ApplyTitleBarTheme(hwnd, palette.IsDark, palette.MenuBackgroundColor, palette.MenuForegroundColor);
+            return ApplyTitleBarTheme(hwnd, palette.IsDark, palette.MenuBackgroundColor, palette.MenuForegroundColor, palette.BorderColor);
         }
 
         /// <summary>
-        /// Applies title bar styling using explicit dark mode flag, caption color, and text color.
-        /// Gracefully falls back on older Windows builds where attributes 35/36 or 20 are unsupported.
+        /// Applies title bar styling using explicit dark mode flag, caption color, text color, and optional border color.
+        /// Gracefully falls back on older Windows builds where attributes 34/35/36 or 20 are unsupported.
         /// </summary>
-        public static bool ApplyTitleBarTheme(IntPtr hwnd, bool isDark, Color captionColor, Color textColor)
+        public static bool ApplyTitleBarTheme(IntPtr hwnd, bool isDark, Color captionColor, Color textColor, Color? borderColor = null)
         {
             if (hwnd == IntPtr.Zero) return false;
 
@@ -74,11 +75,42 @@ namespace MDPlus.Core
                 int textColorRef = ColorToColorRef(textColor);
                 DwmSetWindowAttribute(hwnd, DWMWA_TEXT_COLOR, ref textColorRef, sizeof(int));
 
+                // 4. Window border color (attribute 34 - supported on Windows 11 build 22000+)
+                if (borderColor.HasValue)
+                {
+                    int borderColorRef = ColorToColorRef(borderColor.Value);
+                    DwmSetWindowAttribute(hwnd, DWMWA_BORDER_COLOR, ref borderColorRef, sizeof(int));
+                }
+
                 return true;
             }
             catch
             {
                 // Graceful fallback for non-Windows platforms or missing dwmapi.dll
+                return false;
+            }
+        }
+
+        /// <summary>
+        /// Resets title bar DWM attributes back to Windows default OS caption styling.
+        /// </summary>
+        public static bool ResetTitleBarTheme(IntPtr hwnd)
+        {
+            if (hwnd == IntPtr.Zero) return false;
+
+            try
+            {
+                int defaultMode = 0;
+                DwmSetWindowAttribute(hwnd, DWMWA_USE_IMMERSIVE_DARK_MODE, ref defaultMode, sizeof(int));
+
+                int defaultColor = unchecked((int)DWMWA_COLOR_DEFAULT);
+                DwmSetWindowAttribute(hwnd, DWMWA_CAPTION_COLOR, ref defaultColor, sizeof(int));
+                DwmSetWindowAttribute(hwnd, DWMWA_TEXT_COLOR, ref defaultColor, sizeof(int));
+                DwmSetWindowAttribute(hwnd, DWMWA_BORDER_COLOR, ref defaultColor, sizeof(int));
+                return true;
+            }
+            catch
+            {
                 return false;
             }
         }
@@ -92,6 +124,11 @@ namespace MDPlus.Core
 
             try
             {
+                if (window.Dispatcher != null && !window.Dispatcher.CheckAccess())
+                {
+                    return window.Dispatcher.Invoke(() => ApplyTitleBarTheme(window, palette));
+                }
+
                 var helper = new WindowInteropHelper(window);
                 IntPtr hwnd = helper.Handle;
                 if (hwnd == IntPtr.Zero)

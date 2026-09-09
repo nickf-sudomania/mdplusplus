@@ -15,11 +15,24 @@ namespace MDPlus.Controls
         public VerifyIntegrityWindow()
         {
             InitializeComponent();
-            ApplyTheme();
+
             SourceInitialized += (s, e) =>
             {
                 DwmHelper.ApplyTitleBarTheme(this, ThemeManager.Instance.CurrentPalette);
             };
+
+            ThemeManager.Instance.ThemeChanged += OnThemeChanged;
+            Closed += (s, e) =>
+            {
+                ThemeManager.Instance.ThemeChanged -= OnThemeChanged;
+            };
+
+            ApplyTheme();
+        }
+
+        private void OnThemeChanged(object? sender, EventArgs e)
+        {
+            Dispatcher.InvokeAsync(ApplyTheme);
         }
 
         public VerifyIntegrityWindow(string initialFilePath) : this()
@@ -32,9 +45,9 @@ namespace MDPlus.Controls
 
         private void ApplyTheme()
         {
-            bool isDark = ThemeManager.Instance.IsDark;
-            RootGrid.Background = isDark ? new SolidColorBrush(Color.FromRgb(30, 30, 30)) : new SolidColorBrush(Color.FromRgb(250, 250, 250));
-            DwmHelper.ApplyTitleBarTheme(this, ThemeManager.Instance.CurrentPalette);
+            var palette = ThemeManager.Instance.CurrentPalette;
+            RootGrid.Background = palette.EditorBg;
+            DwmHelper.ApplyTitleBarTheme(this, palette);
         }
 
         private void BrowseFile_Click(object sender, RoutedEventArgs e)

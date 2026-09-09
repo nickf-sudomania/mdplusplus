@@ -148,6 +148,11 @@ namespace MDPlus.Tests
             RunTest("AppSettings Update Preference & Timestamp Serialization", TestAppSettingsUpdateSettingsPersistence);
             RunTest("Window Title Bar & Help Menu Update Action Integrity", TestWindowTitleBarAndHelpMenuIntegrity);
             RunTest("Update Service GitHub API Mock & Cryptographic Verification", TestUpdateServiceCheckAndVerificationWithMock);
+            RunTest("Update Service Path-Bounded Checksum & Release Notes Extraction", TestUpdateServicePathBoundedChecksumExtraction);
+            RunTest("Update Service Download Cancellation & Temporary File Cleanup", TestUpdateServiceDownloadCancellationAndFileCleanup);
+            RunTest("AppSettings Thread-Safe Concurrent Persistence", TestAppSettingsConcurrentSaveSafety);
+            RunTest("DWM Border Color Attribute & Reset Helper Integrity", TestDwmHelperBorderAndResetAttributes);
+            RunTest("Update Service Exact Asset Priority over Loose Suffix Matches", TestUpdateServiceExactAssetPriority);
 
             sw.Stop();
 
@@ -2223,6 +2228,159 @@ b4f2e7af3a2e26456be05a236d8fa5f6750069fe45f8cf16197ea9934ee53b0a  MDPlus-win-x64
 
             Assert(!tamperedResult.Success, "Download & verify with corrupted/mismatching SHA-256 hash must fail");
             Assert(tamperedResult.ErrorMessage != null && tamperedResult.ErrorMessage.Contains("verification failed"), "Error message explains verification failure");
+        }
+
+        private static void TestUpdateServicePathBoundedChecksumExtraction()
+        {
+            // 1. Suffix collision test: ensure "Other-MDPlus-Setup.exe" does NOT match target "MDPlus-Setup.exe"
+            string collisionManifest = @"
+1111111111111111111111111111111111111111111111111111111111111111  Other-MDPlus-Setup.exe
+2222222222222222222222222222222222222222222222222222222222222222  dist/MDPlus-Setup.exe";
+
+            string? extractedHash = UpdateService.ExtractExpectedHash(collisionManifest, "MDPlus-Setup.exe");
+            AssertEqual("2222222222222222222222222222222222222222222222222222222222222222", extractedHash, "Path-bounded setup hash must match dist/MDPlus-Setup.exe, not Other-MDPlus-Setup.exe");
+
+            // 2. Binary mode prefix '*MDPlus-Setup.exe'
+            string binaryManifest = "3333333333333333333333333333333333333333333333333333333333333333 *MDPlus-Setup.exe";
+            string? binaryHash = UpdateService.ExtractExpectedHash(binaryManifest, "MDPlus-Setup.exe");
+            AssertEqual("3333333333333333333333333333333333333333333333333333333333333333", binaryHash, "Binary mode prefix * must be extracted");
+
+            // 3. Colon style with SHA-256 label in release notes
+            string releaseNotesColon = "### Release Highlights\nSHA-256: 4444444444444444444444444444444444444444444444444444444444444444";
+            string? labelHash = UpdateService.ExtractExpectedHash(releaseNotesColon, "MDPlus-Setup.exe");
+            AssertEqual("4444444444444444444444444444444444444444444444444444444444444444", labelHash, "SHA-256 label in release notes must be extracted");
+
+            // 4. Standalone 64-hex string in release highlights
+            string standaloneHex = "MDPlus Setup Checksum: `5555555555555555555555555555555555555555555555555555555555555555`";
+            string? standaloneHash = UpdateService.ExtractExpectedHash(standaloneHex, "MDPlus-Setup.exe");
+            AssertEqual("5555555555555555555555555555555555555555555555555555555555555555", standaloneHash, "Standalone 64-hex token in release highlights must be extracted");
+        }
+
+        private static void TestUpdateServiceDownloadCancellationAndFileCleanup()
+        {
+            var handler = new MockHttpMessageHandler(request =>
+            {
+                return new System.Net.Http.HttpResponseMessage(System.Net.HttpStatusCode.OK)
+                {
+                    Content = new System.Net.Http.ByteArrayContent(new byte[1024 * 1024])
+                };
+            });
+
+            using var httpClient = new System.Net.Http.HttpClient(handler);
+            var updateService = new UpdateService(httpClient);
+
+            var checkInfo = new UpdateCheckResult
+            {
+                IsSuccess = true,
+                IsUpdateAvailable = true,
+                SetupDownloadUrl = "https://mock.download/MDPlus-Setup.exe",
+                ReleaseHighlights = "6666666666666666666666666666666666666666666666666666666666666666"
+            };
+
+            using var cts = new System.Threading.CancellationTokenSource();
+            cts.Cancel(); // Cancel immediately
+
+            bool threwCancellation = false;
+            try
+            {
+                var task = updateService.DownloadAndVerifyUpdateAsync(checkInfo, cancellationToken: cts.Token);
+                task.Wait();
+            }
+            catch (AggregateException ae) when (ae.InnerException is OperationCanceledException)
+            {
+                threwCancellation = true;
+            }
+            catch (OperationCanceledException)
+            {
+                threwCancellation = true;
+            }
+
+            Assert(threwCancellation, "DownloadAndVerifyUpdateAsync must rethrow OperationCanceledException upon cancellation");
+
+            string destFile = System.IO.Path.Combine(System.IO.Path.GetTempPath(), "MDPlusUpdate", UpdateService.SetupFileName);
+            Assert(!System.IO.File.Exists(destFile), "Canceled download must clean up destination executable file");
+        }
+
+        private static void TestAppSettingsConcurrentSaveSafety()
+        {
+            var settings = new AppSettings
+            {
+                CheckForUpdatesOnStartup = true,
+                LastUpdateCheckUtc = DateTime.UtcNow
+            };
+
+            var tasks = new List<Task>();
+            for (int i = 0; i < 20; i++)
+            {
+                int index = i;
+                tasks.Add(Task.Run(() =>
+                {
+                    settings.WindowWidth = 1000 + index;
+                    settings.LastUpdateCheckUtc = DateTime.UtcNow.AddMinutes(index);
+                    settings.Save();
+                }));
+            }
+
+            Task.WaitAll(tasks.ToArray());
+
+            var loaded = AppSettings.Load();
+            Assert(loaded != null, "AppSettings must load cleanly after concurrent saves");
+        }
+
+        private static void TestDwmHelperBorderAndResetAttributes()
+        {
+            AssertEqual(34, DwmHelper.DWMWA_BORDER_COLOR, "DWMWA_BORDER_COLOR is attribute 34");
+            AssertEqual(35, DwmHelper.DWMWA_CAPTION_COLOR, "DWMWA_CAPTION_COLOR is attribute 35");
+            AssertEqual(36, DwmHelper.DWMWA_TEXT_COLOR, "DWMWA_TEXT_COLOR is attribute 36");
+            AssertEqual(20, DwmHelper.DWMWA_USE_IMMERSIVE_DARK_MODE, "DWMWA_USE_IMMERSIVE_DARK_MODE is attribute 20");
+            AssertEqual(19, DwmHelper.DWMWA_USE_IMMERSIVE_DARK_MODE_BEFORE_20H1, "DWMWA_USE_IMMERSIVE_DARK_MODE_BEFORE_20H1 is attribute 19");
+
+            Assert(!DwmHelper.ResetTitleBarTheme(IntPtr.Zero), "ResetTitleBarTheme on IntPtr.Zero gracefully returns false");
+        }
+
+        private static void TestUpdateServiceExactAssetPriority()
+        {
+            string releaseJson = @"{
+                ""tag_name"": ""v1.3.0"",
+                ""name"": ""Release 1.3.0"",
+                ""body"": ""6666666666666666666666666666666666666666666666666666666666666666"",
+                ""assets"": [
+                    {
+                        ""name"": ""MDPlus-Setup.exe"",
+                        ""browser_download_url"": ""https://download/exact/MDPlus-Setup.exe""
+                    },
+                    {
+                        ""name"": ""Other-Setup.exe"",
+                        ""browser_download_url"": ""https://download/loose/Other-Setup.exe""
+                    },
+                    {
+                        ""name"": ""SHA256SUMS.txt"",
+                        ""browser_download_url"": ""https://download/exact/SHA256SUMS.txt""
+                    },
+                    {
+                        ""name"": ""package.sha256"",
+                        ""browser_download_url"": ""https://download/loose/package.sha256""
+                    }
+                ]
+            }";
+
+            var handler = new MockHttpMessageHandler(req =>
+            {
+                return new System.Net.Http.HttpResponseMessage(System.Net.HttpStatusCode.OK)
+                {
+                    Content = new System.Net.Http.StringContent(releaseJson, System.Text.Encoding.UTF8, "application/json")
+                };
+            });
+
+            using var client = new System.Net.Http.HttpClient(handler);
+            var service = new UpdateService(client, "https://mock.api/latest");
+
+            var task = service.CheckForUpdatesAsync("1.0.0");
+            task.Wait();
+            var res = task.Result;
+
+            AssertEqual("https://download/exact/MDPlus-Setup.exe", res.SetupDownloadUrl!, "Exact SetupFileName must take priority over loose *Setup.exe matches");
+            AssertEqual("https://download/exact/SHA256SUMS.txt", res.ChecksumsDownloadUrl!, "Exact ChecksumsFileName must take priority over loose *.sha256 matches");
         }
 
         private class MockHttpMessageHandler : System.Net.Http.HttpMessageHandler

@@ -137,22 +137,27 @@ namespace MDPlus.Models
             return new AppSettings();
         }
 
+        private static readonly object _saveLock = new object();
+
         public void Save()
         {
-            try
+            lock (_saveLock)
             {
-                if (!Directory.Exists(SettingsFolder))
+                try
                 {
-                    Directory.CreateDirectory(SettingsFolder);
+                    if (!Directory.Exists(SettingsFolder))
+                    {
+                        Directory.CreateDirectory(SettingsFolder);
+                    }
+                    string json = JsonSerializer.Serialize(this, new JsonSerializerOptions { WriteIndented = true });
+                    string tempFile = SettingsFile + ".tmp";
+                    File.WriteAllText(tempFile, json);
+                    File.Move(tempFile, SettingsFile, overwrite: true);
                 }
-                string json = JsonSerializer.Serialize(this, new JsonSerializerOptions { WriteIndented = true });
-                string tempFile = SettingsFile + ".tmp";
-                File.WriteAllText(tempFile, json);
-                File.Move(tempFile, SettingsFile, overwrite: true);
-            }
-            catch
-            {
-                // Ignore save errors
+                catch
+                {
+                    // Ignore save errors
+                }
             }
         }
     }

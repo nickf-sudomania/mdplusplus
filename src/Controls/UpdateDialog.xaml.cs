@@ -20,13 +20,20 @@ namespace MDPlus.Controls
             _updateInfo = updateInfo ?? throw new ArgumentNullException(nameof(updateInfo));
             _updateService = updateService ?? new UpdateService();
 
-            PopulateDialog();
-            ApplyTheme();
-
             SourceInitialized += (s, e) =>
             {
                 DwmHelper.ApplyTitleBarTheme(this, ThemeManager.Instance.CurrentPalette);
             };
+
+            ThemeManager.Instance.ThemeChanged += OnThemeChanged;
+
+            PopulateDialog();
+            ApplyTheme();
+        }
+
+        private void OnThemeChanged(object? sender, EventArgs e)
+        {
+            Dispatcher.InvokeAsync(ApplyTheme);
         }
 
         private void PopulateDialog()
@@ -53,7 +60,6 @@ namespace MDPlus.Controls
         private void ApplyTheme()
         {
             var palette = ThemeManager.Instance.CurrentPalette;
-            bool isDark = palette.IsDark;
 
             RootGrid.Background = palette.EditorBg;
             HeaderBorder.Background = palette.SidebarBg;
@@ -67,18 +73,20 @@ namespace MDPlus.Controls
             FooterBorder.Background = palette.SidebarBg;
             FooterBorder.BorderBrush = palette.Border;
 
-            if (!isDark)
-            {
-                TitleTextBlock.Foreground = new SolidColorBrush(Color.FromRgb(36, 41, 47));
-                VersionSubtext.Foreground = new SolidColorBrush(Color.FromRgb(87, 96, 106));
-                StatusTextBlock.Foreground = new SolidColorBrush(Color.FromRgb(87, 96, 106));
-                LaterButton.Background = new SolidColorBrush(Color.FromRgb(246, 248, 250));
-                LaterButton.Foreground = new SolidColorBrush(Color.FromRgb(36, 41, 47));
-                LaterButton.BorderBrush = new SolidColorBrush(Color.FromRgb(208, 215, 222));
-                ReleaseNotesButton.Background = new SolidColorBrush(Color.FromRgb(246, 248, 250));
-                ReleaseNotesButton.Foreground = new SolidColorBrush(Color.FromRgb(36, 41, 47));
-                ReleaseNotesButton.BorderBrush = new SolidColorBrush(Color.FromRgb(208, 215, 222));
-            }
+            TitleTextBlock.Foreground = palette.HeadingFg;
+            VersionSubtext.Foreground = palette.MutedFg;
+            StatusTextBlock.Foreground = palette.MutedFg;
+
+            LaterButton.Background = palette.MenuHoverBg;
+            LaterButton.Foreground = palette.MenuFg;
+            LaterButton.BorderBrush = palette.Border;
+
+            ReleaseNotesButton.Background = palette.MenuHoverBg;
+            ReleaseNotesButton.Foreground = palette.MenuFg;
+            ReleaseNotesButton.BorderBrush = palette.Border;
+
+            DownloadProgressBar.Foreground = palette.Accent;
+            DownloadProgressBar.Background = palette.Border;
 
             DwmHelper.ApplyTitleBarTheme(this, palette);
         }
@@ -93,7 +101,10 @@ namespace MDPlus.Controls
                 }
                 catch (Exception ex)
                 {
-                    MessageBox.Show(this, $"Failed to open release URL: {ex.Message}", "Open Browser Error", MessageBoxButton.OK, MessageBoxImage.Warning);
+                    if (IsLoaded)
+                    {
+                        MessageBox.Show(this, $"Failed to open release URL: {ex.Message}", "Open Browser Error", MessageBoxButton.OK, MessageBoxImage.Warning);
+                    }
                 }
             }
         }
@@ -123,6 +134,8 @@ namespace MDPlus.Controls
             {
                 var result = await _updateService.DownloadAndVerifyUpdateAsync(_updateInfo, progress, _downloadCts.Token);
 
+                if (!IsLoaded) return;
+
                 if (result.Success && !string.IsNullOrEmpty(result.InstallerPath))
                 {
                     StatusTextBlock.Text = "Cryptographic SHA-256 verification passed! Launching installer...";
@@ -141,12 +154,14 @@ namespace MDPlus.Controls
             }
             catch (OperationCanceledException)
             {
+                if (!IsLoaded) return;
                 StatusTextBlock.Text = "Download canceled.";
                 UpdateNowButton.IsEnabled = true;
                 LaterButton.IsEnabled = true;
             }
             catch (Exception ex)
             {
+                if (!IsLoaded) return;
                 StatusTextBlock.Text = "Error: " + ex.Message;
                 MessageBox.Show(this, $"An error occurred during update: {ex.Message}", "Update Error", MessageBoxButton.OK, MessageBoxImage.Error);
                 UpdateNowButton.IsEnabled = true;
@@ -156,6 +171,7 @@ namespace MDPlus.Controls
 
         protected override void OnClosed(EventArgs e)
         {
+            ThemeManager.Instance.ThemeChanged -= OnThemeChanged;
             _downloadCts?.Cancel();
             base.OnClosed(e);
         }
