@@ -8,6 +8,7 @@ namespace MDPlus.Models
         public int Level { get; set; } = 1;
         public string Text { get; set; } = string.Empty;
         public string Anchor { get; set; } = string.Empty;
+        public int LineIndex { get; set; }
         public Thickness IndentMargin => new Thickness((Level - 1) * 14, 2, 4, 2);
         public List<HeadingItem> Children { get; set; } = new List<HeadingItem>();
     }

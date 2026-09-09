@@ -244,7 +244,8 @@ namespace MDPlus.Core
                     break;
 
                 case LinkInline link:
-                    sb.Append($"<a href=\"{WebUtility.HtmlEncode(link.Url)}\"");
+                    string safeHref = SanitizeUrl(link.Url);
+                    sb.Append($"<a href=\"{WebUtility.HtmlEncode(safeHref)}\"");
                     if (!string.IsNullOrEmpty(link.Title)) sb.Append($" title=\"{WebUtility.HtmlEncode(link.Title)}\"");
                     sb.Append(">");
                     foreach (var c in link.Children) ConvertInlineToHtml(c, sb);
@@ -252,7 +253,8 @@ namespace MDPlus.Core
                     break;
 
                 case ImageInline img:
-                    sb.Append($"<img src=\"{WebUtility.HtmlEncode(img.Url)}\" alt=\"{WebUtility.HtmlEncode(img.AltText)}\"");
+                    string safeSrc = SanitizeUrl(img.Url);
+                    sb.Append($"<img src=\"{WebUtility.HtmlEncode(safeSrc)}\" alt=\"{WebUtility.HtmlEncode(img.AltText)}\"");
                     if (!string.IsNullOrEmpty(img.Title)) sb.Append($" title=\"{WebUtility.HtmlEncode(img.Title)}\"");
                     sb.Append(">");
                     break;
@@ -261,6 +263,19 @@ namespace MDPlus.Core
                     sb.Append(br.IsHard ? "<br>\n" : " ");
                     break;
             }
+        }
+
+        private static string SanitizeUrl(string url)
+        {
+            if (string.IsNullOrWhiteSpace(url)) return string.Empty;
+            string trimmed = url.Trim();
+            if (trimmed.StartsWith("javascript:", StringComparison.OrdinalIgnoreCase) ||
+                trimmed.StartsWith("vbscript:", StringComparison.OrdinalIgnoreCase) ||
+                trimmed.StartsWith("data:text/html", StringComparison.OrdinalIgnoreCase))
+            {
+                return "#";
+            }
+            return trimmed;
         }
 
         private static string GetDefaultCss(bool isDark)

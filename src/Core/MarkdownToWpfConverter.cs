@@ -28,7 +28,7 @@ namespace MDPlus.Core
         private readonly SolidColorBrush _linkBrush;
 
         public event EventHandler<string>? AnchorNavigationRequested;
-        public event EventHandler<string>? FileNavigationRequested;
+        public event EventHandler<FileNavigationEventArgs>? FileNavigationRequested;
 
         public MarkdownToWpfConverter(string baseDirectory, bool isDark)
         {
@@ -745,27 +745,14 @@ namespace MDPlus.Core
                         if (target.StartsWith("#"))
                         {
                             AnchorNavigationRequested?.Invoke(this, target.Substring(1));
+                            return;
                         }
-                        else if (target.EndsWith(".md", StringComparison.OrdinalIgnoreCase) ||
-                                 target.EndsWith(".markdown", StringComparison.OrdinalIgnoreCase) ||
-                                 target.EndsWith(".mdown", StringComparison.OrdinalIgnoreCase) ||
-                                 target.EndsWith(".mkd", StringComparison.OrdinalIgnoreCase))
-                        {
-                            string fullTargetPath = target;
-                            if (!System.IO.Path.IsPathRooted(fullTargetPath) && !string.IsNullOrEmpty(_baseDirectory))
-                            {
-                                fullTargetPath = System.IO.Path.Combine(_baseDirectory, target);
-                            }
 
-                            if (File.Exists(fullTargetPath))
-                            {
-                                FileNavigationRequested?.Invoke(this, fullTargetPath);
-                            }
-                        }
-                        else if (Uri.TryCreate(target, UriKind.Absolute, out Uri? webUri) &&
-                                 (webUri.Scheme == Uri.UriSchemeHttp ||
-                                  webUri.Scheme == Uri.UriSchemeHttps ||
-                                  webUri.Scheme == Uri.UriSchemeMailto))
+                        // 1. Web schemes (http:, https:, mailto:) always open in browser
+                        if (Uri.TryCreate(target, UriKind.Absolute, out Uri? webUri) &&
+                            (webUri.Scheme == Uri.UriSchemeHttp ||
+                             webUri.Scheme == Uri.UriSchemeHttps ||
+                             webUri.Scheme == Uri.UriSchemeMailto))
                         {
                             try
                             {
@@ -774,6 +761,34 @@ namespace MDPlus.Core
                             catch
                             {
                                 // Fail gracefully if browser launch fails
+                            }
+                            return;
+                        }
+
+                        // 2. Check for local Markdown file (with optional anchor e.g. doc.md#section)
+                        string pathWithoutAnchor = target;
+                        string? targetAnchor = null;
+                        int hashIdx = target.IndexOf('#');
+                        if (hashIdx >= 0)
+                        {
+                            pathWithoutAnchor = target.Substring(0, hashIdx);
+                            targetAnchor = target.Substring(hashIdx + 1);
+                        }
+
+                        if (pathWithoutAnchor.EndsWith(".md", StringComparison.OrdinalIgnoreCase) ||
+                            pathWithoutAnchor.EndsWith(".markdown", StringComparison.OrdinalIgnoreCase) ||
+                            pathWithoutAnchor.EndsWith(".mdown", StringComparison.OrdinalIgnoreCase) ||
+                            pathWithoutAnchor.EndsWith(".mkd", StringComparison.OrdinalIgnoreCase))
+                        {
+                            string fullTargetPath = pathWithoutAnchor;
+                            if (!System.IO.Path.IsPathRooted(fullTargetPath) && !string.IsNullOrEmpty(_baseDirectory))
+                            {
+                                fullTargetPath = System.IO.Path.Combine(_baseDirectory, pathWithoutAnchor);
+                            }
+
+                            if (File.Exists(fullTargetPath))
+                            {
+                                FileNavigationRequested?.Invoke(this, new FileNavigationEventArgs(fullTargetPath, targetAnchor));
                             }
                         }
                         // Non-web schemes (e.g. file:, cmd:, powershell:, executables) are strictly blocked for security.
@@ -887,6 +902,18 @@ namespace MDPlus.Core
             };
             border.Child = placeholderText;
             return new InlineUIContainer(border) { BaselineAlignment = BaselineAlignment.Center };
+        }
+    }
+
+    public class FileNavigationEventArgs : EventArgs
+    {
+        public string FilePath { get; }
+        public string? Anchor { get; }
+
+        public FileNavigationEventArgs(string filePath, string? anchor = null)
+        {
+            FilePath = filePath;
+            Anchor = anchor;
         }
     }
 }

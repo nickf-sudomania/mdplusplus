@@ -3,6 +3,9 @@ using System.Collections.Generic;
 using System.IO;
 using System.Security.Cryptography;
 using System.Text;
+using System.Text.RegularExpressions;
+using System.Threading;
+using System.Threading.Tasks;
 
 namespace MDPlus.Core
 {
@@ -21,6 +24,22 @@ namespace MDPlus.Core
     /// </summary>
     public static class HashService
     {
+        private static readonly Regex BsdChecksumRegex = new Regex(
+            @"^(?:SHA256|SHA-256|SHA512|SHA1|MD5)\s*\((?<file>.+?)\)\s*=\s*(?<hash>[a-fA-F0-9]{32,128})$",
+            RegexOptions.Compiled | RegexOptions.IgnoreCase);
+
+        private static readonly Regex StandardChecksumRegex = new Regex(
+            @"^(?<hash>[a-fA-F0-9]{32,128})\s+[*?]?(?<file>.+)$",
+            RegexOptions.Compiled);
+
+        private static readonly Regex ColonChecksumRegex = new Regex(
+            @"^(?<file>[^:]+):\s*(?<hash>[a-fA-F0-9]{32,128})$",
+            RegexOptions.Compiled);
+
+        private static readonly Regex BareHashRegex = new Regex(
+            @"^[a-fA-F0-9]{64}$",
+            RegexOptions.Compiled);
+
         /// <summary>
         /// Computes the SHA-256 hash of a file on disk.
         /// </summary>
@@ -41,6 +60,26 @@ namespace MDPlus.Core
         }
 
         /// <summary>
+        /// Asynchronously computes the SHA-256 hash of a file on disk with cancellation support.
+        /// </summary>
+        public static async Task<string> ComputeSha256Async(string filePath, CancellationToken cancellationToken = default)
+        {
+            if (string.IsNullOrEmpty(filePath))
+            {
+                throw new ArgumentException("File path cannot be null or empty.", nameof(filePath));
+            }
+
+            if (!File.Exists(filePath))
+            {
+                throw new FileNotFoundException($"File not found: {filePath}", filePath);
+            }
+
+            await using var stream = new FileStream(
+                filePath, FileMode.Open, FileAccess.Read, FileShare.Read, bufferSize: 65536, useAsync: true);
+            return await ComputeSha256Async(stream, cancellationToken).ConfigureAwait(false);
+        }
+
+        /// <summary>
         /// Computes the SHA-256 hash of a readable stream.
         /// </summary>
         public static string ComputeSha256(Stream stream)
@@ -52,6 +91,21 @@ namespace MDPlus.Core
 
             using var sha256 = SHA256.Create();
             byte[] hashBytes = sha256.ComputeHash(stream);
+            return ConvertToHex(hashBytes);
+        }
+
+        /// <summary>
+        /// Asynchronously computes the SHA-256 hash of a readable stream with cancellation support.
+        /// </summary>
+        public static async Task<string> ComputeSha256Async(Stream stream, CancellationToken cancellationToken = default)
+        {
+            if (stream == null)
+            {
+                throw new ArgumentNullException(nameof(stream));
+            }
+
+            using var sha256 = SHA256.Create();
+            byte[] hashBytes = await sha256.ComputeHashAsync(stream, cancellationToken).ConfigureAwait(false);
             return ConvertToHex(hashBytes);
         }
 
@@ -85,15 +139,33 @@ namespace MDPlus.Core
         }
 
         /// <summary>
+        /// Asynchronously verifies whether the SHA-256 hash of a file matches an expected hash.
+        /// </summary>
+        public static async Task<bool> VerifyFileSha256Async(string filePath, string expectedHash, CancellationToken cancellationToken = default)
+        {
+            if (string.IsNullOrWhiteSpace(expectedHash) || !File.Exists(filePath))
+            {
+                return false;
+            }
+
+            string actual = await ComputeSha256Async(filePath, cancellationToken).ConfigureAwait(false);
+            return string.Equals(actual, NormalizeHash(expectedHash), StringComparison.OrdinalIgnoreCase);
+        }
+
+        /// <summary>
         /// Formats a single entry in standard GNU/coreutils format: "{hash}  {fileName}".
         /// </summary>
         public static string FormatChecksumEntry(string fileName, string hash)
         {
-            return $"{hash.ToLowerInvariant()}  {fileName}";
+            return $"{hash.ToLowerInvariant()}  {CleanFileName(fileName)}";
         }
 
         /// <summary>
-        /// Parses a checksum file containing lines formatted as "{hash}  {fileName}" or "{hash} *{fileName}".
+        /// Parses a checksum file containing lines formatted as:
+        /// - GNU style: "{hash}  {fileName}", "{hash} *{fileName}", "{hash}\t{fileName}"
+        /// - BSD/OpenSSL style: "SHA256 ({fileName}) = {hash}"
+        /// - Colon style: "{fileName}: {hash}"
+        /// - Bare hash: "{hash}"
         /// </summary>
         public static Dictionary<string, string> ParseChecksums(string checksumsContent)
         {
@@ -107,22 +179,54 @@ namespace MDPlus.Core
             foreach (var line in lines)
             {
                 string trimmed = line.Trim();
-                if (string.IsNullOrEmpty(trimmed) || trimmed.StartsWith("#"))
+                if (string.IsNullOrEmpty(trimmed) || trimmed.StartsWith("#") || trimmed.StartsWith("//"))
                 {
                     continue; // Skip comments and empty lines
                 }
 
-                // Standard format: <hash>  <filename> or <hash> *<filename>
-                int spaceIndex = trimmed.IndexOf(' ');
-                if (spaceIndex >= 32) // SHA-256 is 64 hex characters
+                // 1. Check BSD/OpenSSL style: SHA256 (filename) = hash
+                var bsdMatch = BsdChecksumRegex.Match(trimmed);
+                if (bsdMatch.Success)
                 {
-                    string hash = trimmed.Substring(0, spaceIndex).Trim();
-                    string fileName = trimmed.Substring(spaceIndex + 1).Trim().TrimStart('*');
-
-                    if (!string.IsNullOrEmpty(fileName))
+                    string file = CleanFileName(bsdMatch.Groups["file"].Value);
+                    string hash = bsdMatch.Groups["hash"].Value.ToLowerInvariant();
+                    if (!string.IsNullOrEmpty(file))
                     {
-                        result[fileName] = hash.ToLowerInvariant();
+                        result[file] = hash;
+                        continue;
                     }
+                }
+
+                // 2. Standard GNU style: <hash>  <filename> (or \t or * prefix)
+                var stdMatch = StandardChecksumRegex.Match(trimmed);
+                if (stdMatch.Success)
+                {
+                    string hash = stdMatch.Groups["hash"].Value.ToLowerInvariant();
+                    string file = CleanFileName(stdMatch.Groups["file"].Value);
+                    if (!string.IsNullOrEmpty(file))
+                    {
+                        result[file] = hash;
+                        continue;
+                    }
+                }
+
+                // 3. Colon style: filename: hash
+                var colonMatch = ColonChecksumRegex.Match(trimmed);
+                if (colonMatch.Success)
+                {
+                    string file = CleanFileName(colonMatch.Groups["file"].Value);
+                    string hash = colonMatch.Groups["hash"].Value.ToLowerInvariant();
+                    if (!string.IsNullOrEmpty(file))
+                    {
+                        result[file] = hash;
+                        continue;
+                    }
+                }
+
+                // 4. Bare hash line (e.g. single .sha256 file containing only the 64-hex hash)
+                if (BareHashRegex.IsMatch(trimmed))
+                {
+                    result[string.Empty] = trimmed.ToLowerInvariant();
                 }
             }
 
@@ -149,6 +253,8 @@ namespace MDPlus.Core
             {
                 string fileName = kvp.Key;
                 string expected = kvp.Value;
+                if (string.IsNullOrEmpty(fileName)) continue;
+
                 string resolvedPath = Path.IsPathRooted(fileName) ? fileName : Path.Combine(baseDir, fileName);
 
                 var itemResult = new ChecksumVerificationResult
@@ -191,6 +297,16 @@ namespace MDPlus.Core
         {
             if (string.IsNullOrWhiteSpace(hash)) return string.Empty;
             return hash.Trim().ToLowerInvariant();
+        }
+
+        private static string CleanFileName(string rawFileName)
+        {
+            string clean = rawFileName.Trim().TrimStart('*', ' ');
+            if (clean.StartsWith("./") || clean.StartsWith(".\\"))
+            {
+                clean = clean.Substring(2);
+            }
+            return clean;
         }
 
         private static string ConvertToHex(byte[] bytes)

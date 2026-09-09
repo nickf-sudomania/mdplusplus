@@ -10,6 +10,8 @@ namespace MDPlus.Controls
 {
     public partial class VerifyIntegrityWindow : Window
     {
+        private System.Threading.CancellationTokenSource? _hashCts;
+
         public VerifyIntegrityWindow()
         {
             InitializeComponent();
@@ -53,27 +55,51 @@ namespace MDPlus.Controls
             }
         }
 
-        private void FilePathTextBox_TextChanged(object sender, System.Windows.Controls.TextChangedEventArgs e)
+        private async void FilePathTextBox_TextChanged(object sender, System.Windows.Controls.TextChangedEventArgs e)
         {
+            _hashCts?.Cancel();
+            _hashCts?.Dispose();
+            _hashCts = new System.Threading.CancellationTokenSource();
+            var token = _hashCts.Token;
+
             string path = FilePathTextBox.Text.Trim('"', ' ');
             if (File.Exists(path))
             {
+                ComputedHashTextBox.Text = "Calculating SHA-256...";
+                SetStatus(
+                    "⏳ CALCULATING...",
+                    "Computing cryptographic SHA-256 hash...",
+                    Color.FromRgb(88, 166, 255),
+                    Color.FromArgb(30, 56, 139, 253),
+                    Color.FromRgb(88, 166, 255));
+
                 try
                 {
-                    string hash = HashService.ComputeSha256(path);
-                    ComputedHashTextBox.Text = hash;
+                    string hash = await HashService.ComputeSha256Async(path, token);
+                    if (!token.IsCancellationRequested)
+                    {
+                        ComputedHashTextBox.Text = hash;
+                        PerformComparison();
+                    }
+                }
+                catch (OperationCanceledException)
+                {
+                    // Ignore cancelled operations
                 }
                 catch (Exception ex)
                 {
-                    ComputedHashTextBox.Text = $"Error: {ex.Message}";
+                    if (!token.IsCancellationRequested)
+                    {
+                        ComputedHashTextBox.Text = $"Error: {ex.Message}";
+                        PerformComparison();
+                    }
                 }
             }
             else
             {
                 ComputedHashTextBox.Text = string.IsNullOrEmpty(path) ? "Select a file to compute hash..." : "File not found.";
+                PerformComparison();
             }
-
-            PerformComparison();
         }
 
         private void ExpectedHashTextBox_TextChanged(object sender, System.Windows.Controls.TextChangedEventArgs e)
@@ -159,15 +185,11 @@ namespace MDPlus.Controls
 
         private void PasteExpected_Click(object sender, RoutedEventArgs e)
         {
-            try
+            string? text = ClipboardHelper.GetText();
+            if (!string.IsNullOrWhiteSpace(text))
             {
-                string text = Clipboard.GetText();
-                if (!string.IsNullOrWhiteSpace(text))
-                {
-                    ExpectedHashTextBox.Text = text.Trim();
-                }
+                ExpectedHashTextBox.Text = text.Trim();
             }
-            catch { }
         }
 
         private void LoadChecksumFile_Click(object sender, RoutedEventArgs e)
@@ -180,43 +202,64 @@ namespace MDPlus.Controls
 
             if (dlg.ShowDialog(this) == true)
             {
-                try
+                LoadChecksumFile(dlg.FileName);
+            }
+        }
+
+        private void LoadChecksumFile(string filePath)
+        {
+            try
+            {
+                string content = File.ReadAllText(filePath);
+                var parsed = HashService.ParseChecksums(content);
+
+                string targetFile = Path.GetFileName(FilePathTextBox.Text.Trim('"', ' '));
+
+                // 1. Direct match or filename match
+                if (!string.IsNullOrEmpty(targetFile))
                 {
-                    string content = File.ReadAllText(dlg.FileName);
-                    var parsed = HashService.ParseChecksums(content);
-
-                    string targetFile = Path.GetFileName(FilePathTextBox.Text.Trim('"', ' '));
-                    if (!string.IsNullOrEmpty(targetFile) && parsed.TryGetValue(targetFile, out string? matchingHash))
+                    foreach (var kvp in parsed)
                     {
-                        ExpectedHashTextBox.Text = matchingHash;
-                        return;
-                    }
-
-                    // Fallback: If 1 entry or single hash string in file
-                    if (parsed.Count == 1)
-                    {
-                        foreach (var val in parsed.Values)
+                        if (kvp.Key.Equals(targetFile, StringComparison.OrdinalIgnoreCase) ||
+                            Path.GetFileName(kvp.Key).Equals(targetFile, StringComparison.OrdinalIgnoreCase))
                         {
-                            ExpectedHashTextBox.Text = val;
+                            ExpectedHashTextBox.Text = kvp.Value;
                             return;
                         }
                     }
+                }
 
-                    string raw = content.Trim();
-                    if (raw.Length == 64)
-                    {
-                        ExpectedHashTextBox.Text = raw;
-                    }
-                    else
-                    {
-                        MessageBox.Show($"Loaded checksum file contains {parsed.Count} entries, but none matched '{targetFile}'.",
-                            "Checksum File", MessageBoxButton.OK, MessageBoxImage.Information);
-                    }
-                }
-                catch (Exception ex)
+                // 2. If single entry in file
+                if (parsed.Count == 1)
                 {
-                    MessageBox.Show($"Failed to read checksum file:\n{ex.Message}", "Error", MessageBoxButton.OK, MessageBoxImage.Error);
+                    foreach (var val in parsed.Values)
+                    {
+                        ExpectedHashTextBox.Text = val;
+                        return;
+                    }
                 }
+
+                // 3. Check for bare hash in parsed
+                if (parsed.TryGetValue(string.Empty, out string? bareHash) && bareHash.Length == 64)
+                {
+                    ExpectedHashTextBox.Text = bareHash;
+                    return;
+                }
+
+                string raw = content.Trim();
+                if (raw.Length == 64)
+                {
+                    ExpectedHashTextBox.Text = raw;
+                }
+                else
+                {
+                    MessageBox.Show($"Loaded checksum file contains {parsed.Count} entries, but none matched '{targetFile}'.",
+                        "Checksum File", MessageBoxButton.OK, MessageBoxImage.Information);
+                }
+            }
+            catch (Exception ex)
+            {
+                MessageBox.Show($"Failed to read checksum file:\n{ex.Message}", "Error", MessageBoxButton.OK, MessageBoxImage.Error);
             }
         }
 
@@ -224,10 +267,38 @@ namespace MDPlus.Controls
         {
             if (e.Data.GetDataPresent(DataFormats.FileDrop))
             {
-                string[] files = (string[])e.Data.GetData(DataFormats.FileDrop);
-                if (files.Length > 0 && File.Exists(files[0]))
+                if (e.Data.GetData(DataFormats.FileDrop) is string[] files && files.Length > 0)
                 {
-                    FilePathTextBox.Text = files[0];
+                    string? targetFile = null;
+                    string? checksumFile = null;
+
+                    foreach (var f in files)
+                    {
+                        if (!File.Exists(f)) continue;
+                        string ext = Path.GetExtension(f).ToLowerInvariant();
+                        if (ext == ".sha256" || (ext == ".txt" && f.Contains("checksum", StringComparison.OrdinalIgnoreCase)))
+                        {
+                            checksumFile = f;
+                        }
+                        else
+                        {
+                            targetFile = f;
+                        }
+                    }
+
+                    if (targetFile != null)
+                    {
+                        FilePathTextBox.Text = targetFile;
+                    }
+                    else if (files.Length == 1 && File.Exists(files[0]))
+                    {
+                        FilePathTextBox.Text = files[0];
+                    }
+
+                    if (checksumFile != null)
+                    {
+                        LoadChecksumFile(checksumFile);
+                    }
                 }
             }
         }

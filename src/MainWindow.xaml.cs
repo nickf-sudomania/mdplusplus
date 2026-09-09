@@ -50,6 +50,7 @@ namespace MDPlus
             SetSidebarVisibility(_settings.ShowToc);
 
             WordWrapMenuItem.IsChecked = _settings.WordWrap;
+            RawMarkdownTextBox.TextWrapping = _settings.WordWrap ? TextWrapping.Wrap : TextWrapping.NoWrap;
 
             Width = _settings.WindowWidth;
             Height = _settings.WindowHeight;
@@ -106,7 +107,7 @@ namespace MDPlus
             }
         }
 
-        public void OpenDocument(string filePath)
+        public void OpenDocument(string filePath, string? anchor = null)
         {
             if (string.IsNullOrEmpty(filePath) || !File.Exists(filePath)) return;
 
@@ -117,6 +118,10 @@ namespace MDPlus
             if (existing != null)
             {
                 SetActiveTab(existing);
+                if (!string.IsNullOrEmpty(anchor))
+                {
+                    MarkdownViewer.ScrollToAnchor(anchor);
+                }
                 return;
             }
 
@@ -151,6 +156,11 @@ namespace MDPlus
 
                 RebuildTabStrip();
                 SetActiveTab(tab);
+
+                if (!string.IsNullOrEmpty(anchor))
+                {
+                    MarkdownViewer.ScrollToAnchor(anchor);
+                }
             }
             catch (Exception ex)
             {
@@ -237,7 +247,7 @@ Console.WriteLine($""Parsed {doc.Blocks.Count} blocks in 2ms!"");
         {
             var converter = new MarkdownToWpfConverter(tab.DirectoryName, ThemeManager.Instance.IsDark);
             converter.AnchorNavigationRequested += (s, anchor) => MarkdownViewer.ScrollToAnchor(anchor);
-            converter.FileNavigationRequested += (s, path) => OpenDocument(path);
+            converter.FileNavigationRequested += (s, e) => OpenDocument(e.FilePath, e.Anchor);
             tab.FlowDocument = converter.Convert(tab.Document);
         }
 
@@ -252,7 +262,8 @@ Console.WriteLine($""Parsed {doc.Blocks.Count} blocks in 2ms!"");
                     {
                         Level = h.Level,
                         Text = h.Text,
-                        Anchor = h.Anchor
+                        Anchor = h.Anchor,
+                        LineIndex = h.LineIndex
                     });
                 }
             }
@@ -297,6 +308,16 @@ Console.WriteLine($""Parsed {doc.Blocks.Count} blocks in 2ms!"");
             StatusZoomText.Text = tab.ZoomText;
             StatusEncodingText.Text = $"{tab.EncodingName} • {tab.LineEndingName}";
             StatusViewModeText.Text = tab.ViewMode.ToString();
+
+            if (DocumentFindBar.Visibility == Visibility.Visible)
+            {
+                OnFindRequested(this, new FindEventArgs
+                {
+                    SearchText = DocumentFindBar.FindTextBox.Text,
+                    MatchCase = DocumentFindBar.MatchCaseCheckBox.IsChecked == true,
+                    Forward = true
+                });
+            }
 
             RebuildTabStrip();
         }
@@ -435,9 +456,15 @@ Console.WriteLine($""Parsed {doc.Blocks.Count} blocks in 2ms!"");
 
                     try
                     {
+                        double scrollOffset = MarkdownViewer.VerticalOffset;
+                        double rawScroll = RawMarkdownTextBox.VerticalOffset;
+                        int rawCaret = RawMarkdownTextBox.CaretIndex;
+
                         tab.RawMarkdown = text;
+                        tab.LineEndingName = text.Contains("\r\n") ? "CRLF" : "LF";
                         tab.Document = _parser.Parse(text);
                         tab.Headings = ExtractHeadings(tab.Document);
+                        tab.Title = !string.IsNullOrEmpty(tab.Document.Title) ? tab.Document.Title : Path.GetFileName(tab.FilePath);
                         RenderDocumentTab(tab);
 
                         if (tab == _activeTab)
@@ -446,7 +473,18 @@ Console.WriteLine($""Parsed {doc.Blocks.Count} blocks in 2ms!"");
                             RawMarkdownTextBox.Text = tab.RawMarkdown;
                             TocListBox.ItemsSource = tab.Headings;
                             StatusStatsText.Text = tab.StatsText;
+                            StatusEncodingText.Text = $"{tab.EncodingName} • {tab.LineEndingName}";
+                            Title = $"{tab.FileName} - MDPlus";
+
+                            MarkdownViewer.ScrollToVerticalOffset(scrollOffset);
+                            RawMarkdownTextBox.ScrollToVerticalOffset(rawScroll);
+                            if (rawCaret >= 0 && rawCaret <= tab.RawMarkdown.Length)
+                            {
+                                RawMarkdownTextBox.CaretIndex = rawCaret;
+                            }
                         }
+
+                        RebuildTabStrip();
                     }
                     catch
                     {
@@ -458,8 +496,97 @@ Console.WriteLine($""Parsed {doc.Blocks.Count} blocks in 2ms!"");
 
         private void OnFindRequested(object? sender, FindEventArgs e)
         {
-            var (current, total) = MarkdownViewer.SearchText(e.SearchText, e.MatchCase, e.Forward);
-            DocumentFindBar.SetMatchCount(current, total);
+            if (_activeTab?.ViewMode == ViewDisplayMode.Raw)
+            {
+                var (current, total) = SearchRawTextBox(e.SearchText, e.MatchCase, e.Forward);
+                DocumentFindBar.SetMatchCount(current, total);
+            }
+            else
+            {
+                var (current, total) = MarkdownViewer.SearchText(e.SearchText, e.MatchCase, e.Forward);
+                if (_activeTab?.ViewMode == ViewDisplayMode.Split)
+                {
+                    SearchRawTextBox(e.SearchText, e.MatchCase, e.Forward);
+                }
+                DocumentFindBar.SetMatchCount(current, total);
+            }
+        }
+
+        private (int current, int total) SearchRawTextBox(string searchText, bool matchCase, bool forward)
+        {
+            if (string.IsNullOrEmpty(searchText) || string.IsNullOrEmpty(RawMarkdownTextBox.Text))
+            {
+                return (0, 0);
+            }
+
+            string content = RawMarkdownTextBox.Text;
+            var comparison = matchCase ? StringComparison.Ordinal : StringComparison.OrdinalIgnoreCase;
+
+            var indices = new List<int>();
+            int idx = 0;
+            while (idx < content.Length)
+            {
+                int found = content.IndexOf(searchText, idx, comparison);
+                if (found == -1) break;
+                indices.Add(found);
+                idx = found + Math.Max(1, searchText.Length);
+            }
+
+            if (indices.Count == 0)
+            {
+                return (0, 0);
+            }
+
+            int currentCaret = RawMarkdownTextBox.SelectionStart;
+            int chosenIndex = -1;
+            int matchNum = 0;
+
+            if (forward)
+            {
+                int startIndex = currentCaret + Math.Max(1, RawMarkdownTextBox.SelectionLength);
+                for (int m = 0; m < indices.Count; m++)
+                {
+                    if (indices[m] >= startIndex)
+                    {
+                        chosenIndex = indices[m];
+                        matchNum = m + 1;
+                        break;
+                    }
+                }
+                if (chosenIndex == -1)
+                {
+                    chosenIndex = indices[0];
+                    matchNum = 1;
+                }
+            }
+            else
+            {
+                int startIndex = currentCaret - 1;
+                for (int m = indices.Count - 1; m >= 0; m--)
+                {
+                    if (indices[m] <= startIndex)
+                    {
+                        chosenIndex = indices[m];
+                        matchNum = m + 1;
+                        break;
+                    }
+                }
+                if (chosenIndex == -1)
+                {
+                    chosenIndex = indices[indices.Count - 1];
+                    matchNum = indices.Count;
+                }
+            }
+
+            if (chosenIndex >= 0)
+            {
+                RawMarkdownTextBox.Select(chosenIndex, searchText.Length);
+                int lineIndex = RawMarkdownTextBox.GetLineIndexFromCharacterIndex(chosenIndex);
+                RawMarkdownTextBox.ScrollToLine(lineIndex);
+                RawMarkdownTextBox.Focus();
+            }
+
+            return (matchNum, indices.Count);
         }
 
         private void UpdateViewDisplayMode(ViewDisplayMode mode)
@@ -1018,12 +1145,23 @@ Console.WriteLine($""Parsed {doc.Blocks.Count} blocks in 2ms!"");
             {
                 if (_activeTab?.ViewMode == ViewDisplayMode.Raw)
                 {
-                    int lineIdx = RawMarkdownTextBox.Text.IndexOf(heading.Text, StringComparison.OrdinalIgnoreCase);
-                    if (lineIdx >= 0)
+                    if (heading.LineIndex >= 0 && heading.LineIndex < RawMarkdownTextBox.LineCount)
                     {
-                        RawMarkdownTextBox.Select(lineIdx, heading.Text.Length);
-                        int line = RawMarkdownTextBox.GetLineIndexFromCharacterIndex(lineIdx);
-                        RawMarkdownTextBox.ScrollToLine(line);
+                        int charIdx = RawMarkdownTextBox.GetCharacterIndexFromLineIndex(heading.LineIndex);
+                        int lineLen = RawMarkdownTextBox.GetLineLength(heading.LineIndex);
+                        RawMarkdownTextBox.Focus();
+                        RawMarkdownTextBox.Select(charIdx, lineLen);
+                        RawMarkdownTextBox.ScrollToLine(heading.LineIndex);
+                    }
+                    else
+                    {
+                        int lineIdx = RawMarkdownTextBox.Text.IndexOf(heading.Text, StringComparison.OrdinalIgnoreCase);
+                        if (lineIdx >= 0)
+                        {
+                            RawMarkdownTextBox.Select(lineIdx, heading.Text.Length);
+                            int line = RawMarkdownTextBox.GetLineIndexFromCharacterIndex(lineIdx);
+                            RawMarkdownTextBox.ScrollToLine(line);
+                        }
                     }
                 }
                 else
@@ -1228,11 +1366,10 @@ Console.WriteLine($""Parsed {doc.Blocks.Count} blocks in 2ms!"");
             {
                 _isSyncingScroll = true;
                 double ratio = e.VerticalOffset / (e.ExtentHeight - e.ViewportHeight);
-                ScrollViewer? viewerScroll = FindVisualChild<ScrollViewer>(MarkdownViewer);
-                if (viewerScroll != null && viewerScroll.ExtentHeight > viewerScroll.ViewportHeight)
+                if (MarkdownViewer.ExtentHeight > MarkdownViewer.ViewportHeight)
                 {
-                    double targetOffset = ratio * (viewerScroll.ExtentHeight - viewerScroll.ViewportHeight);
-                    viewerScroll.ScrollToVerticalOffset(targetOffset);
+                    double targetOffset = ratio * (MarkdownViewer.ExtentHeight - MarkdownViewer.ViewportHeight);
+                    MarkdownViewer.ScrollToVerticalOffset(targetOffset);
                 }
             }
             finally
@@ -1259,9 +1396,18 @@ Console.WriteLine($""Parsed {doc.Blocks.Count} blocks in 2ms!"");
         {
             _fileWatcher.Dispose();
 
-            _settings.WindowWidth = Width;
-            _settings.WindowHeight = Height;
-            _settings.WindowMaximized = WindowState == WindowState.Maximized;
+            if (WindowState == WindowState.Maximized)
+            {
+                _settings.WindowMaximized = true;
+                _settings.WindowWidth = RestoreBounds.Width;
+                _settings.WindowHeight = RestoreBounds.Height;
+            }
+            else
+            {
+                _settings.WindowMaximized = false;
+                _settings.WindowWidth = Width;
+                _settings.WindowHeight = Height;
+            }
             _settings.Save();
         }
     }

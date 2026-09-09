@@ -28,5 +28,22 @@ namespace MDPlus.Core
 
             return false;
         }
+
+        public static string? GetText()
+        {
+            for (int attempt = 0; attempt < 3; attempt++)
+            {
+                try
+                {
+                    return Clipboard.GetText();
+                }
+                catch
+                {
+                    Thread.Sleep(50);
+                }
+            }
+
+            return null;
+        }
     }
 }

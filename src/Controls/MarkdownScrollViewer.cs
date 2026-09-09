@@ -21,6 +21,57 @@ namespace MDPlus.Controls
             HorizontalScrollBarVisibility = ScrollBarVisibility.Disabled;
         }
 
+        private ScrollViewer? _internalScrollViewer;
+
+        private ScrollViewer? InternalScrollViewer
+        {
+            get
+            {
+                if (_internalScrollViewer != null) return _internalScrollViewer;
+                ApplyTemplate();
+                _internalScrollViewer = Template?.FindName("PART_ContentHost", this) as ScrollViewer ?? FindVisualChild<ScrollViewer>(this);
+                return _internalScrollViewer;
+            }
+        }
+
+        public double VerticalOffset => InternalScrollViewer?.VerticalOffset ?? 0.0;
+        public double ExtentHeight => InternalScrollViewer?.ExtentHeight ?? 0.0;
+        public double ViewportHeight => InternalScrollViewer?.ViewportHeight ?? 0.0;
+
+        public void ScrollToVerticalOffset(double offset)
+        {
+            InternalScrollViewer?.ScrollToVerticalOffset(offset);
+        }
+
+        public override void OnApplyTemplate()
+        {
+            base.OnApplyTemplate();
+            _internalScrollViewer = Template?.FindName("PART_ContentHost", this) as ScrollViewer ?? FindVisualChild<ScrollViewer>(this);
+        }
+
+        private static T? FindVisualChild<T>(DependencyObject? parent) where T : DependencyObject
+        {
+            if (parent == null) return null;
+            int childCount = VisualTreeHelper.GetChildrenCount(parent);
+            for (int i = 0; i < childCount; i++)
+            {
+                var child = VisualTreeHelper.GetChild(parent, i);
+                if (child is T typedChild) return typedChild;
+                var childOfChild = FindVisualChild<T>(child);
+                if (childOfChild != null) return childOfChild;
+            }
+            return null;
+        }
+
+        protected override void OnPropertyChanged(DependencyPropertyChangedEventArgs e)
+        {
+            base.OnPropertyChanged(e);
+            if (e.Property == DocumentProperty)
+            {
+                ClearHighlights();
+            }
+        }
+
         public bool ScrollToAnchor(string anchor)
         {
             if (Document == null || string.IsNullOrEmpty(anchor)) return false;

@@ -99,21 +99,55 @@ switch ($Action) {
         Compress-Archive -Path "$stagingDir\*" -DestinationPath $zipPath -Force
         Remove-Item $stagingDir -Recurse -Force
 
-        # 3. Generate cryptographic SHA-256 hashes (Notepad++ integrity standard)
+        # 3. Package source code archive (Notepad++ source release style)
+        Write-Host "`n[INFO] Creating source code release archive (MDPlus-1.0.0-src.zip)..." -ForegroundColor Yellow
+        $srcZipPath = Join-Path $distPath "MDPlus-1.0.0-src.zip"
+        if (Test-Path $srcZipPath) {
+            Remove-Item $srcZipPath -Force
+        }
+
+        $srcStagingDir = Join-Path $distPath "src_staging\MDPlus-1.0.0-src"
+        if (Test-Path (Join-Path $distPath "src_staging")) { Remove-Item (Join-Path $distPath "src_staging") -Recurse -Force }
+        New-Item -ItemType Directory -Path $srcStagingDir | Out-Null
+
+        # Copy source files excluding binaries and git metadata
+        Copy-Item (Join-Path $PSScriptRoot "src") -Destination $srcStagingDir -Recurse -Exclude @("bin", "obj")
+        if (Test-Path (Join-Path $srcStagingDir "src\bin")) { Remove-Item (Join-Path $srcStagingDir "src\bin") -Recurse -Force }
+        if (Test-Path (Join-Path $srcStagingDir "src\obj")) { Remove-Item (Join-Path $srcStagingDir "src\obj") -Recurse -Force }
+        Copy-Item (Join-Path $PSScriptRoot "tests") -Destination $srcStagingDir -Recurse -Exclude @("bin", "obj")
+        if (Test-Path (Join-Path $srcStagingDir "tests\bin")) { Remove-Item (Join-Path $srcStagingDir "tests\bin") -Recurse -Force }
+        if (Test-Path (Join-Path $srcStagingDir "tests\obj")) { Remove-Item (Join-Path $srcStagingDir "tests\obj") -Recurse -Force }
+        if (Test-Path (Join-Path $PSScriptRoot "sample_docs")) {
+            Copy-Item (Join-Path $PSScriptRoot "sample_docs") -Destination $srcStagingDir -Recurse
+        }
+        Copy-Item (Join-Path $PSScriptRoot "MDPlus.sln") -Destination $srcStagingDir
+        Copy-Item (Join-Path $PSScriptRoot "build.ps1") -Destination $srcStagingDir
+        Copy-Item (Join-Path $PSScriptRoot "build.bat") -Destination $srcStagingDir
+        Copy-Item (Join-Path $PSScriptRoot "README.md") -Destination $srcStagingDir
+        Copy-Item (Join-Path $PSScriptRoot "LICENSE") -Destination $srcStagingDir
+
+        Compress-Archive -Path "$srcStagingDir\*" -DestinationPath $srcZipPath -Force
+        Remove-Item (Join-Path $distPath "src_staging") -Recurse -Force
+
+        # 4. Generate cryptographic SHA-256 hashes (Notepad++ release integrity standard)
         Write-Host "`n[INFO] Calculating cryptographic SHA-256 hashes..." -ForegroundColor Yellow
         $exeHash = Get-Sha256Hex $exePath
         $zipHash = Get-Sha256Hex $zipPath
+        $srcHash = Get-Sha256Hex $srcZipPath
 
         # Write individual hash files
         Set-Content -Path (Join-Path $distPath "MDPlus.exe.sha256") -Value "$exeHash  MDPlus.exe"
         Set-Content -Path (Join-Path $distPath "MDPlus-win-x64.zip.sha256") -Value "$zipHash  MDPlus-win-x64.zip"
+        Set-Content -Path (Join-Path $distPath "MDPlus-1.0.0-src.zip.sha256") -Value "$srcHash  MDPlus-1.0.0-src.zip"
 
-        # Write master SHA256SUMS.txt file
+        # Write Notepad++ style unified checksum file (npp.<version>.checksums.sha256 standard)
         $checksumContent = @"
 $exeHash  MDPlus.exe
 $zipHash  MDPlus-win-x64.zip
+$srcHash  MDPlus-1.0.0-src.zip
 "@
         Set-Content -Path (Join-Path $distPath "SHA256SUMS.txt") -Value $checksumContent
+        Set-Content -Path (Join-Path $distPath "MDPlus.1.0.0.checksums.sha256") -Value $checksumContent
 
         Write-Host "`n=======================================================" -ForegroundColor Green
         Write-Host " [SUCCESS] Publish & Hash Generation Complete!" -ForegroundColor Green
@@ -123,6 +157,9 @@ $zipHash  MDPlus-win-x64.zip
         Write-Host "    SHA-256: $exeHash" -ForegroundColor DarkCyan
         Write-Host "  • MDPlus-win-x64.zip" -ForegroundColor Cyan
         Write-Host "    SHA-256: $zipHash" -ForegroundColor DarkCyan
+        Write-Host "  • MDPlus-1.0.0-src.zip (Source Code Archive)" -ForegroundColor Cyan
+        Write-Host "    SHA-256: $srcHash" -ForegroundColor DarkCyan
+        Write-Host "  • MDPlus.1.0.0.checksums.sha256 (Notepad++ Checksum Standard)" -ForegroundColor Gray
         Write-Host "  • SHA256SUMS.txt (Master Checksum Manifest)" -ForegroundColor Gray
         Write-Host ""
         Write-Host "To verify download integrity, run:" -ForegroundColor Gray

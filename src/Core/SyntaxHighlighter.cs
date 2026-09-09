@@ -190,8 +190,46 @@ namespace MDPlus.Core
                     continue;
                 }
 
-                // 3. Strings: "..." or '...' or `...`
+                // 3. Strings: """...""", @"...", "...", '...', `...`
                 char c = code[i];
+
+                // 3a. Triple-quoted multiline strings: """...""" or '''...'''
+                if (StartsWithAt(code, i, "\"\"\"") || StartsWithAt(code, i, "'''"))
+                {
+                    string triple = code.Substring(i, 3);
+                    int end = code.IndexOf(triple, i + 3, StringComparison.Ordinal);
+                    if (end == -1) end = len;
+                    else end += 3;
+                    tokens.Add(new HighlightToken { Text = code.Substring(i, end - i), Type = TokenType.String });
+                    i = end;
+                    continue;
+                }
+
+                // 3b. Verbatim strings: @"..." or $@"...":
+                if ((c == '@' && i + 1 < len && code[i + 1] == '"') ||
+                    (c == '$' && i + 2 < len && code[i + 1] == '@' && code[i + 2] == '"'))
+                {
+                    int prefixLen = c == '$' ? 3 : 2;
+                    int j = i + prefixLen;
+                    while (j < len)
+                    {
+                        if (code[j] == '"')
+                        {
+                            if (j + 1 < len && code[j + 1] == '"')
+                            {
+                                j += 2;
+                                continue;
+                            }
+                            j++;
+                            break;
+                        }
+                        j++;
+                    }
+                    tokens.Add(new HighlightToken { Text = code.Substring(i, j - i), Type = TokenType.String });
+                    i = j;
+                    continue;
+                }
+
                 if (c == '"' || c == '\'' || c == '`')
                 {
                     char quote = c;
@@ -302,7 +340,7 @@ namespace MDPlus.Core
                     continue;
                 }
 
-                if (char.IsDigit(c) || c == '-')
+                if (char.IsDigit(c) || (c == '-' && i + 1 < len && char.IsDigit(code[i + 1])))
                 {
                     int j = i + 1;
                     while (j < len && (char.IsDigit(code[j]) || code[j] == '.' || code[j] == 'e' || code[j] == 'E' || code[j] == '+' || code[j] == '-'))

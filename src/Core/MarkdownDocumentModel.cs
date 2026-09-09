@@ -28,6 +28,7 @@ namespace MDPlus.Core
         public int Level { get; set; } = 1; // 1 to 6
         public string Text { get; set; } = string.Empty;
         public string Anchor { get; set; } = string.Empty;
+        public int LineIndex { get; set; }
         public List<MarkdownInline> Inlines { get; set; } = new List<MarkdownInline>();
     }
 

@@ -80,6 +80,16 @@ namespace MDPlus.Tests
             RunTest("Multi-Backtick Code Spans", TestMultiBacktickCodeSpans);
             RunTest("Angle Bracket URLs in Links & Images", TestAngleBracketUrls);
             RunTest("HTML Exporter Table Column Harmonization", TestTableColumnConsistency);
+            RunTest("Inline Code with Literal Backslashes & Distinct Runs", TestInlineCodeBackslashesAndRuns);
+            RunTest("Emphasis Left/Right Flanking Whitespace Rules (Math Multiplication Safe)", TestEmphasisWhitespaceFlanking);
+            RunTest("Setext Heading Interrupting Paragraph Text", TestSetextHeadingInterruptingParagraph);
+            RunTest("Heading Block Line Index Tracking", TestHeadingLineIndexTracking);
+            RunTest("Multi-Format Checksum Manifest Parsing (GNU, BSD, Tabs, Relative)", TestMultiFormatChecksumManifest);
+            RunTest("Asynchronous SHA-256 Hash Computation", TestAsyncSha256Computation);
+            RunTest("Table Pipe and Delimiter Backslash Escaping", TestTableBackslashesAndEscapes);
+            RunTest("HTML Exporter URL Sanitization (XSS Prevention)", TestHtmlExporterUrlSanitization);
+            RunTest("Syntax Highlighter Multiline and Verbatim Strings", TestSyntaxHighlighterMultilineAndVerbatimStrings);
+            RunTest("Table Alignment Separators and Column Padding", TestTableAlignmentsSeparatorsAndPadding);
 
             sw.Stop();
 
@@ -707,6 +717,214 @@ Following text";
             Assert(html.Contains("<table>"), "Contains table tag");
             Assert(html.Contains("<th"), "Contains th");
             Assert(html.Contains("<td"), "Contains td");
+        }
+
+        private static void TestInlineCodeBackslashesAndRuns()
+        {
+            var parser = new MarkdownParser();
+
+            // 1. Literal backslash at the end of code span: `\`
+            string md1 = "`\\`";
+            var inlines1 = parser.ParseInlines(md1);
+            var code1 = inlines1.OfType<CodeInline>().FirstOrDefault();
+            Assert(code1 != null, "Code with single backslash `\\` must be parsed");
+            AssertEqual("\\", code1!.Code, "Content must be single backslash");
+
+            // 2. Windows file path ending in backslash: `C:\Users\`
+            string md2 = @"`C:\Users\`";
+            var inlines2 = parser.ParseInlines(md2);
+            var code2 = inlines2.OfType<CodeInline>().FirstOrDefault();
+            Assert(code2 != null, @"Code with path `C:\Users\` must be parsed");
+            AssertEqual(@"C:\Users\", code2!.Code, "Content must be path");
+
+            // 3. Single-backtick code containing two backticks must not prematurely close
+            string md3 = "`alpha `` beta`";
+            var inlines3 = parser.ParseInlines(md3);
+            var code3 = inlines3.OfType<CodeInline>().FirstOrDefault();
+            Assert(code3 != null, "Code with double backticks inside must be parsed");
+            AssertEqual("alpha `` beta", code3!.Code, "Must contain inner double backticks intact");
+        }
+
+        private static void TestEmphasisWhitespaceFlanking()
+        {
+            var parser = new MarkdownParser();
+
+            // 1. Math multiplication: 3 * 4 * 5 must remain plain text, not italics!
+            string math = "3 * 4 * 5";
+            var inlinesMath = parser.ParseInlines(math);
+            Assert(!inlinesMath.OfType<ItalicInline>().Any(), "Math multiplication 3 * 4 * 5 must not produce ItalicInline");
+
+            // 2. Delimiter preceded/followed by whitespace
+            string invalidItalic = "*not italic * and * not italic*";
+            var inlinesInvalid = parser.ParseInlines(invalidItalic);
+            Assert(!inlinesInvalid.OfType<ItalicInline>().Any(), "Delimiters with outer/inner spaces must not produce ItalicInline");
+
+            // 3. Proper italic and bold
+            string valid = "*italic* and **bold**";
+            var inlinesValid = parser.ParseInlines(valid);
+            Assert(inlinesValid.OfType<ItalicInline>().Any(), "Valid italic must parse");
+            Assert(inlinesValid.OfType<BoldInline>().Any(), "Valid bold must parse");
+
+            // 4. Nested bold inside italic: *foo **bar** baz*
+            string nested = "*foo **bar** baz*";
+            var inlinesNested = parser.ParseInlines(nested);
+            var outerItalic = inlinesNested.OfType<ItalicInline>().FirstOrDefault();
+            Assert(outerItalic != null, "Must parse outer italic");
+            Assert(outerItalic!.Children.OfType<BoldInline>().Any(), "Must parse inner bold inside outer italic");
+        }
+
+        private static void TestSetextHeadingInterruptingParagraph()
+        {
+            var parser = new MarkdownParser();
+            string md = @"This is normal text in paragraph.
+Important Heading
+---
+Following paragraph text.";
+
+            var doc = parser.Parse(md);
+            AssertEqual(3, doc.Blocks.Count, "Should parse 3 blocks (Paragraph, Setext Heading 2, Paragraph)");
+            Assert(doc.Blocks[0] is ParagraphBlock, "Block 0 must be ParagraphBlock");
+            Assert(doc.Blocks[1] is HeadingBlock, "Block 1 must be HeadingBlock");
+            var h = (HeadingBlock)doc.Blocks[1];
+            AssertEqual(2, h.Level, "Setext level must be 2 for ---");
+            AssertEqual("Important Heading", h.Text, "Heading text must be 'Important Heading'");
+            Assert(doc.Blocks[2] is ParagraphBlock, "Block 2 must be ParagraphBlock");
+        }
+
+        private static void TestHeadingLineIndexTracking()
+        {
+            var parser = new MarkdownParser();
+            string md = @"First paragraph line 0
+
+# Heading At Line 2
+
+Paragraph line 4
+
+Subheading At Line 6
+---
+Paragraph line 9";
+
+            var doc = parser.Parse(md);
+            var headings = doc.Blocks.OfType<HeadingBlock>().ToList();
+            AssertEqual(2, headings.Count, "Should have 2 headings");
+            AssertEqual(2, headings[0].LineIndex, "First heading at line 2");
+            AssertEqual(6, headings[1].LineIndex, "Second heading at line 6");
+        }
+
+        private static void TestMultiFormatChecksumManifest()
+        {
+            // GNU format, Tab-delimited format, BSD format, Asterisk binary format, Relative path
+            string manifest = @"# Multi-format Manifest
+b94d27b9934d3e08a52e52d7da7dabfac484efe37a5380ee9088f7ace2efcde9  MDPlus.exe
+e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855	MDPlus-win-x64.zip
+SHA256 (MDPlus-1.0.0-src.zip) = a1b2c3d4e5f60718293a4b5c6d7e8f90123456789abcdef0123456789abcdef0
+5e884898da28047151d0e56f8dc6292773603d0d6aabbdd62a11ef721d1542d8 *./subfolder/tool.exe
+";
+            var parsed = HashService.ParseChecksums(manifest);
+            AssertEqual(4, parsed.Count, "Must parse 4 entries across GNU, tab, BSD, and relative formats");
+            Assert(parsed.ContainsKey("MDPlus.exe"), "Contains MDPlus.exe");
+            Assert(parsed.ContainsKey("MDPlus-win-x64.zip"), "Contains tab-delimited MDPlus-win-x64.zip");
+            Assert(parsed.ContainsKey("MDPlus-1.0.0-src.zip"), "Contains BSD-formatted MDPlus-1.0.0-src.zip");
+            Assert(parsed.ContainsKey("subfolder/tool.exe"), "Contains relative-path stripped subfolder/tool.exe");
+
+            AssertEqual("b94d27b9934d3e08a52e52d7da7dabfac484efe37a5380ee9088f7ace2efcde9", parsed["MDPlus.exe"], "MDPlus.exe hash");
+            AssertEqual("a1b2c3d4e5f60718293a4b5c6d7e8f90123456789abcdef0123456789abcdef0", parsed["MDPlus-1.0.0-src.zip"], "BSD hash");
+        }
+
+        private static void TestAsyncSha256Computation()
+        {
+            string tempFile = System.IO.Path.GetTempFileName();
+            try
+            {
+                System.IO.File.WriteAllText(tempFile, "Async SHA256 test data", Encoding.UTF8);
+                string syncHash = HashService.ComputeSha256(tempFile);
+                string asyncHash = HashService.ComputeSha256Async(tempFile).GetAwaiter().GetResult();
+                AssertEqual(syncHash, asyncHash, "Async hash must match sync hash");
+
+                bool verified = HashService.VerifyFileSha256Async(tempFile, syncHash).GetAwaiter().GetResult();
+                Assert(verified, "Async verification must succeed");
+            }
+            finally
+            {
+                if (System.IO.File.Exists(tempFile)) System.IO.File.Delete(tempFile);
+            }
+        }
+
+        private static void TestTableBackslashesAndEscapes()
+        {
+            var parser = new MarkdownParser();
+            string md = @"| Header A | Header B |
+| --- | --- |
+| Escaped \| Pipe | Escaped \* Star |";
+
+            var doc = parser.Parse(md);
+            AssertEqual(1, doc.Blocks.Count, "Should parse 1 table block");
+            var table = doc.Blocks[0] as TableBlock;
+            Assert(table != null, "Block must be TableBlock");
+            AssertEqual(1, table!.Rows.Count, "Should have 1 data row");
+            AssertEqual(2, table.Rows[0].Cells.Count, "Row should have 2 cells");
+
+            // Cell 0 should have unescaped pipe
+            var cell0 = table.Rows[0].Cells[0];
+            AssertEqual("Escaped | Pipe", cell0.Text, "Pipe must be unescaped");
+
+            // Cell 1 should preserve backslash so inline star is not parsed as italic
+            var cell1 = table.Rows[0].Cells[1];
+            Assert(!cell1.Inlines.OfType<ItalicInline>().Any(), "Escaped star in cell must NOT produce ItalicInline");
+            var textInline = cell1.Inlines.OfType<TextInline>().FirstOrDefault();
+            Assert(textInline != null && textInline.Text.Contains("*"), "Text should contain literal asterisk");
+        }
+
+        private static void TestHtmlExporterUrlSanitization()
+        {
+            var parser = new MarkdownParser();
+            string md = @"[XSS Link](javascript:alert('pwned'))
+![XSS Image](data:text/html;base64,PHNjcmlwdD5hbGVydCgxKTwvc2NyaXB0Pg==)
+[Safe Link](https://notepad-plus-plus.org/)";
+
+            var doc = parser.Parse(md);
+            string html = HtmlExporter.ExportBodyHtml(doc);
+
+            Assert(!html.Contains("href=\"javascript:"), "javascript: scheme must be sanitized");
+            Assert(!html.Contains("src=\"data:text/html"), "data:text/html scheme must be sanitized");
+            Assert(html.Contains("href=\"#\""), "Sanitized link must point to #");
+            Assert(html.Contains("src=\"#\""), "Sanitized image must point to #");
+            Assert(html.Contains("href=\"https://notepad-plus-plus.org/\""), "Safe https:// link must be preserved");
+        }
+
+        private static void TestSyntaxHighlighterMultilineAndVerbatimStrings()
+        {
+            // Python docstring spanning multiple lines
+            string pyCode = "def foo():\n    \"\"\"First docstring line\n    Second docstring line\"\"\"\n    return True";
+            var pyTokens = SyntaxHighlighter.Highlight(pyCode, "python");
+            var pyStringTokens = pyTokens.Where(t => t.Type == TokenType.String).ToList();
+            Assert(pyStringTokens.Count >= 1, "Must find Python docstring token");
+            Assert(pyStringTokens.Any(t => t.Text.Contains("First docstring line") && t.Text.Contains("Second docstring line")),
+                "Python triple-quote string must span newlines without premature termination");
+
+            // C# verbatim string spanning multiple lines
+            string csCode = "string path = @\"C:\\Users\\nickf\\\nDocuments\\mdplus\";";
+            var csTokens = SyntaxHighlighter.Highlight(csCode, "csharp");
+            var csStringTokens = csTokens.Where(t => t.Type == TokenType.String).ToList();
+            Assert(csStringTokens.Count >= 1, "Must find C# verbatim string token");
+            Assert(csStringTokens.Any(t => t.Text.Contains("C:\\Users\\nickf\\") && t.Text.Contains("Documents\\mdplus")),
+                "C# verbatim string must span newlines");
+        }
+
+        private static void TestTableAlignmentsSeparatorsAndPadding()
+        {
+            var parser = new MarkdownParser();
+            string md = @"| Col 1 | Col 2 | Col 3 | Col 4 |
+| :---: | ---: | :--- | --- |
+| 1 | 2 | 3 | 4 |";
+
+            var doc = parser.Parse(md);
+            var table = doc.Blocks.OfType<TableBlock>().FirstOrDefault();
+            Assert(table != null, "Table parsed");
+            AssertEqual(ColumnAlignment.Center, table!.Alignments[0], "Col 1 is Center");
+            AssertEqual(ColumnAlignment.Right, table.Alignments[1], "Col 2 is Right");
+            AssertEqual(ColumnAlignment.Left, table.Alignments[2], "Col 3 is Left");
+            AssertEqual(ColumnAlignment.Left, table.Alignments[3], "Col 4 is Left");
         }
     }
 }

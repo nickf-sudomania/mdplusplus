@@ -8,7 +8,7 @@ namespace MDPlus.Core
     public class MarkdownParser
     {
         private static readonly Regex FrontmatterFenceRegex = new Regex(@"^---\s*$", RegexOptions.Compiled);
-        private static readonly Regex HeadingRegex = new Regex(@"^(#{1,6})\s+(.*?)(?:\s+#+)?\s*$", RegexOptions.Compiled);
+        private static readonly Regex HeadingRegex = new Regex(@"^\s{0,3}(#{1,6})\s+(.*?)(?:\s+#+)?\s*$", RegexOptions.Compiled);
         private static readonly Regex ThematicBreakRegex = new Regex(@"^(?:(?:\*\s*){3,}|(?:-\s*){3,}|(?:_\s*){3,})$", RegexOptions.Compiled);
         private static readonly Regex CodeFenceRegex = new Regex(@"^(`{3,}|~{3,})\s*([^\s`~]*)", RegexOptions.Compiled);
         private static readonly Regex CalloutRegex = new Regex(@"^\[!(NOTE|TIP|IMPORTANT|WARNING|CAUTION)\]\s*(.*)$", RegexOptions.Compiled | RegexOptions.IgnoreCase);
@@ -103,6 +103,7 @@ namespace MDPlus.Core
                         Level = level,
                         Text = headingText,
                         Anchor = anchor,
+                        LineIndex = currentLine,
                         Inlines = ParseInlines(headingText)
                     };
                     doc.Blocks.Add(headingBlock);
@@ -126,7 +127,7 @@ namespace MDPlus.Core
                 if (!isNonParagraphLine && currentLine + 1 < lines.Length)
                 {
                     string nextLine = lines[currentLine + 1];
-                    if (Regex.IsMatch(nextLine, @"^={3,}\s*$"))
+                    if (Regex.IsMatch(nextLine, @"^\s{0,3}={3,}\s*$"))
                     {
                         string headingText = line.Trim();
                         doc.Blocks.Add(new HeadingBlock
@@ -134,6 +135,7 @@ namespace MDPlus.Core
                             Level = 1,
                             Text = headingText,
                             Anchor = GenerateAnchor(headingText),
+                            LineIndex = currentLine,
                             Inlines = ParseInlines(headingText)
                         });
                         if (string.IsNullOrEmpty(doc.Title))
@@ -143,7 +145,7 @@ namespace MDPlus.Core
                         currentLine += 2;
                         continue;
                     }
-                    else if (Regex.IsMatch(nextLine, @"^-{3,}\s*$") && !ThematicBreakRegex.IsMatch(line))
+                    else if (Regex.IsMatch(nextLine, @"^\s{0,3}-{3,}\s*$") && !ThematicBreakRegex.IsMatch(line))
                     {
                         string headingText = line.Trim();
                         doc.Blocks.Add(new HeadingBlock
@@ -151,6 +153,7 @@ namespace MDPlus.Core
                             Level = 2,
                             Text = headingText,
                             Anchor = GenerateAnchor(headingText),
+                            LineIndex = currentLine,
                             Inlines = ParseInlines(headingText)
                         });
                         currentLine += 2;
@@ -294,22 +297,30 @@ namespace MDPlus.Core
             var cells = new List<string>();
             string trimmed = line.Trim();
             if (trimmed.StartsWith("|")) trimmed = trimmed.Substring(1);
-            if (trimmed.EndsWith("|") && !trimmed.EndsWith("\\|")) trimmed = trimmed.Substring(0, trimmed.Length - 1);
+            if (trimmed.EndsWith("|"))
+            {
+                int slashCount = 0;
+                int idx = trimmed.Length - 2;
+                while (idx >= 0 && trimmed[idx] == '\\')
+                {
+                    slashCount++;
+                    idx--;
+                }
+                if (slashCount % 2 == 0)
+                {
+                    trimmed = trimmed.Substring(0, trimmed.Length - 1);
+                }
+            }
 
             var sb = new StringBuilder();
-            bool escape = false;
 
             for (int i = 0; i < trimmed.Length; i++)
             {
                 char c = trimmed[i];
-                if (escape)
+                if (c == '\\' && i + 1 < trimmed.Length && trimmed[i + 1] == '|')
                 {
-                    sb.Append(c);
-                    escape = false;
-                }
-                else if (c == '\\')
-                {
-                    escape = true;
+                    sb.Append('|');
+                    i++; // Skip the escaped pipe
                 }
                 else if (c == '|')
                 {
@@ -333,6 +344,11 @@ namespace MDPlus.Core
             foreach (var p in parts)
             {
                 string s = p.Trim();
+                if (!s.Contains("-"))
+                {
+                    aligns.Add(ColumnAlignment.Left);
+                    continue;
+                }
                 bool left = s.StartsWith(":");
                 bool right = s.EndsWith(":");
                 if (left && right) aligns.Add(ColumnAlignment.Center);
@@ -504,6 +520,17 @@ namespace MDPlus.Core
                     break;
                 }
 
+                // If this line is followed by a Setext heading underline, break so Setext heading can be parsed
+                if (currentLine + 1 < lines.Length)
+                {
+                    string next = lines[currentLine + 1];
+                    if (Regex.IsMatch(next, @"^\s{0,3}={3,}\s*$") ||
+                        (Regex.IsMatch(next, @"^\s{0,3}-{3,}\s*$") && !ThematicBreakRegex.IsMatch(line.Trim())))
+                    {
+                        break;
+                    }
+                }
+
                 paraLines.Add(line);
                 currentLine++;
             }
@@ -590,21 +617,25 @@ namespace MDPlus.Core
                 {
                     int count = 0;
                     while (i + count < length && text[i + count] == '`') count++;
-                    string fence = new string('`', count);
 
                     int end = -1;
-                    for (int k = i + count; k <= length - count; k++)
+                    int k = i + count;
+                    while (k < length)
                     {
-                        if (text[k] == '\\')
+                        if (text[k] == '`')
+                        {
+                            int runLen = 0;
+                            while (k + runLen < length && text[k + runLen] == '`') runLen++;
+                            if (runLen == count)
+                            {
+                                end = k;
+                                break;
+                            }
+                            k += runLen;
+                        }
+                        else
                         {
                             k++;
-                            continue;
-                        }
-                        if (string.CompareOrdinal(text, k, fence, 0, count) == 0)
-                        {
-                            if (k + count < length && text[k + count] == '`') continue;
-                            end = k;
-                            break;
                         }
                     }
 
@@ -774,38 +805,48 @@ namespace MDPlus.Core
                 // 7. Bold & Italic: *** or ___
                 if ((c == '*' || c == '_') && i + 2 < length && text[i + 1] == c && text[i + 2] == c)
                 {
-                    string delimiter = new string(c, 3);
-                    int end = FindDelimiterEnd(text, delimiter, i + 3);
-                    if (end > i)
+                    // Opening delimiter must not be followed by whitespace
+                    if (i + 3 < length && !char.IsWhiteSpace(text[i + 3]))
                     {
-                        FlushText();
-                        string content = text.Substring(i + 3, end - i - 3);
-                        inlines.Add(new BoldItalicInline(ParseInlines(content).ToArray()));
-                        i = end + 3;
-                        continue;
+                        string delimiter = new string(c, 3);
+                        int end = FindDelimiterEnd(text, delimiter, i + 3);
+                        if (end > i)
+                        {
+                            FlushText();
+                            string content = text.Substring(i + 3, end - i - 3);
+                            inlines.Add(new BoldItalicInline(ParseInlines(content).ToArray()));
+                            i = end + 3;
+                            continue;
+                        }
                     }
                 }
 
                 // 8. Bold: ** or __
                 if ((c == '*' || c == '_') && i + 1 < length && text[i + 1] == c)
                 {
-                    string delimiter = new string(c, 2);
-                    int end = FindDelimiterEnd(text, delimiter, i + 2);
-                    if (end > i)
+                    // Opening delimiter must not be followed by whitespace
+                    if (i + 2 < length && !char.IsWhiteSpace(text[i + 2]))
                     {
-                        FlushText();
-                        string content = text.Substring(i + 2, end - i - 2);
-                        inlines.Add(new BoldInline(ParseInlines(content).ToArray()));
-                        i = end + 2;
-                        continue;
+                        string delimiter = new string(c, 2);
+                        int end = FindDelimiterEnd(text, delimiter, i + 2);
+                        if (end > i)
+                        {
+                            FlushText();
+                            string content = text.Substring(i + 2, end - i - 2);
+                            inlines.Add(new BoldInline(ParseInlines(content).ToArray()));
+                            i = end + 2;
+                            continue;
+                        }
                     }
                 }
 
                 // 9. Italic: * or _ (checking that _ is not within_word_identifier)
-                if ((c == '*' || c == '_'))
+                if (c == '*' || c == '_')
                 {
                     bool isWordCharBefore = i > 0 && char.IsLetterOrDigit(text[i - 1]);
-                    if (!(c == '_' && isWordCharBefore))
+                    // Opening delimiter must not be followed by whitespace
+                    bool hasContentAfter = i + 1 < length && !char.IsWhiteSpace(text[i + 1]);
+                    if (hasContentAfter && !(c == '_' && isWordCharBefore))
                     {
                         int end = FindDelimiterEnd(text, c.ToString(), i + 1);
                         if (end > i && end - i > 1)
@@ -826,28 +867,34 @@ namespace MDPlus.Core
                 // 10. Strikethrough: ~~text~~
                 if (c == '~' && i + 1 < length && text[i + 1] == '~')
                 {
-                    int end = FindDelimiterEnd(text, "~~", i + 2);
-                    if (end > i)
+                    if (i + 2 < length && !char.IsWhiteSpace(text[i + 2]))
                     {
-                        FlushText();
-                        string content = text.Substring(i + 2, end - i - 2);
-                        inlines.Add(new StrikethroughInline(ParseInlines(content).ToArray()));
-                        i = end + 2;
-                        continue;
+                        int end = FindDelimiterEnd(text, "~~", i + 2);
+                        if (end > i)
+                        {
+                            FlushText();
+                            string content = text.Substring(i + 2, end - i - 2);
+                            inlines.Add(new StrikethroughInline(ParseInlines(content).ToArray()));
+                            i = end + 2;
+                            continue;
+                        }
                     }
                 }
 
                 // 11. Highlight: ==text==
                 if (c == '=' && i + 1 < length && text[i + 1] == '=')
                 {
-                    int end = FindDelimiterEnd(text, "==", i + 2);
-                    if (end > i)
+                    if (i + 2 < length && !char.IsWhiteSpace(text[i + 2]))
                     {
-                        FlushText();
-                        string content = text.Substring(i + 2, end - i - 2);
-                        inlines.Add(new HighlightInline(ParseInlines(content).ToArray()));
-                        i = end + 2;
-                        continue;
+                        int end = FindDelimiterEnd(text, "==", i + 2);
+                        if (end > i)
+                        {
+                            FlushText();
+                            string content = text.Substring(i + 2, end - i - 2);
+                            inlines.Add(new HighlightInline(ParseInlines(content).ToArray()));
+                            i = end + 2;
+                            continue;
+                        }
                     }
                 }
 
@@ -862,6 +909,7 @@ namespace MDPlus.Core
         private int FindDelimiterEnd(string text, string delimiter, int startIndex)
         {
             int dLen = delimiter.Length;
+            char delimChar = delimiter[0];
             for (int k = startIndex; k <= text.Length - dLen; k++)
             {
                 if (text[k] == '\\')
@@ -871,6 +919,26 @@ namespace MDPlus.Core
                 }
                 if (string.CompareOrdinal(text, k, delimiter, 0, dLen) == 0)
                 {
+                    // Closing delimiter must not be preceded by whitespace
+                    if (k > 0 && char.IsWhiteSpace(text[k - 1]))
+                    {
+                        // An unescaped delimiter of the exact same run length preceded by whitespace
+                        // cannot close, and an emphasis span cannot leap across an invalid delimiter.
+                        bool isExactRun = (k + dLen >= text.Length || text[k + dLen] != delimChar) &&
+                                          (k <= startIndex || text[k - 1] != delimChar);
+                        if (isExactRun)
+                        {
+                            return -1;
+                        }
+                        continue;
+                    }
+                    // For single/double delimiter, ensure not part of a longer run
+                    if ((delimChar == '*' || delimChar == '_' || delimChar == '~' || delimChar == '=') &&
+                        ((k + dLen < text.Length && text[k + dLen] == delimChar) ||
+                         (k > startIndex && text[k - 1] == delimChar)))
+                    {
+                        continue;
+                    }
                     return k;
                 }
             }

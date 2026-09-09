@@ -26,8 +26,17 @@ echo 4. Publish Release & Generate SHA-256 Hashes (Notepad++ Standard)
 echo 5. Verify Download Checksums (SHA-256)
 echo 6. Clean Artifacts
 echo.
-set /p choice="Select an option (1-6, default=1): "
+set "choice=%~1"
+if /i "%choice%"=="build" set choice=1
+if /i "%choice%"=="test" set choice=2
+if /i "%choice%"=="run" set choice=3
+if /i "%choice%"=="publish" set choice=4
+if /i "%choice%"=="verify" set choice=5
+if /i "%choice%"=="clean" set choice=6
 
+if "%choice%"=="" (
+    set /p choice="Select an option (1-6, default=1): "
+)
 if "%choice%"=="" set choice=1
 
 if "%choice%"=="1" (
@@ -57,7 +66,7 @@ if "%choice%"=="3" (
 
 if "%choice%"=="4" (
     echo.
-    echo [INFO] Publishing release executable, zip archive, and generating SHA-256 hashes...
+    echo [INFO] Publishing release executable, source code, and generating SHA-256 hashes...
     powershell -NoProfile -ExecutionPolicy Bypass -File "%~dp0build.ps1" -Action Publish
     goto end
 )
@@ -80,4 +89,4 @@ if "%choice%"=="6" (
 
 :end
 echo.
-pause
+if "%~1"=="" pause

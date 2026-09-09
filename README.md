@@ -95,33 +95,39 @@ Most popular Markdown viewers today (MarkText, Obsidian, Joplin, VS Code preview
 
 ---
 
-## 🛡️ Release Integrity & Download Security (Notepad++ Standard)
+## 🛡️ Release & Source Code Integrity (Notepad++ Standard)
 
-Inspired by how [Notepad++](https://notepad-plus-plus.org/) manages its releases to protect users from tampered or compromised binaries, **MDPlus** implements end-to-end cryptographic verification:
+Inspired by how [Notepad++](https://notepad-plus-plus.org/) manages its releases and source code distributions to protect users from tampered or compromised software, **MDPlus** implements end-to-end cryptographic verification:
 
-- **Automated SHA-256 Digests:** Every published build automatically generates cryptographic SHA-256 hash files (`SHA256SUMS.txt`, `MDPlus.exe.sha256`, and `MDPlus-win-x64.zip.sha256`).
-- **Dual Release Distribution:** Standalone single-file binary (`MDPlus.exe`) and portable archive package (`MDPlus-win-x64.zip`).
-- **Build Script Verification:** `.\build.ps1 -Action Verify` checks every local build artifact against the official manifest and detects single-byte corruptions.
-- **CI/CD Integration:** Automated GitHub Actions workflow (`.github/workflows/build-and-release.yml`) builds, tests, verifies, and publishes hashes directly in release manifests.
+- **Source & Binary Integrity:** Every release publishes full source code archives (`MDPlus-1.0.0-src.zip`), standalone executables (`MDPlus.exe`), and portable zip packages (`MDPlus-win-x64.zip`), each accompanied by cryptographic SHA-256 digests.
+- **Notepad++ Checksum Standards:** Checksums are published both as standard GNU coreutils manifests (`SHA256SUMS.txt`), Notepad++ format manifest (`MDPlus.1.0.0.checksums.sha256`), and individual per-file digests (`.sha256`).
+- **Automated Verification:** `.\build.ps1 -Action Verify` automatically verifies all release packages (including source code) against the official digests and alerts on single-byte corruption or tampering.
+- **Built-in In-App Verification:** An integrated GUI verification dialog (**Tools** > **Verify File Integrity...**) allows users to verify any binary, zip, or source package using drag-and-drop or checksum file loading.
+- **CI/CD Release Automation:** GitHub Actions workflow (`.github/workflows/build-and-release.yml`) builds, tests, verifies, packages source and binaries, and publishes hashes directly into the release notes.
 
-### How to Verify Your Download
+### How to Verify Your Download (Binaries & Source)
 
 #### Option 1: Using PowerShell
 ```powershell
+# Verify executable
 Get-FileHash MDPlus.exe -Algorithm SHA256
+
+# Verify source code archive
+Get-FileHash MDPlus-1.0.0-src.zip -Algorithm SHA256
 ```
-Compare the output against `dist\SHA256SUMS.txt` or the official GitHub release notes.
+Compare the output against `dist\MDPlus.1.0.0.checksums.sha256` or `dist\SHA256SUMS.txt`.
 
 #### Option 2: Using Command Prompt (CMD)
 ```cmd
 certutil -hashfile MDPlus.exe SHA256
+certutil -hashfile MDPlus-1.0.0-src.zip SHA256
 ```
 
 #### Option 3: Built-in MDPlus Integrity Tool (GUI)
 1. Open MDPlus.
 2. Select **Tools** > **Verify File Integrity (SHA-256)...** (or press `Ctrl+Shift+V`).
 3. Select any file or click **Current App** to verify the running executable.
-4. Paste the official expected SHA-256 hash. The tool will instantly validate the authenticity with an interactive status banner.
+4. Click **Load Checksum File...** to load `MDPlus.1.0.0.checksums.sha256` or paste the expected hash. The tool validates authenticity and highlights any mismatch in real time.
 
 ---
 
