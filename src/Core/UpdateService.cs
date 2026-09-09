@@ -323,6 +323,43 @@ namespace MDPlus.Core
 
                 if (!response.IsSuccessStatusCode)
                 {
+                    if (response.StatusCode == System.Net.HttpStatusCode.NotFound)
+                    {
+                        // When /releases/latest returns 404, check if /releases list endpoint has any releases (e.g. prereleases)
+                        if (_releasesApiUrl.EndsWith("/releases/latest", StringComparison.OrdinalIgnoreCase))
+                        {
+                            try
+                            {
+                                string listUrl = _releasesApiUrl.Substring(0, _releasesApiUrl.Length - 7); // strip "/latest"
+                                using var listReq = new HttpRequestMessage(HttpMethod.Get, listUrl);
+                                using var listResp = await _httpClient.SendAsync(listReq, cancellationToken).ConfigureAwait(false);
+                                if (listResp.IsSuccessStatusCode)
+                                {
+                                    string listJson = await listResp.Content.ReadAsStringAsync(cancellationToken).ConfigureAwait(false);
+                                    using var listDoc = JsonDocument.Parse(listJson);
+                                    if (listDoc.RootElement.ValueKind == JsonValueKind.Array && listDoc.RootElement.GetArrayLength() > 0)
+                                    {
+                                        return ParseReleaseJsonElement(listDoc.RootElement[0], currentVer);
+                                    }
+                                }
+                            }
+                            catch
+                            {
+                                // Fall through to up-to-date result
+                            }
+                        }
+
+                        // When no releases have been published on GitHub yet, the current build is already up to date
+                        return new UpdateCheckResult
+                        {
+                            IsSuccess = true,
+                            IsUpdateAvailable = false,
+                            CurrentVersion = currentVer,
+                            LatestVersion = currentVer,
+                            ReleaseUrl = "https://github.com/nickf-sudomania/mdplusplus/releases"
+                        };
+                    }
+
                     string statusMsg;
                     if (response.StatusCode == System.Net.HttpStatusCode.Forbidden ||
                         (int)response.StatusCode == 429)
@@ -365,107 +402,122 @@ namespace MDPlus.Core
 
                 string json = await response.Content.ReadAsStringAsync(cancellationToken).ConfigureAwait(false);
                 using var doc = JsonDocument.Parse(json);
-                var root = doc.RootElement;
-
-                string tagName = root.TryGetProperty("tag_name", out var tagProp) ? tagProp.GetString() ?? string.Empty : string.Empty;
-                string name = root.TryGetProperty("name", out var nameProp) ? nameProp.GetString() ?? string.Empty : string.Empty;
-                string body = root.TryGetProperty("body", out var bodyProp) ? bodyProp.GetString() ?? string.Empty : string.Empty;
-                string htmlUrl = root.TryGetProperty("html_url", out var urlProp) ? urlProp.GetString() ?? string.Empty : string.Empty;
-
-                string? setupUrl = null;
-                string? setupFileName = null;
-                int bestSetupPriority = 0;
-
-                string? checksumsUrl = null;
-                int bestChecksumsPriority = 0;
-
-                if (root.TryGetProperty("assets", out var assetsProp) && assetsProp.ValueKind == JsonValueKind.Array)
-                {
-                    foreach (var asset in assetsProp.EnumerateArray())
-                    {
-                        string assetName = asset.TryGetProperty("name", out var an) ? an.GetString() ?? string.Empty : string.Empty;
-                        string dlUrl = asset.TryGetProperty("browser_download_url", out var du) ? du.GetString() ?? string.Empty : string.Empty;
-
-                        // Setup priority: 4 = exact "MDPlus-Setup.exe", 3 = starts with "MDPlus" and ends with "Setup.exe",
-                        // 2 = contains "MDPlus" and ends with "Setup.exe", 1 = ends with "Setup.exe"
-                        int setupPriority = 0;
-                        if (assetName.Equals(SetupFileName, StringComparison.OrdinalIgnoreCase))
-                        {
-                            setupPriority = 4;
-                        }
-                        else if (assetName.StartsWith("MDPlus", StringComparison.OrdinalIgnoreCase) &&
-                                 assetName.EndsWith("Setup.exe", StringComparison.OrdinalIgnoreCase))
-                        {
-                            setupPriority = 3;
-                        }
-                        else if (assetName.Contains("MDPlus", StringComparison.OrdinalIgnoreCase) &&
-                                 assetName.EndsWith("Setup.exe", StringComparison.OrdinalIgnoreCase))
-                        {
-                            setupPriority = 2;
-                        }
-                        else if (assetName.EndsWith("Setup.exe", StringComparison.OrdinalIgnoreCase) ||
-                                 assetName.EndsWith("-setup.exe", StringComparison.OrdinalIgnoreCase))
-                        {
-                            setupPriority = 1;
-                        }
-
-                        if (setupPriority > bestSetupPriority)
-                        {
-                            bestSetupPriority = setupPriority;
-                            setupUrl = dlUrl;
-                            setupFileName = assetName;
-                        }
-
-                        // Checksums priority: 4 = exact "SHA256SUMS.txt", 3 = starts with "MDPlus" & checksums ext,
-                        // 2 = contains "MDPlus" & checksums ext, 1 = generic checksums ext
-                        int checksumsPriority = 0;
-                        if (assetName.Equals(ChecksumsFileName, StringComparison.OrdinalIgnoreCase))
-                        {
-                            checksumsPriority = 4;
-                        }
-                        else if (assetName.StartsWith("MDPlus", StringComparison.OrdinalIgnoreCase) &&
-                                 (assetName.EndsWith("sums.txt", StringComparison.OrdinalIgnoreCase) ||
-                                  assetName.EndsWith(".sha256", StringComparison.OrdinalIgnoreCase) ||
-                                  assetName.EndsWith(".checksums.sha256", StringComparison.OrdinalIgnoreCase)))
-                        {
-                            checksumsPriority = 3;
-                        }
-                        else if (assetName.Contains("MDPlus", StringComparison.OrdinalIgnoreCase) &&
-                                 (assetName.EndsWith("sums.txt", StringComparison.OrdinalIgnoreCase) ||
-                                  assetName.EndsWith(".sha256", StringComparison.OrdinalIgnoreCase) ||
-                                  assetName.EndsWith(".checksums.sha256", StringComparison.OrdinalIgnoreCase)))
-                        {
-                            checksumsPriority = 2;
-                        }
-                        else if (assetName.EndsWith(".checksums.sha256", StringComparison.OrdinalIgnoreCase) ||
-                                 assetName.EndsWith(".sha256", StringComparison.OrdinalIgnoreCase) ||
-                                 assetName.EndsWith("sums.txt", StringComparison.OrdinalIgnoreCase))
-                        {
-                            checksumsPriority = 1;
-                        }
-
-                        if (checksumsPriority > bestChecksumsPriority)
-                        {
-                            bestChecksumsPriority = checksumsPriority;
-                            checksumsUrl = dlUrl;
-                        }
-                    }
-                }
-
-                bool isNewer = IsNewerVersion(currentVer, tagName);
-
+                return ParseReleaseJsonElement(doc.RootElement, currentVer);
+            }
+            catch (Exception ex)
+            {
                 return new UpdateCheckResult
                 {
-                    IsSuccess = true,
-                    IsUpdateAvailable = isNewer,
+                    IsSuccess = false,
                     CurrentVersion = currentVer,
-                    LatestVersion = tagName,
-                    ReleaseHighlights = !string.IsNullOrWhiteSpace(body) ? body : name,
-                    ReleaseUrl = htmlUrl,
-                    SetupDownloadUrl = setupUrl,
-                    SetupFileName = setupFileName,
-                    ChecksumsDownloadUrl = checksumsUrl
+                    ErrorMessage = ex.Message
                 };
+            }
+        }
+
+        /// <summary>
+        /// Parses a GitHub Release JSON element (from /releases/latest or /releases array)
+        /// into an UpdateCheckResult.
+        /// </summary>
+        public static UpdateCheckResult ParseReleaseJsonElement(JsonElement root, string currentVer)
+        {
+            try
+            {
+                string tagName = root.TryGetProperty("tag_name", out var tagProp) ? tagProp.GetString() ?? string.Empty : string.Empty;
+            string name = root.TryGetProperty("name", out var nameProp) ? nameProp.GetString() ?? string.Empty : string.Empty;
+            string body = root.TryGetProperty("body", out var bodyProp) ? bodyProp.GetString() ?? string.Empty : string.Empty;
+            string htmlUrl = root.TryGetProperty("html_url", out var urlProp) ? urlProp.GetString() ?? string.Empty : string.Empty;
+
+            string? setupUrl = null;
+            string? setupFileName = null;
+            int bestSetupPriority = 0;
+
+            string? checksumsUrl = null;
+            int bestChecksumsPriority = 0;
+
+            if (root.TryGetProperty("assets", out var assetsProp) && assetsProp.ValueKind == JsonValueKind.Array)
+            {
+                foreach (var asset in assetsProp.EnumerateArray())
+                {
+                    string assetName = asset.TryGetProperty("name", out var an) ? an.GetString() ?? string.Empty : string.Empty;
+                    string dlUrl = asset.TryGetProperty("browser_download_url", out var du) ? du.GetString() ?? string.Empty : string.Empty;
+
+                    int setupPriority = 0;
+                    if (assetName.Equals(SetupFileName, StringComparison.OrdinalIgnoreCase))
+                    {
+                        setupPriority = 4;
+                    }
+                    else if (assetName.StartsWith("MDPlus", StringComparison.OrdinalIgnoreCase) &&
+                             assetName.EndsWith("Setup.exe", StringComparison.OrdinalIgnoreCase))
+                    {
+                        setupPriority = 3;
+                    }
+                    else if (assetName.Contains("MDPlus", StringComparison.OrdinalIgnoreCase) &&
+                             assetName.EndsWith("Setup.exe", StringComparison.OrdinalIgnoreCase))
+                    {
+                        setupPriority = 2;
+                    }
+                    else if (assetName.EndsWith("Setup.exe", StringComparison.OrdinalIgnoreCase) ||
+                             assetName.EndsWith("-setup.exe", StringComparison.OrdinalIgnoreCase))
+                    {
+                        setupPriority = 1;
+                    }
+
+                    if (setupPriority > bestSetupPriority)
+                    {
+                        bestSetupPriority = setupPriority;
+                        setupUrl = dlUrl;
+                        setupFileName = assetName;
+                    }
+
+                    int checksumsPriority = 0;
+                    if (assetName.Equals(ChecksumsFileName, StringComparison.OrdinalIgnoreCase))
+                    {
+                        checksumsPriority = 4;
+                    }
+                    else if (assetName.StartsWith("MDPlus", StringComparison.OrdinalIgnoreCase) &&
+                             (assetName.EndsWith("sums.txt", StringComparison.OrdinalIgnoreCase) ||
+                              assetName.EndsWith(".sha256", StringComparison.OrdinalIgnoreCase) ||
+                              assetName.EndsWith(".checksums.sha256", StringComparison.OrdinalIgnoreCase)))
+                    {
+                        checksumsPriority = 3;
+                    }
+                    else if (assetName.Contains("MDPlus", StringComparison.OrdinalIgnoreCase) &&
+                             (assetName.EndsWith("sums.txt", StringComparison.OrdinalIgnoreCase) ||
+                              assetName.EndsWith(".sha256", StringComparison.OrdinalIgnoreCase) ||
+                              assetName.EndsWith(".checksums.sha256", StringComparison.OrdinalIgnoreCase)))
+                    {
+                        checksumsPriority = 2;
+                    }
+                    else if (assetName.EndsWith(".checksums.sha256", StringComparison.OrdinalIgnoreCase) ||
+                             assetName.EndsWith(".sha256", StringComparison.OrdinalIgnoreCase) ||
+                             assetName.EndsWith("sums.txt", StringComparison.OrdinalIgnoreCase))
+                    {
+                        checksumsPriority = 1;
+                    }
+
+                    if (checksumsPriority > bestChecksumsPriority)
+                    {
+                        bestChecksumsPriority = checksumsPriority;
+                        checksumsUrl = dlUrl;
+                    }
+                }
+            }
+
+            bool isNewer = IsNewerVersion(currentVer, tagName);
+
+            return new UpdateCheckResult
+            {
+                IsSuccess = true,
+                IsUpdateAvailable = isNewer,
+                CurrentVersion = currentVer,
+                LatestVersion = tagName,
+                ReleaseHighlights = !string.IsNullOrWhiteSpace(body) ? body : name,
+                ReleaseUrl = htmlUrl,
+                SetupDownloadUrl = setupUrl,
+                SetupFileName = setupFileName,
+                ChecksumsDownloadUrl = checksumsUrl
+            };
             }
             catch (Exception ex)
             {

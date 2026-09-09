@@ -168,6 +168,7 @@ namespace MDPlus.Tests
             RunTest("Update Service Versioned Target Manifest Resolution", TestUpdateServiceVersionedTargetManifestMatching);
             RunTest("Update Service Locked Destination File Recovery", TestUpdateServiceLockedDestinationFileFallback);
             RunTest("DWM Window Reset & Update Dialog Keyboard Accessibility", TestDwmHelperResetWindowAndFullscreenLifecycle);
+            RunTest("Update Service 404 Not Found Graceful Up-To-Date Handling", TestUpdateServiceNotFoundGracefulHandling);
 
             sw.Stop();
 
@@ -2948,6 +2949,20 @@ SHA-256: 4444444444444444444444444444444444444444444444444444444444444444
             Assert(updateXaml.Contains("IsDefault=\"True\""), "UpdateNowButton has IsDefault='True'");
             Assert(updateXaml.Contains("IsCancel=\"True\""), "LaterButton has IsCancel='True'");
             Assert(updateXaml.Contains("VerticalScrollBarVisibility=\"Auto\""), "HighlightsTextBox has VerticalScrollBarVisibility='Auto'");
+        }
+
+        private static void TestUpdateServiceNotFoundGracefulHandling()
+        {
+            var handler = new MockHttpMessageHandler(req =>
+                new System.Net.Http.HttpResponseMessage(System.Net.HttpStatusCode.NotFound));
+            using var httpClient = new System.Net.Http.HttpClient(handler);
+            var updateService = new UpdateService(httpClient, "https://mock.api/repos/user/repo/releases/latest");
+            var task = updateService.CheckForUpdatesAsync("1.0.0");
+            task.Wait();
+            var result = task.Result;
+            Assert(result.IsSuccess, "404 on releases/latest must be treated as successful up-to-date check");
+            Assert(!result.IsUpdateAvailable, "No update should be available on 404");
+            AssertEqual("1.0.0", result.CurrentVersion, "Current version preserved");
         }
 
         private class MockHttpMessageHandler : System.Net.Http.HttpMessageHandler
