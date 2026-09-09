@@ -5,20 +5,57 @@ using System.Windows.Controls;
 using System.Windows.Documents;
 using System.Windows.Media;
 
+using MDPlus.Core;
+
 namespace MDPlus.Controls
 {
-    public class MarkdownScrollViewer : FlowDocumentScrollViewer
+    public class MarkdownScrollViewer : RichTextBox
     {
         private readonly List<TextRange> _highlightRanges = new List<TextRange>();
         private int _currentMatchIndex = -1;
         private string _lastSearchText = string.Empty;
         private bool _lastMatchCase = false;
 
+        public static readonly DependencyProperty ZoomProperty =
+            DependencyProperty.Register(nameof(Zoom), typeof(double), typeof(MarkdownScrollViewer),
+                new FrameworkPropertyMetadata(100.0, OnZoomChanged));
+
+        public double Zoom
+        {
+            get => (double)GetValue(ZoomProperty);
+            set => SetValue(ZoomProperty, value);
+        }
+
+        private static void OnZoomChanged(DependencyObject d, DependencyPropertyChangedEventArgs e)
+        {
+            if (d is MarkdownScrollViewer viewer)
+            {
+                double zoom = (double)e.NewValue;
+                double scale = Math.Max(0.2, Math.Min(5.0, zoom / 100.0));
+                viewer.LayoutTransform = new ScaleTransform(scale, scale);
+            }
+        }
+
+        public new FlowDocument? Document
+        {
+            get => base.Document;
+            set
+            {
+                base.Document = value ?? new FlowDocument();
+                ClearHighlights();
+            }
+        }
+
         public MarkdownScrollViewer()
         {
-            IsToolBarVisible = false;
+            BorderThickness = new Thickness(0);
+            Background = Brushes.Transparent;
+            IsDocumentEnabled = true;
+            AcceptsReturn = true;
+            AcceptsTab = true;
             VerticalScrollBarVisibility = ScrollBarVisibility.Auto;
             HorizontalScrollBarVisibility = ScrollBarVisibility.Disabled;
+            SpellCheck.IsEnabled = false;
         }
 
         private ScrollViewer? _internalScrollViewer;
@@ -32,15 +69,6 @@ namespace MDPlus.Controls
                 _internalScrollViewer = Template?.FindName("PART_ContentHost", this) as ScrollViewer ?? FindVisualChild<ScrollViewer>(this);
                 return _internalScrollViewer;
             }
-        }
-
-        public double VerticalOffset => InternalScrollViewer?.VerticalOffset ?? 0.0;
-        public double ExtentHeight => InternalScrollViewer?.ExtentHeight ?? 0.0;
-        public double ViewportHeight => InternalScrollViewer?.ViewportHeight ?? 0.0;
-
-        public void ScrollToVerticalOffset(double offset)
-        {
-            InternalScrollViewer?.ScrollToVerticalOffset(offset);
         }
 
         public override void OnApplyTemplate()
@@ -63,14 +91,6 @@ namespace MDPlus.Controls
             return null;
         }
 
-        protected override void OnPropertyChanged(DependencyPropertyChangedEventArgs e)
-        {
-            base.OnPropertyChanged(e);
-            if (e.Property == DocumentProperty)
-            {
-                ClearHighlights();
-            }
-        }
 
         public bool ScrollToAnchor(string anchor)
         {
@@ -83,10 +103,16 @@ namespace MDPlus.Controls
         {
             foreach (var block in blocks)
             {
-                if (block is Paragraph p && p.Tag is string tagStr && tagStr.Equals(anchor, StringComparison.OrdinalIgnoreCase))
+                if (block is Paragraph p)
                 {
-                    p.BringIntoView();
-                    return true;
+                    string? tagStr = p.Tag as string;
+                    if (p.Tag is HeadingTag ht) tagStr = ht.Anchor;
+                    if (!string.IsNullOrEmpty(tagStr) && tagStr.Equals(anchor, StringComparison.OrdinalIgnoreCase))
+                    {
+                        p.BringIntoView();
+                        CaretPosition = p.ContentStart;
+                        return true;
+                    }
                 }
 
                 if (block is Section s)

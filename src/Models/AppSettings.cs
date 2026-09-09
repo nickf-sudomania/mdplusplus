@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Text.Json;
+using System.Text.Json.Serialization;
 using MDPlus.Core;
 
 namespace MDPlus.Models
@@ -14,7 +15,9 @@ namespace MDPlus.Models
 
         private static readonly string SettingsFile = Path.Combine(SettingsFolder, "settings.json");
 
-        public AppThemeMode Theme { get; set; } = AppThemeMode.System;
+        [JsonConverter(typeof(JsonStringEnumConverter))]
+        public ThemePreset Theme { get; set; } = ThemePreset.GitHubDark;
+
         public bool ShowToc { get; set; } = true;
         public bool ShowLineNumbers { get; set; } = true;
         public bool AutoReload { get; set; } = true;

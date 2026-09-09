@@ -7,10 +7,27 @@ namespace MDPlus.Core
 {
     public class FileWatcherService : IDisposable
     {
+        public static FileWatcherService? Instance { get; private set; }
+
         private readonly ConcurrentDictionary<string, FileSystemWatcher> _watchers = new ConcurrentDictionary<string, FileSystemWatcher>(StringComparer.OrdinalIgnoreCase);
         private readonly ConcurrentDictionary<string, DateTime> _lastEventTimes = new ConcurrentDictionary<string, DateTime>(StringComparer.OrdinalIgnoreCase);
+        private readonly ConcurrentDictionary<string, DateTime> _suppressedFiles = new ConcurrentDictionary<string, DateTime>(StringComparer.OrdinalIgnoreCase);
 
         public event EventHandler<string>? FileChanged;
+
+        public FileWatcherService()
+        {
+            Instance = this;
+        }
+
+        public void SuppressNextChange(string filePath)
+        {
+            if (string.IsNullOrEmpty(filePath)) return;
+            string fullPath = Path.GetFullPath(filePath);
+            _suppressedFiles[fullPath] = DateTime.UtcNow.AddMilliseconds(2000);
+        }
+
+        public void IgnoreNextChange(string filePath) => SuppressNextChange(filePath);
 
         public void WatchFile(string filePath)
         {
@@ -59,6 +76,15 @@ namespace MDPlus.Core
 
         private void OnFileEvent(string fullPath)
         {
+            if (_suppressedFiles.TryGetValue(fullPath, out var suppressUntil))
+            {
+                if (DateTime.UtcNow < suppressUntil)
+                {
+                    return;
+                }
+                _suppressedFiles.TryRemove(fullPath, out _);
+            }
+
             DateTime now = DateTime.UtcNow;
 
             // Debounce within 300ms
@@ -83,6 +109,8 @@ namespace MDPlus.Core
             }
             _watchers.Clear();
             _lastEventTimes.Clear();
+            _suppressedFiles.Clear();
+            if (Instance == this) Instance = null;
         }
     }
 }

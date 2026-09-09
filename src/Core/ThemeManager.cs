@@ -1,4 +1,5 @@
 using System;
+using System.Windows;
 using System.Windows.Media;
 using Microsoft.Win32;
 
@@ -17,21 +18,33 @@ namespace MDPlus.Core
         private static ThemeManager? _instance;
         public static ThemeManager Instance => _instance ??= new ThemeManager();
 
-        private AppThemeMode _mode = AppThemeMode.System;
+        private AppThemeMode _mode = AppThemeMode.Dark;
+        private ThemePreset _currentPreset = ThemePreset.GitHubDark;
+        private bool _useLegacyBrushes = false;
+
         public AppThemeMode Mode
         {
             get => _mode;
             set
             {
-                if (_mode != value)
+                if (_mode != value || !_useLegacyBrushes)
                 {
                     _mode = value;
-                    UpdateTheme();
+                    _useLegacyBrushes = true;
+                    UpdateThemeFromMode();
                 }
             }
         }
 
-        public bool IsDark { get; private set; }
+        public ThemePreset CurrentPreset
+        {
+            get => _currentPreset;
+            set => SetPreset(value);
+        }
+
+        public ThemePalette CurrentPalette => ThemePalette.GetPalette(_currentPreset);
+
+        public bool IsDark { get; private set; } = true;
 
         public event EventHandler? ThemeChanged;
 
@@ -39,18 +52,47 @@ namespace MDPlus.Core
         {
             SystemEvents.UserPreferenceChanged += (s, e) =>
             {
-                if (_mode == AppThemeMode.System)
+                if (_mode == AppThemeMode.System && _useLegacyBrushes)
                 {
-                    UpdateTheme();
+                    UpdateThemeFromMode();
                 }
             };
-            UpdateTheme();
+
+            SetPreset(ThemePreset.GitHubDark);
+        }
+
+        public void SetPreset(ThemePreset preset)
+        {
+            _currentPreset = preset;
+            _useLegacyBrushes = false;
+            IsDark = preset != ThemePreset.GitHubLight;
+            _mode = IsDark ? AppThemeMode.Dark : AppThemeMode.Light;
+
+            UpdateApplicationResources(CurrentPalette);
+            ThemeChanged?.Invoke(this, EventArgs.Empty);
+        }
+
+        public void CycleNextTheme()
+        {
+            int count = Enum.GetValues<ThemePreset>().Length;
+            int next = ((int)_currentPreset + 1) % count;
+            SetPreset((ThemePreset)next);
         }
 
         public void UpdateTheme()
         {
-            bool previous = IsDark;
+            if (_useLegacyBrushes)
+            {
+                UpdateThemeFromMode();
+            }
+            else
+            {
+                SetPreset(_currentPreset);
+            }
+        }
 
+        private void UpdateThemeFromMode()
+        {
             if (_mode == AppThemeMode.System)
             {
                 IsDark = GetWindowsSystemIsDark();
@@ -60,7 +102,33 @@ namespace MDPlus.Core
                 IsDark = _mode == AppThemeMode.Dark;
             }
 
+            _currentPreset = IsDark ? ThemePreset.GitHubDark : ThemePreset.GitHubLight;
+            UpdateApplicationResources(CurrentPalette);
             ThemeChanged?.Invoke(this, EventArgs.Empty);
+        }
+
+        public void UpdateApplicationResources(ThemePalette palette)
+        {
+            var app = Application.Current;
+            if (app == null) return;
+
+            app.Resources["MenuBackgroundBrush"] = palette.MenuBg;
+            app.Resources["MenuForegroundBrush"] = palette.MenuFg;
+            app.Resources["MenuHoverBackgroundBrush"] = palette.MenuHoverBg;
+            app.Resources["MenuHoverForegroundBrush"] = palette.MenuHoverFg;
+            app.Resources["MenuPopupBackgroundBrush"] = palette.MenuPopupBg;
+            app.Resources["MenuPopupBorderBrush"] = palette.MenuPopupBorder;
+            app.Resources["MenuBorderBrush"] = palette.MenuBorder;
+            app.Resources["MenuSeparatorBrush"] = palette.MenuSeparator;
+
+            app.Resources["WindowBackgroundBrush"] = palette.WindowBg;
+            app.Resources["DocumentBackgroundBrush"] = palette.EditorBg;
+            app.Resources["ForegroundBrush"] = palette.EditorFg;
+            app.Resources["BorderBrush"] = palette.Border;
+            app.Resources["MutedForegroundBrush"] = palette.MutedFg;
+            app.Resources["AccentBrush"] = palette.Accent;
+            app.Resources["StatusBarBackgroundBrush"] = palette.StatusBg;
+            app.Resources["StatusBarForegroundBrush"] = palette.StatusFg;
         }
 
         private bool GetWindowsSystemIsDark()
@@ -115,16 +183,16 @@ namespace MDPlus.Core
             return brush;
         }
 
-        public SolidColorBrush WindowBackground => IsDark ? DarkWindowBg : LightWindowBg;
-        public SolidColorBrush DocumentBackground => IsDark ? DarkDocBg : LightDocBg;
-        public SolidColorBrush SidebarBackground => IsDark ? DarkSidebarBg : LightSidebarBg;
-        public SolidColorBrush MenuBackground => IsDark ? DarkMenuBg : LightMenuBg;
-        public SolidColorBrush StatusBarBackground => IsDark ? DarkStatusBg : LightStatusBg;
-        public SolidColorBrush StatusBarForeground => IsDark ? DarkStatusFg : LightStatusFg;
-        public SolidColorBrush Foreground => IsDark ? DarkFg : LightFg;
-        public SolidColorBrush BorderBrush => IsDark ? DarkBorder : LightBorder;
-        public SolidColorBrush AccentBrush => IsDark ? DarkAccent : LightAccent;
-        public SolidColorBrush TabActiveBackground => IsDark ? DarkTabActive : LightTabActive;
-        public SolidColorBrush TabInactiveBackground => IsDark ? DarkTabInactive : LightTabInactive;
+        public SolidColorBrush WindowBackground => _useLegacyBrushes ? (IsDark ? DarkWindowBg : LightWindowBg) : CurrentPalette.WindowBg;
+        public SolidColorBrush DocumentBackground => _useLegacyBrushes ? (IsDark ? DarkDocBg : LightDocBg) : CurrentPalette.EditorBg;
+        public SolidColorBrush SidebarBackground => _useLegacyBrushes ? (IsDark ? DarkSidebarBg : LightSidebarBg) : CurrentPalette.SidebarBg;
+        public SolidColorBrush MenuBackground => _useLegacyBrushes ? (IsDark ? DarkMenuBg : LightMenuBg) : CurrentPalette.MenuBg;
+        public SolidColorBrush StatusBarBackground => _useLegacyBrushes ? (IsDark ? DarkStatusBg : LightStatusBg) : CurrentPalette.StatusBg;
+        public SolidColorBrush StatusBarForeground => _useLegacyBrushes ? (IsDark ? DarkStatusFg : LightStatusFg) : CurrentPalette.StatusFg;
+        public SolidColorBrush Foreground => _useLegacyBrushes ? (IsDark ? DarkFg : LightFg) : CurrentPalette.EditorFg;
+        public SolidColorBrush BorderBrush => _useLegacyBrushes ? (IsDark ? DarkBorder : LightBorder) : CurrentPalette.Border;
+        public SolidColorBrush AccentBrush => _useLegacyBrushes ? (IsDark ? DarkAccent : LightAccent) : CurrentPalette.Accent;
+        public SolidColorBrush TabActiveBackground => _useLegacyBrushes ? (IsDark ? DarkTabActive : LightTabActive) : CurrentPalette.TabActiveBg;
+        public SolidColorBrush TabInactiveBackground => _useLegacyBrushes ? (IsDark ? DarkTabInactive : LightTabInactive) : CurrentPalette.TabInactiveBg;
     }
 }

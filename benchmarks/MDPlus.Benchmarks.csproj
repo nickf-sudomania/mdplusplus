@@ -5,10 +5,9 @@
     <TargetFramework>net8.0-windows</TargetFramework>
     <Nullable>enable</Nullable>
     <UseWPF>true</UseWPF>
-    <RootNamespace>MDPlus.Tests</RootNamespace>
-    <AssemblyName>MDPlus.Tests</AssemblyName>
-    <StartupObject>MDPlus.Tests.TestRunner</StartupObject>
-    <DefaultItemExcludes>$(DefaultItemExcludes);e2e/**</DefaultItemExcludes>
+    <RootNamespace>MDPlus.Benchmarks</RootNamespace>
+    <AssemblyName>MDPlus.Benchmarks</AssemblyName>
+    <StartupObject>MDPlus.Benchmarks.Program</StartupObject>
   </PropertyGroup>
 
   <ItemGroup>

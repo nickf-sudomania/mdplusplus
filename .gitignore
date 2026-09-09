@@ -11,3 +11,8 @@ dist/
 ## Logs and temporary files
 *.log
 *.tmp
+
+## Multi-agent internal artifacts
+.agents/
+ORIGINAL_REQUEST.md
+TEST_READY.md

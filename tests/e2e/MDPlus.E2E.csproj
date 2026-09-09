@@ -1,0 +1,17 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net8.0-windows</TargetFramework>
+    <Nullable>enable</Nullable>
+    <UseWPF>true</UseWPF>
+    <RootNamespace>MDPlus.E2E</RootNamespace>
+    <AssemblyName>MDPlus.E2E</AssemblyName>
+    <StartupObject>MDPlus.E2E.Program</StartupObject>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\src\MDPlus.csproj" />
+  </ItemGroup>
+
+</Project>

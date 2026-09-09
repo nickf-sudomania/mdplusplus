@@ -15,6 +15,7 @@ namespace MDPlus.Core
     {
         private readonly string _baseDirectory;
         private readonly bool _isDark;
+        private readonly ThemePalette _palette;
 
         // Theme colors
         private readonly SolidColorBrush _textBrush;
@@ -30,45 +31,26 @@ namespace MDPlus.Core
         public event EventHandler<string>? AnchorNavigationRequested;
         public event EventHandler<FileNavigationEventArgs>? FileNavigationRequested;
 
-        public MarkdownToWpfConverter(string baseDirectory, bool isDark)
+        public MarkdownToWpfConverter(string baseDirectory, ThemePalette palette)
         {
             _baseDirectory = baseDirectory;
-            _isDark = isDark;
+            _palette = palette ?? ThemePalette.GitHubDark;
+            _isDark = _palette.IsDark;
 
-            if (_isDark)
-            {
-                _textBrush = new SolidColorBrush(Color.FromRgb(230, 237, 243));      // #e6edf3
-                _headingBrush = new SolidColorBrush(Color.FromRgb(240, 246, 252));   // #f0f6fc
-                _mutedBrush = new SolidColorBrush(Color.FromRgb(139, 148, 158));     // #8b949e
-                _borderBrush = new SolidColorBrush(Color.FromRgb(48, 54, 61));       // #30363d
-                _codeBgBrush = new SolidColorBrush(Color.FromRgb(22, 27, 34));       // #161b22
-                _tableHeaderBg = new SolidColorBrush(Color.FromRgb(22, 27, 34));     // #161b22
-                _tableAltRowBg = new SolidColorBrush(Color.FromRgb(25, 30, 37));     // #191e25
-                _accentBrush = new SolidColorBrush(Color.FromRgb(88, 166, 255));     // #58a6ff
-                _linkBrush = new SolidColorBrush(Color.FromRgb(88, 166, 255));       // #58a6ff
-            }
-            else
-            {
-                _textBrush = new SolidColorBrush(Color.FromRgb(36, 41, 47));         // #24292f
-                _headingBrush = new SolidColorBrush(Color.FromRgb(31, 35, 40));      // #1f2328
-                _mutedBrush = new SolidColorBrush(Color.FromRgb(101, 109, 118));     // #656d76
-                _borderBrush = new SolidColorBrush(Color.FromRgb(208, 215, 222));    // #d0d7de
-                _codeBgBrush = new SolidColorBrush(Color.FromRgb(246, 248, 250));    // #f6f8fa
-                _tableHeaderBg = new SolidColorBrush(Color.FromRgb(246, 248, 250));  // #f6f8fa
-                _tableAltRowBg = new SolidColorBrush(Color.FromRgb(251, 252, 253));  // #fbfcfd
-                _accentBrush = new SolidColorBrush(Color.FromRgb(9, 105, 218));      // #0969da
-                _linkBrush = new SolidColorBrush(Color.FromRgb(9, 105, 218));        // #0969da
-            }
+            _textBrush = _palette.EditorFg;
+            _headingBrush = _palette.HeadingFg;
+            _mutedBrush = _palette.MutedFg;
+            _borderBrush = _palette.Border;
+            _codeBgBrush = _palette.CodeBg;
+            _tableHeaderBg = _palette.TableHeaderBg;
+            _tableAltRowBg = _palette.TableAltRowBg;
+            _accentBrush = _palette.Accent;
+            _linkBrush = _palette.Accent;
+        }
 
-            _textBrush.Freeze();
-            _headingBrush.Freeze();
-            _mutedBrush.Freeze();
-            _borderBrush.Freeze();
-            _codeBgBrush.Freeze();
-            _tableHeaderBg.Freeze();
-            _tableAltRowBg.Freeze();
-            _accentBrush.Freeze();
-            _linkBrush.Freeze();
+        public MarkdownToWpfConverter(string baseDirectory, bool isDark)
+            : this(baseDirectory, isDark ? ThemePalette.GitHubDark : ThemePalette.GitHubLight)
+        {
         }
 
         public FlowDocument Convert(MarkdownDocument doc)
@@ -362,7 +344,7 @@ namespace MDPlus.Core
             var outerBorder = new Border
             {
                 Background = _codeBgBrush,
-                BorderBrush = _borderBrush,
+                BorderBrush = _palette != null ? _palette.CodeBorder : _borderBrush,
                 BorderThickness = new Thickness(1),
                 CornerRadius = new CornerRadius(6),
                 Margin = new Thickness(0, 8, 0, 16)

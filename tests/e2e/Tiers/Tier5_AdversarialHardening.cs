@@ -1,0 +1,326 @@
+using System;
+using System.Collections.Generic;
+using System.Diagnostics;
+using System.IO;
+using System.Linq;
+using System.Windows.Documents;
+using System.Windows.Media;
+using System.Windows.Media.Imaging;
+using MDPlus.Core;
+using MDPlus.E2E.Harness;
+using MDPlus.Models;
+using static MDPlus.E2E.Harness.E2ETestHarness;
+
+namespace MDPlus.E2E.Tiers
+{
+    public static class Tier5_AdversarialHardening
+    {
+        public static void RunAll()
+        {
+            Console.WriteLine("\n==================================================");
+            Console.WriteLine("  Tier 5: Adversarial Hardening (Challenger)");
+            Console.WriteLine("==================================================");
+
+            RunTest("Tier5", "T5.1: WCAG AA contrast ratio matrix across all 5 theme presets", TestWCAGContrastMatrixAll5Palettes);
+            RunTest("Tier5", "T5.2: Multi-resolution icon mipmap binary inspection and decoders", TestAppIconMipmapFramesAndDecoders);
+            RunTest("Tier5", "T5.3: Rapid theme cycling (100 loops / 500 switches) & brush immutability", TestRapidThemeCycling100LoopsThroughAllPresets);
+            RunTest("Tier5", "T5.4: Tab lifecycle stress, dirty transitions, and theme resilience", TestTabLifecycleStressAndDirtyTransitions);
+        }
+
+        private static void TestWCAGContrastMatrixAll5Palettes()
+        {
+            var presets = new[]
+            {
+                ThemePreset.GitHubDark,
+                ThemePreset.GitHubLight,
+                ThemePreset.Nord,
+                ThemePreset.OneDark,
+                ThemePreset.Monokai
+            };
+
+            foreach (var preset in presets)
+            {
+                var palette = ThemePalette.GetPalette(preset);
+
+                // 1. Text vs Background
+                double textBgContrast = ThemePalette.CalculateContrast(palette.EditorFg.Color, palette.EditorBg.Color);
+                AssertTrue(textBgContrast >= 4.5, $"{preset} Text vs Background ({textBgContrast:F2}:1) must be >= 4.5:1");
+
+                // 2. Menu Item Text vs Menu Background
+                double menuContrast = ThemePalette.CalculateContrast(palette.MenuFg.Color, palette.MenuBg.Color);
+                AssertTrue(menuContrast >= 4.5, $"{preset} Menu Text vs Menu Bg ({menuContrast:F2}:1) must be >= 4.5:1");
+
+                // 3. Menu Item Text vs Menu Hover Background
+                // 3a. MenuHoverFg (active hover text) vs MenuHoverBg
+                double hoverFgContrast = ThemePalette.CalculateContrast(palette.MenuHoverFg.Color, palette.MenuHoverBg.Color);
+                AssertTrue(hoverFgContrast >= 4.5, $"{preset} Menu Hover Text vs Menu Hover Bg ({hoverFgContrast:F2}:1) must be >= 4.5:1");
+
+                // 4. Status Bar Text vs Status Bar Background
+                double statusContrast = ThemePalette.CalculateContrast(palette.StatusFg.Color, palette.StatusBg.Color);
+                AssertTrue(statusContrast >= 4.5, $"{preset} Status Text vs Status Bg ({statusContrast:F2}:1) must be >= 4.5:1");
+
+                // 5. Table Header Text vs Table Header Background
+                // HeadingFg is used for table header row text
+                double tableHeaderContrast = ThemePalette.CalculateContrast(palette.HeadingFg.Color, palette.TableHeaderBg.Color);
+                AssertTrue(tableHeaderContrast >= 4.5, $"{preset} Table Header Text (HeadingFg) vs Table Header Bg ({tableHeaderContrast:F2}:1) must be >= 4.5:1");
+
+                // Also verify EditorFg vs TableHeaderBg
+                double tableEditorContrast = ThemePalette.CalculateContrast(palette.EditorFg.Color, palette.TableHeaderBg.Color);
+                AssertTrue(tableEditorContrast >= 4.5, $"{preset} Table EditorFg vs Table Header Bg ({tableEditorContrast:F2}:1) must be >= 4.5:1");
+            }
+        }
+
+        private static void TestAppIconMipmapFramesAndDecoders()
+        {
+            string repoRoot = GetRepositoryRoot();
+            string iconPath = Path.Combine(repoRoot, "src", "Resources", "AppIcon.ico");
+
+            AssertTrue(File.Exists(iconPath), $"AppIcon.ico must exist at {iconPath}");
+            byte[] bytes = File.ReadAllBytes(iconPath);
+            AssertTrue(bytes.Length > 20000, $"AppIcon.ico size ({bytes.Length} bytes) must be > 20KB to contain 4 resolutions.");
+
+            // 1. Binary header inspection
+            var entries = ParseIco(bytes);
+            AssertEqual(4, entries.Count, "AppIcon.ico must contain exactly 4 mipmap directory entries.");
+
+            var widths = entries.Select(e => e.Width).OrderBy(w => w).ToList();
+            AssertEqual(16, widths[0], "First mipmap width must be 16.");
+            AssertEqual(32, widths[1], "Second mipmap width must be 32.");
+            AssertEqual(48, widths[2], "Third mipmap width must be 48.");
+            AssertEqual(256, widths[3], "Fourth mipmap width must be 256.");
+
+            foreach (var entry in entries)
+            {
+                AssertEqual(32, entry.BitCount, $"Mipmap {entry.Width}x{entry.Height} must have 32 bpp color depth.");
+                AssertTrue(entry.ImageOffset > 0, $"Mipmap {entry.Width} image offset must be valid.");
+                AssertTrue(entry.BytesInRes > 0, $"Mipmap {entry.Width} resource size must be > 0.");
+            }
+
+            // Verify PNG signature on 256x256 entry
+            var entry256 = entries.First(e => e.Width == 256);
+            AssertTrue(entry256.ImageOffset + 8 <= bytes.Length, "256x256 offset must fit in file.");
+            bool isPng = bytes[entry256.ImageOffset] == 0x89 &&
+                         bytes[entry256.ImageOffset + 1] == 0x50 &&
+                         bytes[entry256.ImageOffset + 2] == 0x4E &&
+                         bytes[entry256.ImageOffset + 3] == 0x47;
+            AssertTrue(isPng, "256x256 frame payload must have valid PNG magic signature.");
+
+            // 2. WPF IconBitmapDecoder verification
+            using var ms = new MemoryStream(bytes);
+            var decoder = new IconBitmapDecoder(ms, BitmapCreateOptions.None, BitmapCacheOption.Default);
+            AssertEqual(4, decoder.Frames.Count, "IconBitmapDecoder must parse exactly 4 frames.");
+
+            var decodedSizes = decoder.Frames.Select(f => f.PixelWidth).OrderBy(s => s).ToList();
+            AssertEqual(16, decodedSizes[0]);
+            AssertEqual(32, decodedSizes[1]);
+            AssertEqual(48, decodedSizes[2]);
+            AssertEqual(256, decodedSizes[3]);
+
+            foreach (var frame in decoder.Frames)
+            {
+                AssertEqual(PixelFormats.Bgra32, frame.Format, $"Frame {frame.PixelWidth}x{frame.PixelHeight} must be Bgra32.");
+            }
+        }
+
+        private static void TestRapidThemeCycling100LoopsThroughAllPresets()
+        {
+            var tm = ThemeManager.Instance;
+            AssertNotNull(tm);
+
+            var parser = new MarkdownParser();
+            string sampleMarkdown = @"# Stress Test Document
+Here is **bold** text and `inline code`.
+
+| Name | Role | Status |
+| :--- | :---: | ---: |
+| Alpha | Admin | Active |
+| Beta | Guest | Pending |
+
+```csharp
+public static void Main() => Console.WriteLine(""Stress"");
+```
+
+> [!NOTE]
+> Testing rapid theme toggling under heavy FlowDocument load.
+
+- [x] Item 1
+- [ ] Item 2
+";
+            var doc = parser.Parse(sampleMarkdown);
+
+            // Pre-create 10 document tabs with rendered FlowDocuments
+            var tabs = new List<DocumentTabItem>();
+            for (int t = 0; t < 10; t++)
+            {
+                var tab = new DocumentTabItem
+                {
+                    FilePath = $@"C:\temp\stress_doc_{t}.md",
+                    Title = $"stress_doc_{t}.md",
+                    RawMarkdown = sampleMarkdown,
+                    Document = doc
+                };
+                var converter = new MarkdownToWpfConverter(AppDomain.CurrentDomain.BaseDirectory, tm.CurrentPalette);
+                tab.FlowDocument = converter.Convert(doc);
+                tabs.Add(tab);
+            }
+
+            // Force initial GC to establish baseline memory
+            GC.Collect();
+            GC.WaitForPendingFinalizers();
+            GC.Collect();
+            long memoryBefore = GC.GetTotalMemory(true);
+
+            var presets = new[]
+            {
+                ThemePreset.GitHubDark,
+                ThemePreset.GitHubLight,
+                ThemePreset.Nord,
+                ThemePreset.OneDark,
+                ThemePreset.Monokai
+            };
+
+            var sw = Stopwatch.StartNew();
+            int totalSwitches = 0;
+
+            // Execute 100 full loops through all 5 presets = 500 theme changes
+            for (int loop = 0; loop < 100; loop++)
+            {
+                for (int p = 0; p < presets.Length; p++)
+                {
+                    var targetPreset = presets[p];
+                    tm.SetPreset(targetPreset);
+                    totalSwitches++;
+
+                    AssertEqual(targetPreset, tm.CurrentPreset, $"CurrentPreset must match {targetPreset}");
+                    var currentPalette = tm.CurrentPalette;
+
+                    // Verify frozen brush immutability - must NEVER throw InvalidOperationException
+                    AssertTrue(currentPalette.WindowBg.IsFrozen, "WindowBg brush must remain frozen");
+                    AssertTrue(currentPalette.EditorBg.IsFrozen, "EditorBg brush must remain frozen");
+                    AssertTrue(currentPalette.EditorFg.IsFrozen, "EditorFg brush must remain frozen");
+                    AssertTrue(currentPalette.MenuBg.IsFrozen, "MenuBg brush must remain frozen");
+                    AssertTrue(currentPalette.MenuFg.IsFrozen, "MenuFg brush must remain frozen");
+                    AssertTrue(currentPalette.MenuHoverBg.IsFrozen, "MenuHoverBg brush must remain frozen");
+                    AssertTrue(currentPalette.MenuHoverFg.IsFrozen, "MenuHoverFg brush must remain frozen");
+                    AssertTrue(currentPalette.StatusBg.IsFrozen, "StatusBg brush must remain frozen");
+                    AssertTrue(currentPalette.StatusFg.IsFrozen, "StatusFg brush must remain frozen");
+                    AssertTrue(currentPalette.TableHeaderBg.IsFrozen, "TableHeaderBg brush must remain frozen");
+                    AssertTrue(currentPalette.HeadingFg.IsFrozen, "HeadingFg brush must remain frozen");
+                    AssertTrue(currentPalette.CodeBg.IsFrozen, "CodeBg brush must remain frozen");
+                    AssertTrue(currentPalette.Accent.IsFrozen, "Accent brush must remain frozen");
+
+                    // Re-render FlowDocuments for open tabs to stress allocation and rendering
+                    if (loop % 10 == 0 && p == 0)
+                    {
+                        foreach (var tab in tabs)
+                        {
+                            var tabConverter = new MarkdownToWpfConverter(AppDomain.CurrentDomain.BaseDirectory, currentPalette);
+                            tab.FlowDocument = tabConverter.Convert(tab.Document);
+                            AssertNotNull(tab.FlowDocument);
+                            AssertEqual(currentPalette.EditorFg.Color, ((SolidColorBrush)tab.FlowDocument.Foreground).Color);
+                        }
+                    }
+                }
+            }
+
+            sw.Stop();
+            AssertEqual(500, totalSwitches, "Should have completed exactly 500 theme switches.");
+
+            // Post-stress GC and memory verification
+            GC.Collect();
+            GC.WaitForPendingFinalizers();
+            GC.Collect();
+            long memoryAfter = GC.GetTotalMemory(true);
+            long memoryGrowthBytes = memoryAfter - memoryBefore;
+
+            // Memory growth should be negligible (< 10 MB after 500 theme changes)
+            AssertTrue(memoryGrowthBytes < 10 * 1024 * 1024,
+                $"Memory growth after 500 theme switches must be < 10MB. Grew: {memoryGrowthBytes / 1024} KB.");
+
+            // Restore baseline preset
+            tm.SetPreset(ThemePreset.GitHubDark);
+        }
+
+        private static void TestTabLifecycleStressAndDirtyTransitions()
+        {
+            var tm = ThemeManager.Instance;
+            tm.SetPreset(ThemePreset.GitHubDark);
+
+            var parser = new MarkdownParser();
+            var tabs = new List<DocumentTabItem>();
+
+            // 1. Rapidly open 50 tabs
+            for (int i = 0; i < 50; i++)
+            {
+                string md = $"# Document {i}\n\nContent for doc {i}.";
+                var doc = parser.Parse(md);
+                var tab = new DocumentTabItem
+                {
+                    FilePath = $@"C:\workspace\file_{i}.md",
+                    Title = $"file_{i}.md",
+                    RawMarkdown = md,
+                    Document = doc
+                };
+                tabs.Add(tab);
+            }
+
+            AssertEqual(50, tabs.Count);
+
+            // 2. Mark odd tabs dirty
+            for (int i = 0; i < tabs.Count; i++)
+            {
+                if (i % 2 == 1)
+                {
+                    tabs[i].MarkDirty();
+                    AssertTrue(tabs[i].IsDirty, $"Tab {i} must be dirty.");
+                    AssertEqual($"file_{i}.md *", tabs[i].DisplayTitle, $"Tab {i} DisplayTitle must include asterisk.");
+                }
+                else
+                {
+                    AssertFalse(tabs[i].IsDirty, $"Tab {i} must not be dirty.");
+                    AssertEqual($"file_{i}.md", tabs[i].DisplayTitle, $"Tab {i} DisplayTitle must not include asterisk.");
+                }
+            }
+
+            // 3. Switch themes while tabs have dirty state
+            tm.CycleNextTheme(); // GitHubLight
+            AssertEqual(ThemePreset.GitHubLight, tm.CurrentPreset);
+
+            // Verify dirty states are preserved across theme switch
+            for (int i = 0; i < tabs.Count; i++)
+            {
+                if (i % 2 == 1)
+                {
+                    AssertTrue(tabs[i].IsDirty, $"Tab {i} dirty state preserved after theme change.");
+                    AssertEqual($"file_{i}.md *", tabs[i].DisplayTitle);
+                }
+                else
+                {
+                    AssertFalse(tabs[i].IsDirty);
+                    AssertEqual($"file_{i}.md", tabs[i].DisplayTitle);
+                }
+            }
+
+            // 4. Mark all clean and verify
+            foreach (var tab in tabs)
+            {
+                tab.MarkClean();
+                AssertFalse(tab.IsDirty);
+                AssertFalse(tab.DisplayTitle.EndsWith(" *"));
+            }
+
+            // 5. Stress close tabs in reverse order
+            while (tabs.Count > 0)
+            {
+                var lastTab = tabs[tabs.Count - 1];
+                tabs.RemoveAt(tabs.Count - 1);
+                AssertNotNull(lastTab);
+            }
+
+            AssertEqual(0, tabs.Count, "All tabs must be closed cleanly.");
+
+            // Reset preset
+            tm.SetPreset(ThemePreset.GitHubDark);
+        }
+    }
+}

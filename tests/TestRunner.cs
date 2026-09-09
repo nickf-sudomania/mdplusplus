@@ -1,8 +1,20 @@
 using System;
+using System.Collections.Generic;
 using System.Diagnostics;
 using System.Linq;
 using System.Text;
+using System.Windows;
+using System.Windows.Controls;
+using System.Windows.Documents;
+using System.Windows.Media;
 using MDPlus.Core;
+
+using WpfTable = System.Windows.Documents.Table;
+using WpfTableCell = System.Windows.Documents.TableCell;
+using WpfTableRow = System.Windows.Documents.TableRow;
+using WpfTableRowGroup = System.Windows.Documents.TableRowGroup;
+using WpfList = System.Windows.Documents.List;
+using WpfListItem = System.Windows.Documents.ListItem;
 
 namespace MDPlus.Tests
 {
@@ -11,6 +23,7 @@ namespace MDPlus.Tests
         private static int _passCount = 0;
         private static int _failCount = 0;
 
+        [STAThread]
         public static int Main(string[] args)
         {
             Console.WriteLine("==================================================");
@@ -90,6 +103,23 @@ namespace MDPlus.Tests
             RunTest("HTML Exporter URL Sanitization (XSS Prevention)", TestHtmlExporterUrlSanitization);
             RunTest("Syntax Highlighter Multiline and Verbatim Strings", TestSyntaxHighlighterMultilineAndVerbatimStrings);
             RunTest("Table Alignment Separators and Column Padding", TestTableAlignmentsSeparatorsAndPadding);
+
+            // 16. Markdown Serialization Engine Tests (Milestone 1)
+            RunTest("Serialization: Headings 1 through 6 (Clean Asterisks)", TestSerializationHeadings);
+            RunTest("Serialization: Inline Elements (Bold, Italic, Strike, Highlight, Code, Links, Images)", TestSerializationInlines);
+            RunTest("Serialization: Fenced Code Blocks with Language", TestSerializationFencedCodeBlocks);
+            RunTest("Serialization: Blockquotes and GitHub Callouts", TestSerializationBlockquotesAndCallouts);
+            RunTest("Serialization: Unordered, Ordered, and Task Lists", TestSerializationListsAndTaskChecklists);
+            RunTest("Serialization: GFM Tables with Alignment and Escaping", TestSerializationTables);
+            RunTest("Serialization: Direct Block and Inline API", TestSerializationDirectBlockAndInlineApi);
+            RunTest("Serialization: Full Document Round-Trip Lossless Fidelity", TestSerializationFullDocumentRoundTrip);
+
+            // 17. Theme Palette System & Menu Readability Tests (Milestone 3)
+            RunTest("Theme Presets Initialization & Brush Immutability", TestThemePresetsInitializationAndImmutability);
+            RunTest("Theme WCAG AA Contrast Compliance (>= 4.5:1)", TestThemeWcagAaContrastCompliance);
+            RunTest("ThemeManager Dynamic Switching & Notification", TestThemeManagerDynamicSwitchingAndEvents);
+            RunTest("ThemeManager Cycling via CycleNextTheme", TestThemeManagerCycling);
+            RunTest("MarkdownToWpfConverter Theme Palette Integration", TestMarkdownConverterThemePaletteIntegration);
 
             sw.Stop();
 
@@ -925,6 +955,505 @@ SHA256 (MDPlus-1.0.0-src.zip) = a1b2c3d4e5f60718293a4b5c6d7e8f90123456789abcdef0
             AssertEqual(ColumnAlignment.Right, table.Alignments[1], "Col 2 is Right");
             AssertEqual(ColumnAlignment.Left, table.Alignments[2], "Col 3 is Left");
             AssertEqual(ColumnAlignment.Left, table.Alignments[3], "Col 4 is Left");
+        }
+
+        private static void TestSerializationHeadings()
+        {
+            var parser = new MarkdownParser();
+            var converter = new MarkdownToWpfConverter(AppDomain.CurrentDomain.BaseDirectory, true);
+
+            // 1. All 6 levels round-trip
+            string md = "# Heading 1\n\n## Heading 2\n\n### Heading 3\n\n#### Heading 4\n\n##### Heading 5\n\n###### Heading 6";
+            var flowDoc = converter.Convert(parser.Parse(md));
+            string serialized = MarkdownSerializer.Serialize(flowDoc).Trim();
+            AssertEqual(md, serialized, "Headings 1-6 roundtrip");
+
+            // Verify NO unintended bold asterisks from paragraph font-weight inheritance
+            Assert(!serialized.Contains("**Heading"), "Headings must not serialize with inherited bold asterisks");
+
+            // 2. Heading with explicit bold word
+            string mdBoldHeading = "# Title with **bold** word";
+            var flowDocBold = converter.Convert(parser.Parse(mdBoldHeading));
+            string serBold = MarkdownSerializer.Serialize(flowDocBold).Trim();
+            AssertEqual("# Title with **bold** word", serBold, "Heading with explicit bold preserves asterisks");
+
+            // 3. Heading with inline code
+            string mdCodeHeading = "## Heading with `code` word";
+            var flowDocCode = converter.Convert(parser.Parse(mdCodeHeading));
+            string serCode = MarkdownSerializer.Serialize(flowDocCode).Trim();
+            AssertEqual("## Heading with `code` word", serCode, "Heading with code preserves backticks");
+
+            // 4. Programmatic Paragraphs with Tag and FontSize
+            var p1 = new Paragraph(new Run("Code Tag H1")) { Tag = "h1" };
+            AssertEqual("# Code Tag H1", MarkdownSerializer.SerializeBlock(p1), "Tag h1");
+
+            var p2 = new Paragraph(new Run("FontSize H2")) { FontSize = 20 };
+            AssertEqual("## FontSize H2", MarkdownSerializer.SerializeBlock(p2), "FontSize 20 H2");
+
+            var p3 = new Paragraph(new Run("Tag Object H3")) { Tag = new HeadingTag { Level = 3 } };
+            AssertEqual("### Tag Object H3", MarkdownSerializer.SerializeBlock(p3), "HeadingTag H3");
+
+            var p4 = new Paragraph(new Run("Int Tag H4")) { Tag = 4 };
+            AssertEqual("#### Int Tag H4", MarkdownSerializer.SerializeBlock(p4), "Tag int 4");
+
+            var p5 = new Paragraph(new Run("FontSize H5")) { FontSize = 13.5 };
+            AssertEqual("##### FontSize H5", MarkdownSerializer.SerializeBlock(p5), "FontSize 13.5 H5");
+
+            var p6 = new Paragraph(new Run("FontSize H6")) { FontSize = 12 };
+            AssertEqual("###### FontSize H6", MarkdownSerializer.SerializeBlock(p6), "FontSize 12 H6");
+        }
+
+        private static void TestSerializationInlines()
+        {
+            var parser = new MarkdownParser();
+            var converter = new MarkdownToWpfConverter(AppDomain.CurrentDomain.BaseDirectory, true);
+
+            // 1. Core inlines round-trip
+            string md = "Text with **bold**, *italic*, ***bold italic***, ~~strike~~, ==highlight==, and `inline code`.";
+            var doc = parser.Parse(md);
+            var flowDoc = converter.Convert(doc);
+            string ser = MarkdownSerializer.Serialize(flowDoc).Trim();
+            AssertEqual(md, ser, "Inlines roundtrip");
+
+            // 2. Multi-backtick inline code with inner backticks
+            string mdCode = "Code with `` ` `` backtick and `` `foo` `` code";
+            var docCode = parser.Parse(mdCode);
+            var flowDocCode = converter.Convert(docCode);
+            string serCode = MarkdownSerializer.Serialize(flowDocCode).Trim();
+            var reParsed = parser.Parse(serCode);
+            var codeInlines = reParsed.Blocks.OfType<ParagraphBlock>().First().Inlines.OfType<CodeInline>().ToList();
+            AssertEqual(2, codeInlines.Count, "Two code inlines");
+            AssertEqual("`", codeInlines[0].Code, "First code backtick");
+            AssertEqual("`foo`", codeInlines[1].Code, "Second code backtick");
+
+            // 3. Hyperlinks
+            string mdLink = "Visit [OpenAI](https://openai.com) for details.";
+            var flowDocLink = converter.Convert(parser.Parse(mdLink));
+            string serLink = MarkdownSerializer.Serialize(flowDocLink).Trim();
+            AssertEqual(mdLink, serLink, "Hyperlink roundtrip");
+
+            // 4. Standalone formatting
+            var spanStrike = new Span(new Run("strikethrough text"));
+            spanStrike.TextDecorations.Add(TextDecorations.Strikethrough);
+            AssertEqual("~~strikethrough text~~", MarkdownSerializer.SerializeInline(spanStrike), "Standalone strikethrough span");
+
+            var spanHl = new Span(new Run("highlighted text")) { Background = Brushes.Yellow };
+            AssertEqual("==highlighted text==", MarkdownSerializer.SerializeInline(spanHl), "Standalone highlight span");
+
+            var spanCode = new Span(new Run("var a = 42;")) { Tag = "code" };
+            AssertEqual("`var a = 42;`", MarkdownSerializer.SerializeInline(spanCode), "Standalone code span");
+        }
+
+        private static void TestSerializationFencedCodeBlocks()
+        {
+            var parser = new MarkdownParser();
+            var converter = new MarkdownToWpfConverter(AppDomain.CurrentDomain.BaseDirectory, true);
+
+            // 1. C# code block
+            string mdCs = "```csharp\npublic class Worker\n{\n    public void Work() => Console.WriteLine(\"Done\");\n}\n```";
+            var flowDocCs = converter.Convert(parser.Parse(mdCs));
+            string serCs = MarkdownSerializer.Serialize(flowDocCs).Trim();
+            AssertEqual(mdCs, serCs, "C# code block roundtrip");
+
+            // 2. Python code block
+            string mdPy = "```python\ndef hello():\n    print(\"Hello world\")\n```";
+            var flowDocPy = converter.Convert(parser.Parse(mdPy));
+            string serPy = MarkdownSerializer.Serialize(flowDocPy).Trim();
+            AssertEqual(mdPy, serPy, "Python code block roundtrip");
+
+            // 3. Plain text / no language
+            string mdText = "```\nPlain text line 1\nPlain text line 2\n```";
+            var flowDocText = converter.Convert(parser.Parse(mdText));
+            string serText = MarkdownSerializer.Serialize(flowDocText).Trim();
+            AssertEqual(mdText, serText, "Plain text code block roundtrip");
+
+            // 4. Code block with CodeBlockTag
+            var pCode = new Paragraph { Tag = new CodeBlockTag { Language = "json", Code = "{\"key\": \"val\"}" } };
+            string serTag = MarkdownSerializer.SerializeBlock(pCode);
+            Assert(serTag.StartsWith("```json"), "Serialized tag code starts with ```json");
+            Assert(serTag.Contains("\"key\": \"val\""), "Serialized tag code contains body");
+        }
+
+        private static void TestSerializationBlockquotesAndCallouts()
+        {
+            var parser = new MarkdownParser();
+            var converter = new MarkdownToWpfConverter(AppDomain.CurrentDomain.BaseDirectory, true);
+
+            // 1. Standard blockquote
+            string mdQuote = "> This is a blockquote statement.";
+            var flowDocQuote = converter.Convert(parser.Parse(mdQuote));
+            string serQuote = MarkdownSerializer.Serialize(flowDocQuote).Trim();
+            AssertEqual(mdQuote, serQuote, "Standard blockquote roundtrip");
+
+            // 2. Multi-paragraph blockquote
+            string mdMulti = "> Paragraph 1\n>\n> Paragraph 2";
+            var flowDocMulti = converter.Convert(parser.Parse(mdMulti));
+            string serMulti = MarkdownSerializer.Serialize(flowDocMulti).Trim();
+            var reParsed = parser.Parse(serMulti);
+            AssertEqual(1, reParsed.Blocks.Count, "1 blockquote block");
+            AssertEqual(2, ((BlockquoteBlock)reParsed.Blocks[0]).Blocks.Count, "2 paragraphs inside blockquote");
+
+            // 3. GitHub Callouts (Note, Tip, Important, Warning, Caution)
+            string mdNote = "> [!NOTE]\n> Information note content.";
+            string serNote = MarkdownSerializer.Serialize(converter.Convert(parser.Parse(mdNote))).Trim();
+            AssertEqual(mdNote, serNote, "Note callout roundtrip");
+
+            string mdTip = "> [!TIP]\n> Pro tip for markdown.";
+            string serTip = MarkdownSerializer.Serialize(converter.Convert(parser.Parse(mdTip))).Trim();
+            AssertEqual(mdTip, serTip, "Tip callout roundtrip");
+
+            string mdWarn = "> [!WARNING] Cautionary Warning\n> Do not proceed without review.";
+            string serWarn = MarkdownSerializer.Serialize(converter.Convert(parser.Parse(mdWarn))).Trim();
+            AssertEqual(mdWarn, serWarn, "Warning callout with custom title roundtrip");
+
+            // 4. Callout with child list and code block
+            string mdComplexCallout = "> [!IMPORTANT]\n> Action required:\n>\n> - Item Alpha\n> - Item Beta\n>\n> ```csharp\n> int x = 100;\n> ```";
+            var flowDocComplex = converter.Convert(parser.Parse(mdComplexCallout));
+            string serComplex = MarkdownSerializer.Serialize(flowDocComplex).Trim();
+            var reParsedComplex = parser.Parse(serComplex);
+            var bqComplex = (BlockquoteBlock)reParsedComplex.Blocks[0];
+            AssertEqual(CalloutType.Important, bqComplex.Callout, "Complex callout is Important");
+            Assert(bqComplex.Blocks.Any(b => b is ParagraphBlock), "Contains paragraph");
+            Assert(bqComplex.Blocks.Any(b => b is ListBlock), "Contains list");
+            Assert(bqComplex.Blocks.Any(b => b is CodeBlock), "Contains code block");
+        }
+
+        private static void TestSerializationListsAndTaskChecklists()
+        {
+            var parser = new MarkdownParser();
+            var converter = new MarkdownToWpfConverter(AppDomain.CurrentDomain.BaseDirectory, true);
+
+            // 1. Task checklists with checked and unchecked items
+            string mdTasks = "- [x] Complete first task\n- [ ] Pending second task\n- [x] Third task";
+            var flowDocTasks = converter.Convert(parser.Parse(mdTasks));
+            string serTasks = MarkdownSerializer.Serialize(flowDocTasks).Trim();
+            AssertEqual(mdTasks, serTasks, "Task list roundtrip");
+
+            // 2. Interactive toggle in FlowDocument
+            var wpfList = flowDocTasks.Blocks.OfType<WpfList>().First();
+            var item2 = wpfList.ListItems.Cast<WpfListItem>().ElementAt(1);
+            var p2 = (Paragraph)item2.Blocks.FirstBlock!;
+            var cb = (CheckBox)((InlineUIContainer)p2.Inlines.FirstInline!).Child;
+            cb.IsChecked = true;
+            string serToggled = MarkdownSerializer.Serialize(flowDocTasks).Trim();
+            Assert(serToggled.Contains("- [x] Pending second task"), "Toggled checkbox serializes as checked");
+
+            // 3. Ordered list
+            string mdOrdered = "1. Item one\n2. Item two\n3. Item three";
+            var flowDocOrd = converter.Convert(parser.Parse(mdOrdered));
+            string serOrd = MarkdownSerializer.Serialize(flowDocOrd).Trim();
+            AssertEqual(mdOrdered, serOrd, "Ordered list roundtrip");
+
+            // 4. Unordered list
+            string mdUnordered = "- Apple\n- Banana\n- Cherry";
+            var flowDocUn = converter.Convert(parser.Parse(mdUnordered));
+            string serUn = MarkdownSerializer.Serialize(flowDocUn).Trim();
+            AssertEqual(mdUnordered, serUn, "Unordered list roundtrip");
+        }
+
+        private static void TestSerializationTables()
+        {
+            var parser = new MarkdownParser();
+            var converter = new MarkdownToWpfConverter(AppDomain.CurrentDomain.BaseDirectory, true);
+
+            // 1. Tables with column alignments
+            string mdTable = "| Header 1 | Header 2 | Header 3 |\n| :--- | :---: | ---: |\n| Left | Center | Right |\n| Val 1 | Val 2 | Val 3 |";
+            var flowDoc = converter.Convert(parser.Parse(mdTable));
+            string ser = MarkdownSerializer.Serialize(flowDoc).Trim();
+            var reParsed = parser.Parse(ser);
+            AssertEqual(1, reParsed.Blocks.Count, "1 TableBlock");
+            var tb = (TableBlock)reParsed.Blocks[0];
+            AssertEqual(ColumnAlignment.Left, tb.Alignments[0], "Col 0 Left");
+            AssertEqual(ColumnAlignment.Center, tb.Alignments[1], "Col 1 Center");
+            AssertEqual(ColumnAlignment.Right, tb.Alignments[2], "Col 2 Right");
+            AssertEqual(2, tb.Rows.Count, "2 data rows");
+
+            // 2. Pipe escaping
+            string mdPipe = "| Col A | Col B |\n| :--- | :--- |\n| Escaped \\| Pipe | Plain |";
+            var flowDocPipe = converter.Convert(parser.Parse(mdPipe));
+            string serPipe = MarkdownSerializer.Serialize(flowDocPipe).Trim();
+            Assert(serPipe.Contains(@"Escaped \| Pipe"), "Serialized table escapes pipe character");
+            var reParsedPipe = parser.Parse(serPipe);
+            var tbPipe = (TableBlock)reParsedPipe.Blocks[0];
+            AssertEqual("Escaped | Pipe", tbPipe.Rows[0].Cells[0].Text, "Unescaped cell text after parse");
+        }
+
+        private static void TestSerializationDirectBlockAndInlineApi()
+        {
+            // Null safety
+            AssertEqual("", MarkdownSerializer.Serialize((FlowDocument)null!), "Null doc");
+            AssertEqual("", MarkdownSerializer.SerializeBlock(null!), "Null block");
+            AssertEqual("", MarkdownSerializer.SerializeInline(null!), "Null inline");
+
+            // Direct inlines
+            var run = new Run("Just text");
+            AssertEqual("Just text", MarkdownSerializer.SerializeInline(run), "Run inline");
+
+            var bold = new Bold(new Run("Bold text"));
+            AssertEqual("**Bold text**", MarkdownSerializer.SerializeInline(bold), "Bold inline");
+
+            var italic = new Italic(new Run("Italic text"));
+            AssertEqual("*Italic text*", MarkdownSerializer.SerializeInline(italic), "Italic inline");
+
+            var link = new Hyperlink(new Run("Click Here")) { NavigateUri = new Uri("https://example.com") };
+            AssertEqual("[Click Here](https://example.com)", MarkdownSerializer.SerializeInline(link), "Link inline");
+
+            var hr = new BlockUIContainer(new Border { Height = 1, Tag = "hr" });
+            AssertEqual("---", MarkdownSerializer.SerializeBlock(hr), "HR block");
+        }
+
+        private static void TestSerializationFullDocumentRoundTrip()
+        {
+            var parser = new MarkdownParser();
+            var converter = new MarkdownToWpfConverter(AppDomain.CurrentDomain.BaseDirectory, true);
+
+            string fullDoc = @"# Project Overview
+
+This is the **primary** specification for MDPlus, which is *extremely* fast and ==reliable==.
+Visit [GitHub Repo](https://github.com/nickf-sudomania/mdplusplus) for details.
+
+## Features
+
+- [x] High performance native editor
+- [x] Zero external dependencies
+- [ ] Electron-free architecture
+
+### Benchmark Comparison
+
+| Metric | MDPlus | MarkText |
+| :--- | :---: | ---: |
+| Startup | 120ms | 1200ms |
+| Idle RAM | 28MB | 180MB |
+
+> [!NOTE]
+> All benchmarks were measured on Windows 11 with .NET 8.
+
+```csharp
+public static void Main()
+{
+    Console.WriteLine(""MDPlus Ready"");
+}
+```
+
+---
+
+End of document.";
+
+            var doc1 = parser.Parse(fullDoc);
+            var flowDoc = converter.Convert(doc1);
+            string serialized = MarkdownSerializer.Serialize(flowDoc).Trim();
+            var doc2 = parser.Parse(serialized);
+
+            AssertEqual(doc1.Blocks.Count, doc2.Blocks.Count, "Full document block counts match");
+            for (int i = 0; i < doc1.Blocks.Count; i++)
+            {
+                AssertEqual(doc1.Blocks[i].GetType(), doc2.Blocks[i].GetType(), $"Block {i} type match");
+            }
+
+            // Idempotent 2nd round-trip
+            var flowDoc2 = converter.Convert(doc2);
+            string serialized2 = MarkdownSerializer.Serialize(flowDoc2).Trim();
+            AssertEqual(serialized, serialized2, "Serialization is idempotent");
+        }
+
+        // 17. Theme Palette System & Menu Readability Tests (Milestone 3)
+
+        private static void TestThemePresetsInitializationAndImmutability()
+        {
+            var presets = new[]
+            {
+                ThemePreset.GitHubDark,
+                ThemePreset.GitHubLight,
+                ThemePreset.Nord,
+                ThemePreset.OneDark,
+                ThemePreset.Monokai
+            };
+
+            AssertEqual(5, presets.Length, "5 theme presets");
+
+            foreach (var preset in presets)
+            {
+                var palette = ThemePalette.GetPalette(preset);
+                Assert(palette != null, $"Palette {preset} must not be null");
+                AssertEqual(preset, palette!.Preset, $"Preset identity {preset}");
+                Assert(!string.IsNullOrEmpty(palette.Name), $"Palette name for {preset}");
+
+                bool expectedIsDark = preset != ThemePreset.GitHubLight;
+                AssertEqual(expectedIsDark, palette.IsDark, $"IsDark flag for {preset}");
+
+                // Validate all essential brushes are non-null and frozen
+                var brushes = new[]
+                {
+                    ("WindowBg", palette.WindowBg),
+                    ("EditorBg", palette.EditorBg),
+                    ("EditorFg", palette.EditorFg),
+                    ("SidebarBg", palette.SidebarBg),
+                    ("MenuBg", palette.MenuBg),
+                    ("MenuFg", palette.MenuFg),
+                    ("MenuHoverBg", palette.MenuHoverBg),
+                    ("MenuHoverFg", palette.MenuHoverFg),
+                    ("MenuPopupBg", palette.MenuPopupBg),
+                    ("MenuPopupBorder", palette.MenuPopupBorder),
+                    ("MenuBorder", palette.MenuBorder),
+                    ("MenuSeparator", palette.MenuSeparator),
+                    ("StatusBg", palette.StatusBg),
+                    ("StatusFg", palette.StatusFg),
+                    ("Border", palette.Border),
+                    ("MutedFg", palette.MutedFg),
+                    ("Accent", palette.Accent),
+                    ("SelectionBg", palette.SelectionBg),
+                    ("CodeBg", palette.CodeBg),
+                    ("CodeBorder", palette.CodeBorder),
+                    ("TableHeaderBg", palette.TableHeaderBg),
+                    ("TableAltRowBg", palette.TableAltRowBg),
+                    ("TableBorder", palette.TableBorder),
+                    ("TabActiveBg", palette.TabActiveBg),
+                    ("TabInactiveBg", palette.TabInactiveBg),
+                    ("HeadingFg", palette.HeadingFg)
+                };
+
+                foreach (var (name, brush) in brushes)
+                {
+                    Assert(brush != null, $"{preset} {name} brush must not be null");
+                    Assert(brush!.IsFrozen, $"{preset} {name} brush must be frozen");
+                }
+
+                // Verify Color properties match brush colors
+                AssertEqual(palette.WindowBg.Color, palette.WindowBackgroundColor, $"{preset} WindowBackgroundColor");
+                AssertEqual(palette.EditorBg.Color, palette.EditorBackgroundColor, $"{preset} EditorBackgroundColor");
+                AssertEqual(palette.EditorFg.Color, palette.EditorForegroundColor, $"{preset} EditorForegroundColor");
+                AssertEqual(palette.MenuBg.Color, palette.MenuBackgroundColor, $"{preset} MenuBackgroundColor");
+                AssertEqual(palette.MenuFg.Color, palette.MenuForegroundColor, $"{preset} MenuForegroundColor");
+                AssertEqual(palette.MenuHoverBg.Color, palette.MenuHoverBackgroundColor, $"{preset} MenuHoverBackgroundColor");
+                AssertEqual(palette.MenuHoverFg.Color, palette.MenuHoverForegroundColor, $"{preset} MenuHoverForegroundColor");
+                AssertEqual(palette.StatusBg.Color, palette.StatusBarBackgroundColor, $"{preset} StatusBarBackgroundColor");
+                AssertEqual(palette.StatusFg.Color, palette.StatusBarForegroundColor, $"{preset} StatusBarForegroundColor");
+            }
+        }
+
+        private static void TestThemeWcagAaContrastCompliance()
+        {
+            // Verify mathematical formulas on control benchmarks
+            double ratioBw = ThemePalette.CalculateContrast(Colors.Black, Colors.White);
+            Assert(Math.Abs(ratioBw - 21.0) < 0.1, "Black/White contrast ratio is 21:1");
+
+            double ratioSame = ThemePalette.CalculateContrast(Colors.Gray, Colors.Gray);
+            Assert(Math.Abs(ratioSame - 1.0) < 0.01, "Identical colors contrast ratio is 1:1");
+
+            var presets = new[]
+            {
+                ThemePreset.GitHubDark,
+                ThemePreset.GitHubLight,
+                ThemePreset.Nord,
+                ThemePreset.OneDark,
+                ThemePreset.Monokai
+            };
+
+            foreach (var preset in presets)
+            {
+                var palette = ThemePalette.GetPalette(preset);
+
+                // 1. Editor Text vs Canvas Background (WCAG AA >= 4.5:1)
+                double editorContrast = ThemePalette.CalculateContrast(palette.EditorBg.Color, palette.EditorFg.Color);
+                Assert(editorContrast >= 4.5, $"{preset} Editor contrast ({editorContrast:F2}:1) must be >= 4.5:1");
+
+                // 2. Menu Text vs Menu Background (WCAG AA >= 4.5:1)
+                double menuContrast = ThemePalette.CalculateContrast(palette.MenuBg.Color, palette.MenuFg.Color);
+                Assert(menuContrast >= 4.5, $"{preset} Menu contrast ({menuContrast:F2}:1) must be >= 4.5:1");
+
+                // 3. Menu Hover Text vs Menu Hover Background (WCAG AA >= 4.5:1)
+                double hoverContrast = ThemePalette.CalculateContrast(palette.MenuHoverBg.Color, palette.MenuHoverFg.Color);
+                Assert(hoverContrast >= 4.5, $"{preset} Menu Hover contrast ({hoverContrast:F2}:1) must be >= 4.5:1");
+
+                // 4. Status Bar Text vs Status Bar Background (WCAG AA >= 4.5:1)
+                double statusContrast = ThemePalette.CalculateContrast(palette.StatusBg.Color, palette.StatusFg.Color);
+                Assert(statusContrast >= 4.5, $"{preset} Status bar contrast ({statusContrast:F2}:1) must be >= 4.5:1");
+
+                // 5. Heading Text vs Canvas Background (WCAG AA >= 4.5:1)
+                double headingContrast = ThemePalette.CalculateContrast(palette.EditorBg.Color, palette.HeadingFg.Color);
+                Assert(headingContrast >= 4.5, $"{preset} Heading contrast ({headingContrast:F2}:1) must be >= 4.5:1");
+            }
+        }
+
+        private static void TestThemeManagerDynamicSwitchingAndEvents()
+        {
+            var tm = ThemeManager.Instance;
+            Assert(tm != null, "ThemeManager instance exists");
+
+            bool eventFired = false;
+            EventHandler handler = (s, e) => eventFired = true;
+            tm!.ThemeChanged += handler;
+
+            try
+            {
+                // Test switching to each preset
+                foreach (ThemePreset preset in Enum.GetValues<ThemePreset>())
+                {
+                    eventFired = false;
+                    tm.SetPreset(preset);
+
+                    Assert(eventFired, $"ThemeChanged event must fire on SetPreset({preset})");
+                    AssertEqual(preset, tm.CurrentPreset, $"CurrentPreset after SetPreset({preset})");
+                    AssertEqual(preset, tm.CurrentPalette.Preset, $"CurrentPalette.Preset after SetPreset({preset})");
+                    AssertEqual(preset != ThemePreset.GitHubLight, tm.IsDark, $"IsDark flag after SetPreset({preset})");
+                }
+            }
+            finally
+            {
+                tm!.ThemeChanged -= handler;
+            }
+        }
+
+        private static void TestThemeManagerCycling()
+        {
+            var tm = ThemeManager.Instance;
+            tm.SetPreset(ThemePreset.GitHubDark);
+
+            var expectedOrder = new[]
+            {
+                ThemePreset.GitHubLight,
+                ThemePreset.Nord,
+                ThemePreset.OneDark,
+                ThemePreset.Monokai,
+                ThemePreset.GitHubDark
+            };
+
+            foreach (var expected in expectedOrder)
+            {
+                tm.CycleNextTheme();
+                AssertEqual(expected, tm.CurrentPreset, $"CycleNextTheme step -> {expected}");
+            }
+        }
+
+        private static void TestMarkdownConverterThemePaletteIntegration()
+        {
+            var parser = new MarkdownParser();
+            string md = @"# Theme Document
+
+Here is regular text with **bold** formatting.
+
+| Col 1 | Col 2 |
+| :--- | :--- |
+| Val A | Val B |
+
+```csharp
+int x = 42;
+```";
+            var doc = parser.Parse(md);
+
+            foreach (ThemePreset preset in Enum.GetValues<ThemePreset>())
+            {
+                var palette = ThemePalette.GetPalette(preset);
+                var converter = new MarkdownToWpfConverter(AppDomain.CurrentDomain.BaseDirectory, palette);
+                var flowDoc = converter.Convert(doc);
+
+                Assert(flowDoc != null, $"FlowDocument for {preset} converted");
+                if (flowDoc != null)
+                {
+                    AssertEqual(palette.EditorFg.Color, ((SolidColorBrush)flowDoc.Foreground).Color, $"{preset} document foreground");
+                    Assert(flowDoc.Blocks.Count >= 4, $"{preset} document has blocks");
+                }
+            }
         }
     }
 }

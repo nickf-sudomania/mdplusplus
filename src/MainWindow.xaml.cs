@@ -3,11 +3,13 @@ using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using System.IO;
 using System.Linq;
+using System.Text;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Documents;
 using System.Windows.Input;
 using System.Windows.Media;
+using System.Windows.Threading;
 using Microsoft.Win32;
 using MDPlus.Controls;
 using MDPlus.Core;
@@ -26,13 +28,15 @@ namespace MDPlus
         private WindowState _previousWindowState = WindowState.Normal;
         private WindowStyle _previousWindowStyle = WindowStyle.SingleBorderWindow;
         private bool _isSyncingScroll = false;
+        private bool _suppressDirtyTracking = false;
+        private int _untitledIndex = 1;
 
         public MainWindow()
         {
             InitializeComponent();
 
             _settings = AppSettings.Load();
-            ThemeManager.Instance.Mode = _settings.Theme;
+            ThemeManager.Instance.SetPreset(_settings.Theme);
             ThemeManager.Instance.ThemeChanged += OnThemeChanged;
 
             _fileWatcher.FileChanged += OnExternalFileChanged;
@@ -42,6 +46,10 @@ namespace MDPlus
 
             MarkdownViewer.AddHandler(ScrollViewer.ScrollChangedEvent, new ScrollChangedEventHandler(MarkdownViewer_ScrollChanged));
             RawMarkdownTextBox.AddHandler(ScrollViewer.ScrollChangedEvent, new ScrollChangedEventHandler(RawTextBox_ScrollChanged));
+
+            MarkdownViewer.TextChanged += MarkdownViewer_TextChanged;
+            RawMarkdownTextBox.TextChanged += RawMarkdownTextBox_TextChanged;
+            MarkdownViewer.AddHandler(System.Windows.Controls.Primitives.ButtonBase.ClickEvent, new RoutedEventHandler(MarkdownViewer_ButtonClick));
 
             ApplyTheme();
             BuildRecentFilesMenu();
@@ -94,16 +102,19 @@ namespace MDPlus
 
             if (!loadedAny)
             {
-                // Look for sample docs or welcome doc
-                string samplePath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "sample_docs", "welcome.md");
-                if (File.Exists(samplePath))
+                Dispatcher.BeginInvoke(DispatcherPriority.Background, new Action(() =>
                 {
-                    OpenDocument(samplePath);
-                }
-                else
-                {
-                    ShowWelcomeDocument();
-                }
+                    // Look for sample docs or welcome doc
+                    string samplePath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "sample_docs", "welcome.md");
+                    if (File.Exists(samplePath))
+                    {
+                        OpenDocument(samplePath);
+                    }
+                    else
+                    {
+                        ShowWelcomeDocument();
+                    }
+                }));
             }
         }
 
@@ -245,7 +256,7 @@ Console.WriteLine($""Parsed {doc.Blocks.Count} blocks in 2ms!"");
 
         private void RenderDocumentTab(DocumentTabItem tab)
         {
-            var converter = new MarkdownToWpfConverter(tab.DirectoryName, ThemeManager.Instance.IsDark);
+            var converter = new MarkdownToWpfConverter(tab.DirectoryName, ThemeManager.Instance.CurrentPalette);
             converter.AnchorNavigationRequested += (s, anchor) => MarkdownViewer.ScrollToAnchor(anchor);
             converter.FileNavigationRequested += (s, e) => OpenDocument(e.FilePath, e.Anchor);
             tab.FlowDocument = converter.Convert(tab.Document);
@@ -294,15 +305,23 @@ Console.WriteLine($""Parsed {doc.Blocks.Count} blocks in 2ms!"");
                 RenderDocumentTab(tab);
             }
 
-            MarkdownViewer.Document = tab.FlowDocument;
-            MarkdownViewer.Zoom = tab.Zoom;
-            RawMarkdownTextBox.FontSize = 13.0 * (tab.Zoom / 100.0);
-            RawMarkdownTextBox.Text = tab.RawMarkdown;
+            _suppressDirtyTracking = true;
+            try
+            {
+                MarkdownViewer.Document = tab.FlowDocument;
+                MarkdownViewer.Zoom = tab.Zoom;
+                RawMarkdownTextBox.FontSize = 13.0 * (tab.Zoom / 100.0);
+                RawMarkdownTextBox.Text = tab.RawMarkdown;
+            }
+            finally
+            {
+                _suppressDirtyTracking = false;
+            }
             TocListBox.ItemsSource = tab.Headings;
 
             UpdateViewDisplayMode(tab.ViewMode);
 
-            Title = $"{tab.FileName} - MDPlus";
+            Title = $"{tab.DisplayTitle} - MDPlus";
             StatusFileText.Text = string.IsNullOrEmpty(tab.FilePath) ? tab.Title : tab.FilePath;
             StatusStatsText.Text = tab.StatsText;
             StatusZoomText.Text = tab.ZoomText;
@@ -325,6 +344,7 @@ Console.WriteLine($""Parsed {doc.Blocks.Count} blocks in 2ms!"");
         private void RebuildTabStrip()
         {
             TabStripPanel.Children.Clear();
+            var palette = ThemeManager.Instance.CurrentPalette;
 
             foreach (var tab in _tabs)
             {
@@ -332,8 +352,8 @@ Console.WriteLine($""Parsed {doc.Blocks.Count} blocks in 2ms!"");
 
                 var tabBorder = new Border
                 {
-                    Background = isActive ? ThemeManager.Instance.TabActiveBackground : ThemeManager.Instance.TabInactiveBackground,
-                    BorderBrush = ThemeManager.Instance.BorderBrush,
+                    Background = isActive ? palette.TabActiveBg : palette.TabInactiveBg,
+                    BorderBrush = palette.Border,
                     BorderThickness = new Thickness(1, 1, 1, isActive ? 0 : 1),
                     CornerRadius = new CornerRadius(4, 4, 0, 0),
                     Margin = new Thickness(2, 4, 2, 0),
@@ -345,8 +365,8 @@ Console.WriteLine($""Parsed {doc.Blocks.Count} blocks in 2ms!"");
                 var sp = new StackPanel { Orientation = Orientation.Horizontal };
                 var titleBlock = new TextBlock
                 {
-                    Text = tab.FileName,
-                    Foreground = isActive ? ThemeManager.Instance.Foreground : new SolidColorBrush(Color.FromRgb(150, 150, 150)),
+                    Text = tab.DisplayTitle,
+                    Foreground = isActive ? palette.EditorFg : palette.MutedFg,
                     FontWeight = isActive ? FontWeights.SemiBold : FontWeights.Normal,
                     FontSize = 12,
                     VerticalAlignment = VerticalAlignment.Center,
@@ -360,7 +380,7 @@ Console.WriteLine($""Parsed {doc.Blocks.Count} blocks in 2ms!"");
                     Width = 16,
                     Height = 16,
                     Background = Brushes.Transparent,
-                    Foreground = new SolidColorBrush(Color.FromRgb(130, 130, 130)),
+                    Foreground = palette.MutedFg,
                     BorderThickness = new Thickness(0),
                     FontSize = 10,
                     FontWeight = FontWeights.Bold,
@@ -389,11 +409,36 @@ Console.WriteLine($""Parsed {doc.Blocks.Count} blocks in 2ms!"");
                 TabStripPanel.Children.Add(tabBorder);
             }
 
+            NewTabButton.Foreground = palette.MutedFg;
             TabStripPanel.Children.Add(NewTabButton);
         }
 
-        private void CloseTab(DocumentTabItem tab)
+        private bool CloseTab(DocumentTabItem tab)
         {
+            if (tab == null) return true;
+
+            if (tab.IsDirty)
+            {
+                string name = !string.IsNullOrEmpty(tab.Title) ? tab.Title : tab.FileName;
+                var result = MessageBox.Show(
+                    $"Do you want to save changes to '{name}'?",
+                    "MDPlus",
+                    MessageBoxButton.YesNoCancel,
+                    MessageBoxImage.Question);
+
+                if (result == MessageBoxResult.Yes)
+                {
+                    if (!SaveTab(tab))
+                    {
+                        return false;
+                    }
+                }
+                else if (result == MessageBoxResult.Cancel)
+                {
+                    return false;
+                }
+            }
+
             if (!string.IsNullOrEmpty(tab.FilePath))
             {
                 _fileWatcher.UnwatchFile(tab.FilePath);
@@ -418,6 +463,8 @@ Console.WriteLine($""Parsed {doc.Blocks.Count} blocks in 2ms!"");
             {
                 RebuildTabStrip();
             }
+
+            return true;
         }
 
         private void OnExternalFileChanged(object? sender, string filePath)
@@ -591,7 +638,86 @@ Console.WriteLine($""Parsed {doc.Blocks.Count} blocks in 2ms!"");
 
         private void UpdateViewDisplayMode(ViewDisplayMode mode)
         {
-            if (_activeTab != null) _activeTab.ViewMode = mode;
+            if (_activeTab == null) return;
+            var oldMode = _activeTab.ViewMode;
+            _activeTab.ViewMode = mode;
+
+            // View Synchronization
+            if (mode == ViewDisplayMode.Raw)
+            {
+                if (oldMode != ViewDisplayMode.Raw && _activeTab.FlowDocument != null)
+                {
+                    string serialized = MarkdownSerializer.Serialize(_activeTab.FlowDocument);
+                    _activeTab.RawMarkdown = serialized;
+                    _suppressDirtyTracking = true;
+                    try
+                    {
+                        RawMarkdownTextBox.Text = serialized;
+                    }
+                    finally
+                    {
+                        _suppressDirtyTracking = false;
+                    }
+                }
+            }
+            else if (mode == ViewDisplayMode.Rendered)
+            {
+                if (oldMode == ViewDisplayMode.Raw)
+                {
+                    string raw = RawMarkdownTextBox.Text;
+                    _activeTab.RawMarkdown = raw;
+                    _activeTab.Document = _parser.Parse(raw);
+                    _activeTab.Headings = ExtractHeadings(_activeTab.Document);
+                    RenderDocumentTab(_activeTab);
+                    _suppressDirtyTracking = true;
+                    try
+                    {
+                        MarkdownViewer.Document = _activeTab.FlowDocument;
+                    }
+                    finally
+                    {
+                        _suppressDirtyTracking = false;
+                    }
+                    TocListBox.ItemsSource = _activeTab.Headings;
+                    UpdateStatusBar();
+                }
+            }
+            else if (mode == ViewDisplayMode.Split)
+            {
+                if (oldMode == ViewDisplayMode.Raw)
+                {
+                    string raw = RawMarkdownTextBox.Text;
+                    _activeTab.RawMarkdown = raw;
+                    _activeTab.Document = _parser.Parse(raw);
+                    _activeTab.Headings = ExtractHeadings(_activeTab.Document);
+                    RenderDocumentTab(_activeTab);
+                    _suppressDirtyTracking = true;
+                    try
+                    {
+                        MarkdownViewer.Document = _activeTab.FlowDocument;
+                    }
+                    finally
+                    {
+                        _suppressDirtyTracking = false;
+                    }
+                    TocListBox.ItemsSource = _activeTab.Headings;
+                    UpdateStatusBar();
+                }
+                else if (oldMode == ViewDisplayMode.Rendered && _activeTab.FlowDocument != null)
+                {
+                    string serialized = MarkdownSerializer.Serialize(_activeTab.FlowDocument);
+                    _activeTab.RawMarkdown = serialized;
+                    _suppressDirtyTracking = true;
+                    try
+                    {
+                        RawMarkdownTextBox.Text = serialized;
+                    }
+                    finally
+                    {
+                        _suppressDirtyTracking = false;
+                    }
+                }
+            }
 
             switch (mode)
             {
@@ -657,28 +783,30 @@ Console.WriteLine($""Parsed {doc.Blocks.Count} blocks in 2ms!"");
 
         private void ApplyTheme()
         {
+            var palette = ThemeManager.Instance.CurrentPalette;
             bool isDark = ThemeManager.Instance.IsDark;
 
-            RootGrid.Background = ThemeManager.Instance.WindowBackground;
-            MainMenu.Background = ThemeManager.Instance.MenuBackground;
-            MainMenu.Foreground = ThemeManager.Instance.Foreground;
-            MainMenu.BorderBrush = ThemeManager.Instance.BorderBrush;
+            RootGrid.Background = palette.WindowBg;
+            MainMenu.Background = palette.MenuBg;
+            MainMenu.Foreground = palette.MenuFg;
+            MainMenu.BorderBrush = palette.Border;
 
-            TabBarBorder.Background = ThemeManager.Instance.SidebarBackground;
-            TabBarBorder.BorderBrush = ThemeManager.Instance.BorderBrush;
+            TabBarBorder.Background = palette.SidebarBg;
+            TabBarBorder.BorderBrush = palette.Border;
 
-            SidebarBorder.Background = ThemeManager.Instance.SidebarBackground;
-            SidebarBorder.BorderBrush = ThemeManager.Instance.BorderBrush;
+            SidebarBorder.Background = palette.SidebarBg;
+            SidebarBorder.BorderBrush = palette.Border;
 
-            ContentGrid.Background = ThemeManager.Instance.DocumentBackground;
+            ContentGrid.Background = palette.EditorBg;
 
-            RawMarkdownTextBox.Background = isDark ? new SolidColorBrush(Color.FromRgb(24, 24, 24)) : Brushes.White;
-            RawMarkdownTextBox.Foreground = isDark ? new SolidColorBrush(Color.FromRgb(212, 212, 212)) : new SolidColorBrush(Color.FromRgb(36, 41, 47));
+            RawMarkdownTextBox.Background = palette.EditorBg;
+            RawMarkdownTextBox.Foreground = palette.EditorFg;
 
-            AppStatusBar.Background = ThemeManager.Instance.StatusBarBackground;
-            AppStatusBar.Foreground = ThemeManager.Instance.StatusBarForeground;
+            AppStatusBar.Background = palette.StatusBg;
+            AppStatusBar.Foreground = palette.StatusFg;
 
             DocumentFindBar.ApplyTheme(isDark);
+            UpdateThemeMenuChecks();
 
             // Re-render all loaded tabs to match new theme
             foreach (var tab in _tabs)
@@ -776,7 +904,190 @@ Console.WriteLine($""Parsed {doc.Blocks.Count} blocks in 2ms!"");
 
         private void NewTab_Click(object sender, RoutedEventArgs e)
         {
-            OpenFile_Click(sender, e);
+            var doc = _parser.Parse(string.Empty);
+            var tab = new DocumentTabItem
+            {
+                FilePath = string.Empty,
+                Title = $"Untitled {_untitledIndex++}",
+                RawMarkdown = string.Empty,
+                Document = doc,
+                Headings = new List<HeadingItem>()
+            };
+            RenderDocumentTab(tab);
+            _tabs.Add(tab);
+            RebuildTabStrip();
+            SetActiveTab(tab);
+        }
+
+        private void SaveFile_Click(object sender, RoutedEventArgs e)
+        {
+            SaveActiveTab();
+        }
+
+        private void SaveAsFile_Click(object sender, RoutedEventArgs e)
+        {
+            if (_activeTab != null)
+            {
+                SaveTab(_activeTab, forceSaveAs: true);
+            }
+        }
+
+        public bool SaveActiveTab()
+        {
+            if (_activeTab == null) return false;
+            return SaveTab(_activeTab, forceSaveAs: false);
+        }
+
+        public bool SaveTab(DocumentTabItem tab, bool forceSaveAs = false)
+        {
+            if (tab == null) return false;
+
+            // 1. Sync latest content into tab.RawMarkdown
+            if (tab == _activeTab)
+            {
+                if (tab.ViewMode == ViewDisplayMode.Raw)
+                {
+                    tab.RawMarkdown = RawMarkdownTextBox.Text;
+                }
+                else
+                {
+                    if (tab.FlowDocument != null)
+                    {
+                        tab.RawMarkdown = MarkdownSerializer.Serialize(tab.FlowDocument);
+                        if (tab.ViewMode == ViewDisplayMode.Split)
+                        {
+                            _suppressDirtyTracking = true;
+                            try
+                            {
+                                RawMarkdownTextBox.Text = tab.RawMarkdown;
+                            }
+                            finally
+                            {
+                                _suppressDirtyTracking = false;
+                            }
+                        }
+                    }
+                }
+            }
+            else
+            {
+                if (tab.FlowDocument != null)
+                {
+                    tab.RawMarkdown = MarkdownSerializer.Serialize(tab.FlowDocument);
+                }
+            }
+
+            // 2. Handle Untitled or Save As
+            if (string.IsNullOrEmpty(tab.FilePath) || forceSaveAs)
+            {
+                var dlg = new SaveFileDialog
+                {
+                    Title = "Save Markdown File",
+                    Filter = "Markdown Files (*.md)|*.md|All Files (*.*)|*.*",
+                    FileName = !string.IsNullOrEmpty(tab.FilePath) ? Path.GetFileName(tab.FilePath) : (tab.FileName.EndsWith(".md", StringComparison.OrdinalIgnoreCase) ? tab.FileName : $"{tab.FileName}.md"),
+                    DefaultExt = ".md"
+                };
+
+                if (dlg.ShowDialog(this) != true)
+                {
+                    return false;
+                }
+
+                if (!string.IsNullOrEmpty(tab.FilePath) && !tab.FilePath.Equals(dlg.FileName, StringComparison.OrdinalIgnoreCase))
+                {
+                    _fileWatcher.UnwatchFile(tab.FilePath);
+                }
+
+                tab.FilePath = dlg.FileName;
+                tab.Title = Path.GetFileName(tab.FilePath);
+            }
+
+            // 3. Suppress FileWatcher before writing
+            _fileWatcher.SuppressNextChange(tab.FilePath);
+
+            try
+            {
+                File.WriteAllText(tab.FilePath, tab.RawMarkdown, new UTF8Encoding(false));
+
+                if (_settings.AutoReload)
+                {
+                    _fileWatcher.WatchFile(tab.FilePath);
+                }
+
+                tab.MarkClean();
+                RebuildTabStrip();
+                UpdateStatusBar();
+                if (_activeTab == tab)
+                {
+                    Title = $"{tab.DisplayTitle} - MDPlus";
+                    StatusFileText.Text = tab.FilePath;
+                }
+
+                _settings.AddRecentFile(tab.FilePath);
+                _settings.Save();
+                BuildRecentFilesMenu();
+
+                return true;
+            }
+            catch (Exception ex)
+            {
+                MessageBox.Show($"Failed to save file '{tab.FilePath}':\n{ex.Message}", "Save Error", MessageBoxButton.OK, MessageBoxImage.Error);
+                return false;
+            }
+        }
+
+        private void MarkdownViewer_TextChanged(object sender, TextChangedEventArgs e)
+        {
+            if (_suppressDirtyTracking || _activeTab == null) return;
+            if (!_activeTab.IsDirty)
+            {
+                _activeTab.MarkDirty();
+                RebuildTabStrip();
+                Title = $"{_activeTab.DisplayTitle} - MDPlus";
+            }
+        }
+
+        private void RawMarkdownTextBox_TextChanged(object sender, TextChangedEventArgs e)
+        {
+            if (_suppressDirtyTracking || _activeTab == null) return;
+            if (!_activeTab.IsDirty)
+            {
+                _activeTab.MarkDirty();
+                RebuildTabStrip();
+                Title = $"{_activeTab.DisplayTitle} - MDPlus";
+            }
+        }
+
+        private void MarkdownViewer_ButtonClick(object sender, RoutedEventArgs e)
+        {
+            if (_suppressDirtyTracking || _activeTab == null) return;
+            if (e.OriginalSource is CheckBox)
+            {
+                if (!_activeTab.IsDirty)
+                {
+                    _activeTab.MarkDirty();
+                    RebuildTabStrip();
+                    Title = $"{_activeTab.DisplayTitle} - MDPlus";
+                }
+            }
+        }
+
+        private void UpdateStatusBar()
+        {
+            if (_activeTab == null)
+            {
+                StatusFileText.Text = "Ready";
+                StatusStatsText.Text = string.Empty;
+                StatusZoomText.Text = "100%";
+                StatusEncodingText.Text = string.Empty;
+                StatusViewModeText.Text = string.Empty;
+                return;
+            }
+            StatusFileText.Text = string.IsNullOrEmpty(_activeTab.FilePath) ? _activeTab.Title : _activeTab.FilePath;
+            StatusStatsText.Text = _activeTab.StatsText;
+            StatusZoomText.Text = _activeTab.ZoomText;
+            StatusEncodingText.Text = $"{_activeTab.EncodingName} • {_activeTab.LineEndingName}";
+            StatusViewModeText.Text = _activeTab.ViewMode.ToString();
         }
 
         private void CloseTab_Click(object sender, RoutedEventArgs e)
@@ -791,7 +1102,10 @@ Console.WriteLine($""Parsed {doc.Blocks.Count} blocks in 2ms!"");
         {
             while (_tabs.Count > 0)
             {
-                CloseTab(_tabs[0]);
+                if (!CloseTab(_tabs[0]))
+                {
+                    break;
+                }
             }
         }
 
@@ -976,10 +1290,36 @@ Console.WriteLine($""Parsed {doc.Blocks.Count} blocks in 2ms!"");
             RawMarkdownTextBox.TextWrapping = _settings.WordWrap ? TextWrapping.Wrap : TextWrapping.NoWrap;
         }
 
+        private void UpdateThemeMenuChecks()
+        {
+            var preset = ThemeManager.Instance.CurrentPreset;
+            if (ThemeGitHubDarkItem != null) ThemeGitHubDarkItem.IsChecked = preset == ThemePreset.GitHubDark;
+            if (ThemeGitHubLightItem != null) ThemeGitHubLightItem.IsChecked = preset == ThemePreset.GitHubLight;
+            if (ThemeNordItem != null) ThemeNordItem.IsChecked = preset == ThemePreset.Nord;
+            if (ThemeOneDarkItem != null) ThemeOneDarkItem.IsChecked = preset == ThemePreset.OneDark;
+            if (ThemeMonokaiItem != null) ThemeMonokaiItem.IsChecked = preset == ThemePreset.Monokai;
+        }
+
+        private void ThemePreset_Click(object sender, RoutedEventArgs e)
+        {
+            if (sender is MenuItem item && item.Tag is string tagStr && Enum.TryParse<ThemePreset>(tagStr, out var preset))
+            {
+                ThemeManager.Instance.SetPreset(preset);
+                _settings.Theme = preset;
+                _settings.Save();
+            }
+        }
+
+        private void CycleTheme_Click(object sender, RoutedEventArgs e)
+        {
+            ThemeManager.Instance.CycleNextTheme();
+            _settings.Theme = ThemeManager.Instance.CurrentPreset;
+            _settings.Save();
+        }
+
         private void ToggleTheme_Click(object sender, RoutedEventArgs e)
         {
-            ThemeManager.Instance.Mode = ThemeManager.Instance.IsDark ? AppThemeMode.Light : AppThemeMode.Dark;
-            _settings.Theme = ThemeManager.Instance.Mode;
+            CycleTheme_Click(sender, e);
         }
 
         private void ToggleFullscreen_Click(object sender, RoutedEventArgs e)
@@ -1239,6 +1579,10 @@ Console.WriteLine($""Parsed {doc.Blocks.Count} blocks in 2ms!"");
             {
                 switch (e.Key)
                 {
+                    case Key.S:
+                        SaveFile_Click(this, new RoutedEventArgs());
+                        e.Handled = true;
+                        break;
                     case Key.O:
                         OpenFile_Click(this, new RoutedEventArgs());
                         e.Handled = true;
@@ -1301,6 +1645,10 @@ Console.WriteLine($""Parsed {doc.Blocks.Count} blocks in 2ms!"");
                 switch (e.Key)
                 {
                     case Key.S:
+                        SaveAsFile_Click(this, new RoutedEventArgs());
+                        e.Handled = true;
+                        break;
+                    case Key.E:
                         ExportHtml_Click(this, new RoutedEventArgs());
                         e.Handled = true;
                         break;
@@ -1394,6 +1742,34 @@ Console.WriteLine($""Parsed {doc.Blocks.Count} blocks in 2ms!"");
 
         private void Window_Closing(object sender, System.ComponentModel.CancelEventArgs e)
         {
+            foreach (var tab in _tabs.ToList())
+            {
+                if (tab.IsDirty)
+                {
+                    SetActiveTab(tab);
+                    string name = !string.IsNullOrEmpty(tab.Title) ? tab.Title : tab.FileName;
+                    var result = MessageBox.Show(
+                        $"Do you want to save changes to '{name}'?",
+                        "MDPlus",
+                        MessageBoxButton.YesNoCancel,
+                        MessageBoxImage.Question);
+
+                    if (result == MessageBoxResult.Yes)
+                    {
+                        if (!SaveTab(tab))
+                        {
+                            e.Cancel = true;
+                            return;
+                        }
+                    }
+                    else if (result == MessageBoxResult.Cancel)
+                    {
+                        e.Cancel = true;
+                        return;
+                    }
+                }
+            }
+
             _fileWatcher.Dispose();
 
             if (WindowState == WindowState.Maximized)

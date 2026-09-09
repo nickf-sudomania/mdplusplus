@@ -3,6 +3,24 @@
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              StartupUri="MainWindow.xaml">
     <Application.Resources>
+        <!-- Default Theme Palette Brushes (Updated dynamically by ThemeManager) -->
+        <SolidColorBrush x:Key="MenuBackgroundBrush" Color="#161B22"/>
+        <SolidColorBrush x:Key="MenuForegroundBrush" Color="#E6EDF3"/>
+        <SolidColorBrush x:Key="MenuHoverBackgroundBrush" Color="#30363D"/>
+        <SolidColorBrush x:Key="MenuHoverForegroundBrush" Color="#FFFFFF"/>
+        <SolidColorBrush x:Key="MenuPopupBackgroundBrush" Color="#161B22"/>
+        <SolidColorBrush x:Key="MenuPopupBorderBrush" Color="#30363D"/>
+        <SolidColorBrush x:Key="MenuBorderBrush" Color="#30363D"/>
+        <SolidColorBrush x:Key="MenuSeparatorBrush" Color="#30363D"/>
+        <SolidColorBrush x:Key="WindowBackgroundBrush" Color="#0D1117"/>
+        <SolidColorBrush x:Key="DocumentBackgroundBrush" Color="#0D1117"/>
+        <SolidColorBrush x:Key="ForegroundBrush" Color="#E6EDF3"/>
+        <SolidColorBrush x:Key="BorderBrush" Color="#30363D"/>
+        <SolidColorBrush x:Key="MutedForegroundBrush" Color="#8B949E"/>
+        <SolidColorBrush x:Key="AccentBrush" Color="#58A6FF"/>
+        <SolidColorBrush x:Key="StatusBarBackgroundBrush" Color="#1F6FEB"/>
+        <SolidColorBrush x:Key="StatusBarForegroundBrush" Color="#FFFFFF"/>
+
         <!-- Clean Modern ScrollBar Style -->
         <Style TargetType="{x:Type ScrollBar}">
             <Setter Property="Background" Value="Transparent"/>
@@ -12,8 +30,288 @@
 
         <!-- Clean Menu Style -->
         <Style TargetType="{x:Type Menu}">
+            <Setter Property="Background" Value="{DynamicResource MenuBackgroundBrush}"/>
+            <Setter Property="Foreground" Value="{DynamicResource MenuForegroundBrush}"/>
             <Setter Property="FontFamily" Value="Segoe UI, sans-serif"/>
             <Setter Property="FontSize" Value="12"/>
+        </Style>
+
+        <!-- 1. TopLevelHeaderTemplate (for top horizontal menu headers: File, Edit, View, etc.) -->
+        <ControlTemplate x:Key="TopLevelHeaderTemplate" TargetType="{x:Type MenuItem}">
+            <Grid SnapsToDevicePixels="True">
+                <Border x:Name="TemplateRoot" 
+                        Background="Transparent" 
+                        BorderThickness="0" 
+                        Padding="8,4,8,4" 
+                        CornerRadius="3"
+                        SnapsToDevicePixels="True">
+                    <ContentPresenter x:Name="ContentPresenter" 
+                                      ContentSource="Header" 
+                                      RecognizesAccessKey="True" 
+                                      VerticalAlignment="Center" 
+                                      SnapsToDevicePixels="True"/>
+                </Border>
+                <Popup x:Name="PART_Popup" 
+                       AllowsTransparency="True" 
+                       Focusable="False" 
+                       IsOpen="{Binding IsSubmenuOpen, RelativeSource={RelativeSource TemplatedParent}}" 
+                       Placement="Bottom" 
+                       PopupAnimation="Fade">
+                    <Border x:Name="SubMenuBorder" 
+                            Background="{DynamicResource MenuPopupBackgroundBrush}" 
+                            BorderBrush="{DynamicResource MenuPopupBorderBrush}" 
+                            BorderThickness="1" 
+                            Padding="3" 
+                            CornerRadius="4"
+                            SnapsToDevicePixels="True">
+                        <ScrollViewer x:Name="SubMenuScrollViewer" CanContentScroll="True">
+                            <ItemsPresenter x:Name="ItemsPresenter" 
+                                            KeyboardNavigation.DirectionalNavigation="Cycle" 
+                                            KeyboardNavigation.TabNavigation="Cycle" 
+                                            Grid.IsSharedSizeScope="True" 
+                                            SnapsToDevicePixels="True"/>
+                        </ScrollViewer>
+                    </Border>
+                </Popup>
+            </Grid>
+            <ControlTemplate.Triggers>
+                <Trigger Property="IsHighlighted" Value="True">
+                    <Setter TargetName="TemplateRoot" Property="Background" Value="{DynamicResource MenuHoverBackgroundBrush}"/>
+                    <Setter Property="Foreground" Value="{DynamicResource MenuHoverForegroundBrush}"/>
+                </Trigger>
+                <Trigger Property="IsSubmenuOpen" Value="True">
+                    <Setter TargetName="TemplateRoot" Property="Background" Value="{DynamicResource MenuHoverBackgroundBrush}"/>
+                    <Setter Property="Foreground" Value="{DynamicResource MenuHoverForegroundBrush}"/>
+                </Trigger>
+                <Trigger Property="IsEnabled" Value="False">
+                    <Setter Property="Foreground" Value="{DynamicResource MutedForegroundBrush}"/>
+                </Trigger>
+            </ControlTemplate.Triggers>
+        </ControlTemplate>
+
+        <!-- 2. TopLevelItemTemplate (for top horizontal clickable items) -->
+        <ControlTemplate x:Key="TopLevelItemTemplate" TargetType="{x:Type MenuItem}">
+            <Border x:Name="TemplateRoot" 
+                    Background="Transparent" 
+                    BorderThickness="0" 
+                    Padding="8,4,8,4" 
+                    CornerRadius="3"
+                    SnapsToDevicePixels="True">
+                <ContentPresenter x:Name="ContentPresenter" 
+                                  ContentSource="Header" 
+                                  RecognizesAccessKey="True" 
+                                  VerticalAlignment="Center" 
+                                  SnapsToDevicePixels="True"/>
+            </Border>
+            <ControlTemplate.Triggers>
+                <Trigger Property="IsHighlighted" Value="True">
+                    <Setter TargetName="TemplateRoot" Property="Background" Value="{DynamicResource MenuHoverBackgroundBrush}"/>
+                    <Setter Property="Foreground" Value="{DynamicResource MenuHoverForegroundBrush}"/>
+                </Trigger>
+                <Trigger Property="IsEnabled" Value="False">
+                    <Setter Property="Foreground" Value="{DynamicResource MutedForegroundBrush}"/>
+                </Trigger>
+            </ControlTemplate.Triggers>
+        </ControlTemplate>
+
+        <!-- 3. SubmenuItemTemplate (for dropdown action items) -->
+        <ControlTemplate x:Key="SubmenuItemTemplate" TargetType="{x:Type MenuItem}">
+            <Border x:Name="TemplateRoot" 
+                    Background="Transparent" 
+                    BorderThickness="0" 
+                    Padding="6,4,6,4" 
+                    CornerRadius="3" 
+                    SnapsToDevicePixels="True">
+                <Grid>
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="20" SharedSizeGroup="MenuItemIconColumnGroup"/>
+                        <ColumnDefinition Width="*"/>
+                        <ColumnDefinition Width="Auto" SharedSizeGroup="MenuItemGestureColumnGroup"/>
+                        <ColumnDefinition Width="10"/>
+                    </Grid.ColumnDefinitions>
+                    
+                    <Border x:Name="GlyphBorder" Width="16" Height="16" HorizontalAlignment="Center" VerticalAlignment="Center">
+                        <Path x:Name="Glyph" 
+                              Data="M 1,6 L 5,10 L 13,2" 
+                              Stroke="{Binding Foreground, RelativeSource={RelativeSource AncestorType=MenuItem}}" 
+                              StrokeThickness="1.8" 
+                              Visibility="Collapsed" 
+                              HorizontalAlignment="Center" 
+                              VerticalAlignment="Center"/>
+                    </Border>
+                    <ContentPresenter x:Name="IconPresenter" ContentSource="Icon" Width="16" Height="16" VerticalAlignment="Center" HorizontalAlignment="Center"/>
+                    
+                    <ContentPresenter Grid.Column="1" 
+                                      ContentSource="Header" 
+                                      RecognizesAccessKey="True" 
+                                      VerticalAlignment="Center" 
+                                      Margin="6,0,16,0" 
+                                      SnapsToDevicePixels="True"/>
+                    
+                    <TextBlock Grid.Column="2" 
+                               Text="{TemplateBinding InputGestureText}" 
+                               Foreground="{DynamicResource MutedForegroundBrush}" 
+                               VerticalAlignment="Center" 
+                               Margin="16,0,4,0"/>
+                </Grid>
+            </Border>
+            <ControlTemplate.Triggers>
+                <Trigger Property="IsChecked" Value="True">
+                    <Setter TargetName="Glyph" Property="Visibility" Value="Visible"/>
+                </Trigger>
+                <Trigger Property="Icon" Value="{x:Null}">
+                    <Setter TargetName="IconPresenter" Property="Visibility" Value="Collapsed"/>
+                </Trigger>
+                <Trigger Property="IsHighlighted" Value="True">
+                    <Setter TargetName="TemplateRoot" Property="Background" Value="{DynamicResource MenuHoverBackgroundBrush}"/>
+                    <Setter Property="Foreground" Value="{DynamicResource MenuHoverForegroundBrush}"/>
+                </Trigger>
+                <Trigger Property="IsEnabled" Value="False">
+                    <Setter Property="Foreground" Value="{DynamicResource MutedForegroundBrush}"/>
+                </Trigger>
+            </ControlTemplate.Triggers>
+        </ControlTemplate>
+
+        <!-- 4. SubmenuHeaderTemplate (for dropdown items opening submenus, e.g. View Mode) -->
+        <ControlTemplate x:Key="SubmenuHeaderTemplate" TargetType="{x:Type MenuItem}">
+            <Grid SnapsToDevicePixels="True">
+                <Border x:Name="TemplateRoot" 
+                        Background="Transparent" 
+                        BorderThickness="0" 
+                        Padding="6,4,6,4" 
+                        CornerRadius="3" 
+                        SnapsToDevicePixels="True">
+                    <Grid>
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="20" SharedSizeGroup="MenuItemIconColumnGroup"/>
+                            <ColumnDefinition Width="*"/>
+                            <ColumnDefinition Width="Auto" SharedSizeGroup="MenuItemGestureColumnGroup"/>
+                            <ColumnDefinition Width="14"/>
+                        </Grid.ColumnDefinitions>
+                        <ContentPresenter x:Name="IconPresenter" ContentSource="Icon" Width="16" Height="16" VerticalAlignment="Center" HorizontalAlignment="Center"/>
+                        <ContentPresenter Grid.Column="1" 
+                                          ContentSource="Header" 
+                                          RecognizesAccessKey="True" 
+                                          VerticalAlignment="Center" 
+                                          Margin="6,0,16,0" 
+                                          SnapsToDevicePixels="True"/>
+                        <TextBlock Grid.Column="2" 
+                                   Text="{TemplateBinding InputGestureText}" 
+                                   Foreground="{DynamicResource MutedForegroundBrush}" 
+                                   VerticalAlignment="Center" 
+                                   Margin="16,0,4,0"/>
+                        <Path Grid.Column="3" 
+                              Data="M 0,0 L 4,4 L 0,8" 
+                              Stroke="{Binding Foreground, RelativeSource={RelativeSource AncestorType=MenuItem}}" 
+                              StrokeThickness="1.4" 
+                              VerticalAlignment="Center" 
+                              HorizontalAlignment="Right" 
+                              Margin="0,0,4,0"/>
+                    </Grid>
+                </Border>
+                <Popup x:Name="PART_Popup" 
+                       AllowsTransparency="True" 
+                       Focusable="False" 
+                       IsOpen="{Binding IsSubmenuOpen, RelativeSource={RelativeSource TemplatedParent}}" 
+                       Placement="Right" 
+                       PopupAnimation="Fade">
+                    <Border x:Name="SubMenuBorder" 
+                            Background="{DynamicResource MenuPopupBackgroundBrush}" 
+                            BorderBrush="{DynamicResource MenuPopupBorderBrush}" 
+                            BorderThickness="1" 
+                            Padding="3" 
+                            CornerRadius="4"
+                            SnapsToDevicePixels="True">
+                        <ScrollViewer x:Name="SubMenuScrollViewer" CanContentScroll="True">
+                            <ItemsPresenter x:Name="ItemsPresenter" 
+                                            KeyboardNavigation.DirectionalNavigation="Cycle" 
+                                            KeyboardNavigation.TabNavigation="Cycle" 
+                                            Grid.IsSharedSizeScope="True" 
+                                            SnapsToDevicePixels="True"/>
+                        </ScrollViewer>
+                    </Border>
+                </Popup>
+            </Grid>
+            <ControlTemplate.Triggers>
+                <Trigger Property="Icon" Value="{x:Null}">
+                    <Setter TargetName="IconPresenter" Property="Visibility" Value="Collapsed"/>
+                </Trigger>
+                <Trigger Property="IsHighlighted" Value="True">
+                    <Setter TargetName="TemplateRoot" Property="Background" Value="{DynamicResource MenuHoverBackgroundBrush}"/>
+                    <Setter Property="Foreground" Value="{DynamicResource MenuHoverForegroundBrush}"/>
+                </Trigger>
+                <Trigger Property="IsSubmenuOpen" Value="True">
+                    <Setter TargetName="TemplateRoot" Property="Background" Value="{DynamicResource MenuHoverBackgroundBrush}"/>
+                    <Setter Property="Foreground" Value="{DynamicResource MenuHoverForegroundBrush}"/>
+                </Trigger>
+                <Trigger Property="IsEnabled" Value="False">
+                    <Setter Property="Foreground" Value="{DynamicResource MutedForegroundBrush}"/>
+                </Trigger>
+            </ControlTemplate.Triggers>
+        </ControlTemplate>
+
+        <!-- General MenuItem Style routing to templates based on Role -->
+        <Style TargetType="{x:Type MenuItem}">
+            <Setter Property="Background" Value="Transparent"/>
+            <Setter Property="Foreground" Value="{DynamicResource MenuForegroundBrush}"/>
+            <Setter Property="FontFamily" Value="Segoe UI, sans-serif"/>
+            <Setter Property="FontSize" Value="12"/>
+            <Setter Property="Template" Value="{StaticResource SubmenuItemTemplate}"/>
+            <Style.Triggers>
+                <Trigger Property="Role" Value="TopLevelHeader">
+                    <Setter Property="Template" Value="{StaticResource TopLevelHeaderTemplate}"/>
+                </Trigger>
+                <Trigger Property="Role" Value="TopLevelItem">
+                    <Setter Property="Template" Value="{StaticResource TopLevelItemTemplate}"/>
+                </Trigger>
+                <Trigger Property="Role" Value="SubmenuHeader">
+                    <Setter Property="Template" Value="{StaticResource SubmenuHeaderTemplate}"/>
+                </Trigger>
+                <Trigger Property="Role" Value="SubmenuItem">
+                    <Setter Property="Template" Value="{StaticResource SubmenuItemTemplate}"/>
+                </Trigger>
+            </Style.Triggers>
+        </Style>
+
+        <!-- Custom ContextMenu Style (eliminates Aero2 white glare & unstyled icon gutter) -->
+        <Style TargetType="{x:Type ContextMenu}">
+            <Setter Property="Background" Value="{DynamicResource MenuPopupBackgroundBrush}"/>
+            <Setter Property="Foreground" Value="{DynamicResource MenuForegroundBrush}"/>
+            <Setter Property="BorderBrush" Value="{DynamicResource MenuPopupBorderBrush}"/>
+            <Setter Property="BorderThickness" Value="1"/>
+            <Setter Property="Padding" Value="3"/>
+            <Setter Property="Grid.IsSharedSizeScope" Value="True"/>
+            <Setter Property="SnapsToDevicePixels" Value="True"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="{x:Type ContextMenu}">
+                        <Border Background="{TemplateBinding Background}"
+                                BorderBrush="{TemplateBinding BorderBrush}"
+                                BorderThickness="{TemplateBinding BorderThickness}"
+                                Padding="{TemplateBinding Padding}"
+                                CornerRadius="4"
+                                SnapsToDevicePixels="True">
+                            <ScrollViewer CanContentScroll="True">
+                                <ItemsPresenter KeyboardNavigation.DirectionalNavigation="Cycle" 
+                                                SnapsToDevicePixels="True"/>
+                            </ScrollViewer>
+                        </Border>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
+        <!-- Custom Separator Style -->
+        <Style TargetType="{x:Type Separator}">
+            <Setter Property="Height" Value="1"/>
+            <Setter Property="Margin" Value="4,3,4,3"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="{x:Type Separator}">
+                        <Border Background="{DynamicResource MenuSeparatorBrush}" Height="1" SnapsToDevicePixels="True"/>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
         </Style>
     </Application.Resources>
 </Application>

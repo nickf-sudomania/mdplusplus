@@ -27,6 +27,38 @@ namespace MDPlus.Models
         private double _zoom = 100.0;
         private string _encodingName = "UTF-8";
         private string _lineEndingName = "CRLF";
+        private bool _isDirty;
+
+        public event EventHandler? DirtyStateChanged;
+
+        public bool IsDirty
+        {
+            get => _isDirty;
+            set
+            {
+                if (_isDirty != value)
+                {
+                    _isDirty = value;
+                    OnPropertyChanged();
+                    OnPropertyChanged(nameof(DisplayTitle));
+                    OnPropertyChanged(nameof(TabHeaderTitle));
+                    DirtyStateChanged?.Invoke(this, EventArgs.Empty);
+                }
+            }
+        }
+
+        public string DisplayTitle => IsDirty ? $"{FileName} *" : FileName;
+        public string TabHeaderTitle => DisplayTitle;
+
+        public void MarkClean()
+        {
+            IsDirty = false;
+        }
+
+        public void MarkDirty()
+        {
+            IsDirty = true;
+        }
 
         public string FilePath
         {
@@ -39,6 +71,8 @@ namespace MDPlus.Models
                     OnPropertyChanged();
                     OnPropertyChanged(nameof(FileName));
                     OnPropertyChanged(nameof(DirectoryName));
+                    OnPropertyChanged(nameof(DisplayTitle));
+                    OnPropertyChanged(nameof(TabHeaderTitle));
                 }
             }
         }
@@ -56,6 +90,8 @@ namespace MDPlus.Models
                     _title = value;
                     OnPropertyChanged();
                     OnPropertyChanged(nameof(FileName));
+                    OnPropertyChanged(nameof(DisplayTitle));
+                    OnPropertyChanged(nameof(TabHeaderTitle));
                 }
             }
         }
