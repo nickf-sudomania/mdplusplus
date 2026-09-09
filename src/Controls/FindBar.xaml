@@ -1,0 +1,47 @@
+<UserControl x:Class="MDPlus.Controls.FindBar"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006" 
+             xmlns:d="http://schemas.microsoft.com/expression/blend/2008" 
+             mc:Ignorable="d" 
+             Height="38">
+    <Border Name="OuterBorder" Background="#2d2d30" BorderBrush="#3f3f46" BorderThickness="0,1,0,1" Padding="12,4,12,4">
+        <Grid VerticalAlignment="Center">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="Auto" />
+                <ColumnDefinition Width="220" />
+                <ColumnDefinition Width="Auto" />
+                <ColumnDefinition Width="Auto" />
+                <ColumnDefinition Width="Auto" />
+                <ColumnDefinition Width="Auto" />
+                <ColumnDefinition Width="*" />
+                <ColumnDefinition Width="Auto" />
+            </Grid.ColumnDefinitions>
+
+            <TextBlock Grid.Column="0" Text="🔍" VerticalAlignment="Center" Margin="0,0,8,0" FontSize="13" Foreground="#999999"/>
+
+            <TextBox Name="FindTextBox" Grid.Column="1" Height="26" VerticalContentAlignment="Center" 
+                     Padding="6,0,6,0" FontSize="13" Background="#1e1e1e" Foreground="#ffffff" 
+                     BorderBrush="#555555" BorderThickness="1"
+                     TextChanged="FindTextBox_TextChanged" KeyDown="FindTextBox_KeyDown" />
+
+            <TextBlock Name="MatchCountText" Grid.Column="2" Text="" VerticalAlignment="Center" 
+                       Margin="10,0,10,0" FontSize="12" Foreground="#888888"/>
+
+            <Button Name="PreviousButton" Grid.Column="3" Content="▲ Previous" Height="26" Padding="8,0,8,0" 
+                    Margin="2,0,2,0" FontSize="12" Click="PreviousButton_Click" Cursor="Hand"
+                    Background="#3e3e42" Foreground="#cccccc" BorderThickness="1" BorderBrush="#555555"/>
+
+            <Button Name="NextButton" Grid.Column="4" Content="▼ Next" Height="26" Padding="8,0,8,0" 
+                    Margin="2,0,8,0" FontSize="12" Click="NextButton_Click" Cursor="Hand"
+                    Background="#3e3e42" Foreground="#cccccc" BorderThickness="1" BorderBrush="#555555"/>
+
+            <CheckBox Name="MatchCaseCheckBox" Grid.Column="5" Content="Match Case" VerticalAlignment="Center" 
+                      FontSize="12" Foreground="#cccccc" Margin="4,0,8,0" Checked="MatchCase_Changed" Unchecked="MatchCase_Changed"/>
+
+            <Button Name="CloseButton" Grid.Column="7" Content="✕" Width="26" Height="26" 
+                    Click="CloseButton_Click" Cursor="Hand" ToolTip="Close (Esc)"
+                    Background="Transparent" Foreground="#aaaaaa" BorderThickness="0" FontWeight="Bold" FontSize="13"/>
+        </Grid>
+    </Border>
+</UserControl>

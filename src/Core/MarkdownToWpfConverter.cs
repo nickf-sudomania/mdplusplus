@@ -1,0 +1,915 @@
+using System;
+using System.Collections.Generic;
+using System.Diagnostics;
+using System.IO;
+using System.Windows;
+using System.Windows.Controls;
+using System.Windows.Documents;
+using System.Windows.Media;
+using System.Windows.Media.Imaging;
+
+namespace MDPlus.Core
+{
+    public class MarkdownToWpfConverter
+    {
+        private readonly string _baseDirectory;
+        private readonly bool _isDark;
+
+        // Theme colors
+        private readonly SolidColorBrush _textBrush;
+        private readonly SolidColorBrush _headingBrush;
+        private readonly SolidColorBrush _mutedBrush;
+        private readonly SolidColorBrush _borderBrush;
+        private readonly SolidColorBrush _codeBgBrush;
+        private readonly SolidColorBrush _tableHeaderBg;
+        private readonly SolidColorBrush _tableAltRowBg;
+        private readonly SolidColorBrush _accentBrush;
+        private readonly SolidColorBrush _linkBrush;
+
+        public event EventHandler<string>? AnchorNavigationRequested;
+        public event EventHandler<string>? FileNavigationRequested;
+
+        public MarkdownToWpfConverter(string baseDirectory, bool isDark)
+        {
+            _baseDirectory = baseDirectory;
+            _isDark = isDark;
+
+            if (_isDark)
+            {
+                _textBrush = new SolidColorBrush(Color.FromRgb(230, 237, 243));      // #e6edf3
+                _headingBrush = new SolidColorBrush(Color.FromRgb(240, 246, 252));   // #f0f6fc
+                _mutedBrush = new SolidColorBrush(Color.FromRgb(139, 148, 158));     // #8b949e
+                _borderBrush = new SolidColorBrush(Color.FromRgb(48, 54, 61));       // #30363d
+                _codeBgBrush = new SolidColorBrush(Color.FromRgb(22, 27, 34));       // #161b22
+                _tableHeaderBg = new SolidColorBrush(Color.FromRgb(22, 27, 34));     // #161b22
+                _tableAltRowBg = new SolidColorBrush(Color.FromRgb(25, 30, 37));     // #191e25
+                _accentBrush = new SolidColorBrush(Color.FromRgb(88, 166, 255));     // #58a6ff
+                _linkBrush = new SolidColorBrush(Color.FromRgb(88, 166, 255));       // #58a6ff
+            }
+            else
+            {
+                _textBrush = new SolidColorBrush(Color.FromRgb(36, 41, 47));         // #24292f
+                _headingBrush = new SolidColorBrush(Color.FromRgb(31, 35, 40));      // #1f2328
+                _mutedBrush = new SolidColorBrush(Color.FromRgb(101, 109, 118));     // #656d76
+                _borderBrush = new SolidColorBrush(Color.FromRgb(208, 215, 222));    // #d0d7de
+                _codeBgBrush = new SolidColorBrush(Color.FromRgb(246, 248, 250));    // #f6f8fa
+                _tableHeaderBg = new SolidColorBrush(Color.FromRgb(246, 248, 250));  // #f6f8fa
+                _tableAltRowBg = new SolidColorBrush(Color.FromRgb(251, 252, 253));  // #fbfcfd
+                _accentBrush = new SolidColorBrush(Color.FromRgb(9, 105, 218));      // #0969da
+                _linkBrush = new SolidColorBrush(Color.FromRgb(9, 105, 218));        // #0969da
+            }
+
+            _textBrush.Freeze();
+            _headingBrush.Freeze();
+            _mutedBrush.Freeze();
+            _borderBrush.Freeze();
+            _codeBgBrush.Freeze();
+            _tableHeaderBg.Freeze();
+            _tableAltRowBg.Freeze();
+            _accentBrush.Freeze();
+            _linkBrush.Freeze();
+        }
+
+        public FlowDocument Convert(MarkdownDocument doc)
+        {
+            var flowDoc = new FlowDocument
+            {
+                FontFamily = new FontFamily("Segoe UI Variable Text, Segoe UI, -apple-system, sans-serif"),
+                FontSize = 15,
+                Foreground = _textBrush,
+                Background = Brushes.Transparent,
+                PagePadding = new Thickness(48, 32, 48, 48),
+                LineHeight = 24,
+                IsHyphenationEnabled = false,
+                ColumnWidth = double.PositiveInfinity // Prevent multi-column layout on wide screens
+            };
+
+            foreach (var block in doc.Blocks)
+            {
+                var wpfBlock = ConvertBlock(block);
+                if (wpfBlock != null)
+                {
+                    flowDoc.Blocks.Add(wpfBlock);
+                }
+            }
+
+            return flowDoc;
+        }
+
+        private Block? ConvertBlock(MarkdownBlock block)
+        {
+            switch (block)
+            {
+                case FrontmatterBlock fm:
+                    return ConvertFrontmatter(fm);
+
+                case HeadingBlock heading:
+                    return ConvertHeading(heading);
+
+                case ParagraphBlock para:
+                    return ConvertParagraph(para);
+
+                case BlockquoteBlock quote:
+                    return ConvertBlockquote(quote);
+
+                case CodeBlock code:
+                    return ConvertCodeBlock(code);
+
+                case TableBlock table:
+                    return ConvertTable(table);
+
+                case ListBlock list:
+                    return ConvertList(list);
+
+                case ThematicBreakBlock _:
+                    return ConvertThematicBreak();
+
+                default:
+                    return null;
+            }
+        }
+
+        private Block ConvertFrontmatter(FrontmatterBlock fm)
+        {
+            var grid = new Grid
+            {
+                Margin = new Thickness(0, 0, 0, 24),
+                Background = _codeBgBrush
+            };
+
+            var border = new Border
+            {
+                BorderBrush = _borderBrush,
+                BorderThickness = new Thickness(1),
+                CornerRadius = new CornerRadius(6),
+                Padding = new Thickness(16, 12, 16, 12),
+                Background = _codeBgBrush
+            };
+
+            var sp = new StackPanel();
+            var titleText = new TextBlock
+            {
+                Text = "METADATA",
+                FontWeight = FontWeights.Bold,
+                FontSize = 11,
+                Foreground = _mutedBrush,
+                Margin = new Thickness(0, 0, 0, 8)
+            };
+            sp.Children.Add(titleText);
+
+            foreach (var kvp in fm.Metadata)
+            {
+                var rowSp = new StackPanel { Orientation = Orientation.Horizontal, Margin = new Thickness(0, 2, 0, 2) };
+                var keyText = new TextBlock
+                {
+                    Text = kvp.Key + ": ",
+                    FontWeight = FontWeights.SemiBold,
+                    Foreground = _accentBrush,
+                    FontSize = 13
+                };
+                var valText = new TextBlock
+                {
+                    Text = kvp.Value,
+                    Foreground = _textBrush,
+                    FontSize = 13
+                };
+                rowSp.Children.Add(keyText);
+                rowSp.Children.Add(valText);
+                sp.Children.Add(rowSp);
+            }
+
+            border.Child = sp;
+            return new BlockUIContainer(border) { Margin = new Thickness(0, 0, 0, 16) };
+        }
+
+        private Block ConvertHeading(HeadingBlock heading)
+        {
+            var p = new Paragraph
+            {
+                Tag = heading.Anchor,
+                FontWeight = FontWeights.SemiBold,
+                Foreground = _headingBrush
+            };
+
+            switch (heading.Level)
+            {
+                case 1:
+                    p.FontSize = 26;
+                    p.FontWeight = FontWeights.Bold;
+                    p.Margin = new Thickness(0, 28, 0, 14);
+                    p.BorderBrush = _borderBrush;
+                    p.BorderThickness = new Thickness(0, 0, 0, 1);
+                    p.Padding = new Thickness(0, 0, 0, 8);
+                    break;
+                case 2:
+                    p.FontSize = 20;
+                    p.FontWeight = FontWeights.Bold;
+                    p.Margin = new Thickness(0, 24, 0, 12);
+                    p.BorderBrush = _borderBrush;
+                    p.BorderThickness = new Thickness(0, 0, 0, 1);
+                    p.Padding = new Thickness(0, 0, 0, 6);
+                    break;
+                case 3:
+                    p.FontSize = 17;
+                    p.Margin = new Thickness(0, 20, 0, 10);
+                    break;
+                case 4:
+                    p.FontSize = 15;
+                    p.Margin = new Thickness(0, 16, 0, 8);
+                    break;
+                case 5:
+                    p.FontSize = 13.5;
+                    p.Foreground = _mutedBrush;
+                    p.Margin = new Thickness(0, 12, 0, 6);
+                    break;
+                case 6:
+                    p.FontSize = 12.5;
+                    p.FontStyle = FontStyles.Italic;
+                    p.Foreground = _mutedBrush;
+                    p.Margin = new Thickness(0, 10, 0, 4);
+                    break;
+            }
+
+            foreach (var inline in heading.Inlines)
+            {
+                var wpfInline = ConvertInline(inline);
+                if (wpfInline != null) p.Inlines.Add(wpfInline);
+            }
+
+            return p;
+        }
+
+        private Block ConvertParagraph(ParagraphBlock para)
+        {
+            var p = new Paragraph
+            {
+                Margin = new Thickness(0, 0, 0, 14),
+                LineHeight = 24
+            };
+
+            foreach (var inline in para.Inlines)
+            {
+                var wpfInline = ConvertInline(inline);
+                if (wpfInline != null) p.Inlines.Add(wpfInline);
+            }
+
+            return p;
+        }
+
+        private Block ConvertBlockquote(BlockquoteBlock quote)
+        {
+            if (quote.Callout != CalloutType.None)
+            {
+                return ConvertCallout(quote);
+            }
+
+            var section = new Section
+            {
+                BorderBrush = _borderBrush,
+                BorderThickness = new Thickness(3.5, 0, 0, 0),
+                Padding = new Thickness(16, 4, 0, 4),
+                Margin = new Thickness(0, 8, 0, 16)
+            };
+
+            foreach (var childBlock in quote.Blocks)
+            {
+                var converted = ConvertBlock(childBlock);
+                if (converted != null)
+                {
+                    if (converted is Paragraph p)
+                    {
+                        p.Foreground = _mutedBrush;
+                    }
+                    section.Blocks.Add(converted);
+                }
+            }
+
+            return section;
+        }
+
+        private Block ConvertCallout(BlockquoteBlock quote)
+        {
+            Color calloutBorderColor;
+            Color calloutBgColor;
+            string icon;
+
+            switch (quote.Callout)
+            {
+                case CalloutType.Tip:
+                    calloutBorderColor = _isDark ? Color.FromRgb(63, 185, 80) : Color.FromRgb(26, 127, 55);
+                    calloutBgColor = _isDark ? Color.FromArgb(30, 46, 160, 67) : Color.FromArgb(40, 218, 251, 225);
+                    icon = "💡";
+                    break;
+                case CalloutType.Important:
+                    calloutBorderColor = _isDark ? Color.FromRgb(163, 113, 247) : Color.FromRgb(130, 80, 223);
+                    calloutBgColor = _isDark ? Color.FromArgb(30, 130, 80, 223) : Color.FromArgb(35, 237, 228, 255);
+                    icon = "📌";
+                    break;
+                case CalloutType.Warning:
+                    calloutBorderColor = _isDark ? Color.FromRgb(210, 153, 34) : Color.FromRgb(154, 103, 0);
+                    calloutBgColor = _isDark ? Color.FromArgb(30, 210, 153, 34) : Color.FromArgb(40, 255, 248, 197);
+                    icon = "⚠️";
+                    break;
+                case CalloutType.Caution:
+                    calloutBorderColor = _isDark ? Color.FromRgb(248, 81, 73) : Color.FromRgb(207, 34, 46);
+                    calloutBgColor = _isDark ? Color.FromArgb(30, 248, 81, 73) : Color.FromArgb(40, 255, 235, 233);
+                    icon = "🚫";
+                    break;
+                case CalloutType.Note:
+                default:
+                    calloutBorderColor = _isDark ? Color.FromRgb(88, 166, 255) : Color.FromRgb(9, 105, 218);
+                    calloutBgColor = _isDark ? Color.FromArgb(30, 56, 139, 253) : Color.FromArgb(40, 221, 244, 255);
+                    icon = "ℹ️";
+                    break;
+            }
+
+            var container = new Border
+            {
+                BorderBrush = new SolidColorBrush(calloutBorderColor),
+                BorderThickness = new Thickness(4, 0, 0, 0),
+                Background = new SolidColorBrush(calloutBgColor),
+                CornerRadius = new CornerRadius(0, 4, 4, 0),
+                Padding = new Thickness(16, 12, 16, 12),
+                Margin = new Thickness(0, 8, 0, 16)
+            };
+
+            var sp = new StackPanel();
+
+            // Header with icon and title
+            var headerSp = new StackPanel { Orientation = Orientation.Horizontal, Margin = new Thickness(0, 0, 0, 6) };
+            var iconTb = new TextBlock
+            {
+                Text = icon + " ",
+                FontSize = 14,
+                VerticalAlignment = VerticalAlignment.Center
+            };
+            var titleTb = new TextBlock
+            {
+                Text = quote.CalloutTitle,
+                FontWeight = FontWeights.Bold,
+                FontSize = 14,
+                Foreground = new SolidColorBrush(calloutBorderColor),
+                VerticalAlignment = VerticalAlignment.Center
+            };
+            headerSp.Children.Add(iconTb);
+            headerSp.Children.Add(titleTb);
+            sp.Children.Add(headerSp);
+
+            // Body
+            foreach (var childBlock in quote.Blocks)
+            {
+                if (childBlock is ParagraphBlock pb)
+                {
+                    var tb = new TextBlock
+                    {
+                        TextWrapping = TextWrapping.Wrap,
+                        LineHeight = 22,
+                        Foreground = _textBrush,
+                        Margin = new Thickness(0, 2, 0, 4)
+                    };
+                    foreach (var inline in pb.Inlines)
+                    {
+                        var wpfInline = ConvertInline(inline);
+                        if (wpfInline != null) tb.Inlines.Add(wpfInline);
+                    }
+                    sp.Children.Add(tb);
+                }
+            }
+
+            container.Child = sp;
+            return new BlockUIContainer(container);
+        }
+
+        private Block ConvertCodeBlock(CodeBlock code)
+        {
+            var outerBorder = new Border
+            {
+                Background = _codeBgBrush,
+                BorderBrush = _borderBrush,
+                BorderThickness = new Thickness(1),
+                CornerRadius = new CornerRadius(6),
+                Margin = new Thickness(0, 8, 0, 16)
+            };
+
+            var mainGrid = new Grid();
+            mainGrid.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
+            mainGrid.RowDefinitions.Add(new RowDefinition { Height = new GridLength(1, GridUnitType.Star) });
+
+            // Header row with language tag and copy button
+            var headerGrid = new Grid
+            {
+                Background = _isDark ? new SolidColorBrush(Color.FromRgb(30, 35, 42)) : new SolidColorBrush(Color.FromRgb(235, 238, 242)),
+                Height = 28
+            };
+
+            string displayLang = string.IsNullOrEmpty(code.Language) ? "TEXT" : code.Language.ToUpperInvariant();
+            var langLabel = new TextBlock
+            {
+                Text = displayLang,
+                FontSize = 11,
+                FontWeight = FontWeights.SemiBold,
+                Foreground = _mutedBrush,
+                VerticalAlignment = VerticalAlignment.Center,
+                Margin = new Thickness(12, 0, 0, 0),
+                HorizontalAlignment = HorizontalAlignment.Left
+            };
+            headerGrid.Children.Add(langLabel);
+
+            var copyBtn = new Button
+            {
+                Content = "Copy",
+                FontSize = 11,
+                Padding = new Thickness(8, 2, 8, 2),
+                Margin = new Thickness(0, 0, 8, 0),
+                HorizontalAlignment = HorizontalAlignment.Right,
+                VerticalAlignment = VerticalAlignment.Center,
+                Cursor = System.Windows.Input.Cursors.Hand,
+                Background = Brushes.Transparent,
+                BorderThickness = new Thickness(1),
+                BorderBrush = _borderBrush,
+                Foreground = _mutedBrush
+            };
+
+            string rawCode = code.Code;
+            copyBtn.Click += (s, e) =>
+            {
+                try
+                {
+                    if (!string.IsNullOrEmpty(rawCode))
+                    {
+                        Clipboard.SetText(rawCode);
+                    }
+                    copyBtn.Content = "Copied!";
+                    var timer = new System.Windows.Threading.DispatcherTimer { Interval = TimeSpan.FromSeconds(2) };
+                    timer.Tick += (ts, te) =>
+                    {
+                        copyBtn.Content = "Copy";
+                        timer.Stop();
+                    };
+                    timer.Start();
+                }
+                catch
+                {
+                    // Clipboard error handle
+                }
+            };
+            headerGrid.Children.Add(copyBtn);
+            Grid.SetRow(headerGrid, 0);
+            mainGrid.Children.Add(headerGrid);
+
+            // Code content with syntax highlighting
+            var textBlock = new TextBlock
+            {
+                FontFamily = new FontFamily("Cascadia Code, Consolas, Courier New, monospace"),
+                FontSize = 13,
+                LineHeight = 20,
+                Padding = new Thickness(12),
+                TextWrapping = TextWrapping.Wrap
+            };
+
+            var tokens = SyntaxHighlighter.Highlight(code.Code, code.Language);
+            foreach (var token in tokens)
+            {
+                var run = new Run(token.Text)
+                {
+                    Foreground = SyntaxHighlighter.GetTokenBrush(token.Type, _isDark)
+                };
+                textBlock.Inlines.Add(run);
+            }
+
+            Grid.SetRow(textBlock, 1);
+            mainGrid.Children.Add(textBlock);
+
+            outerBorder.Child = mainGrid;
+            return new BlockUIContainer(outerBorder);
+        }
+
+        private Block ConvertTable(TableBlock table)
+        {
+            var wpfTable = new Table
+            {
+                CellSpacing = 0,
+                Margin = new Thickness(0, 8, 0, 18),
+                BorderBrush = _borderBrush,
+                BorderThickness = new Thickness(1)
+            };
+
+            int colCount = Math.Max(table.Header.Cells.Count, table.Alignments.Count);
+            if (colCount == 0) colCount = 1;
+
+            for (int i = 0; i < colCount; i++)
+            {
+                wpfTable.Columns.Add(new TableColumn());
+            }
+
+            // Header Group
+            var headerGroup = new TableRowGroup();
+            var headerRow = new System.Windows.Documents.TableRow
+            {
+                Background = _tableHeaderBg
+            };
+
+            for (int i = 0; i < colCount; i++)
+            {
+                var cellText = i < table.Header.Cells.Count ? table.Header.Cells[i] : new TableCell();
+                var align = i < table.Alignments.Count ? table.Alignments[i] : ColumnAlignment.Left;
+
+                var p = new Paragraph
+                {
+                    FontWeight = FontWeights.SemiBold,
+                    Foreground = _headingBrush,
+                    TextAlignment = ConvertAlignment(align),
+                    Margin = new Thickness(0)
+                };
+
+                foreach (var inline in cellText.Inlines)
+                {
+                    var wpfInline = ConvertInline(inline);
+                    if (wpfInline != null) p.Inlines.Add(wpfInline);
+                }
+
+                var cell = new System.Windows.Documents.TableCell(p)
+                {
+                    Padding = new Thickness(12, 10, 12, 10),
+                    BorderBrush = _borderBrush,
+                    BorderThickness = new Thickness(0, 0, i == colCount - 1 ? 0 : 1, 2)
+                };
+                headerRow.Cells.Add(cell);
+            }
+            headerGroup.Rows.Add(headerRow);
+            wpfTable.RowGroups.Add(headerGroup);
+
+            // Body Group
+            if (table.Rows.Count > 0)
+            {
+                var bodyGroup = new TableRowGroup();
+                for (int r = 0; r < table.Rows.Count; r++)
+                {
+                    var dataRow = table.Rows[r];
+                    var wpfRow = new System.Windows.Documents.TableRow
+                    {
+                        Background = (r % 2 == 1) ? _tableAltRowBg : Brushes.Transparent
+                    };
+
+                    for (int i = 0; i < colCount; i++)
+                    {
+                        var cellText = i < dataRow.Cells.Count ? dataRow.Cells[i] : new TableCell();
+                        var align = i < table.Alignments.Count ? table.Alignments[i] : ColumnAlignment.Left;
+
+                        var p = new Paragraph
+                        {
+                            TextAlignment = ConvertAlignment(align),
+                            Margin = new Thickness(0)
+                        };
+
+                        foreach (var inline in cellText.Inlines)
+                        {
+                            var wpfInline = ConvertInline(inline);
+                            if (wpfInline != null) p.Inlines.Add(wpfInline);
+                        }
+
+                        var cell = new System.Windows.Documents.TableCell(p)
+                        {
+                            Padding = new Thickness(12, 8, 12, 8),
+                            BorderBrush = _borderBrush,
+                            BorderThickness = new Thickness(0, 0, i == colCount - 1 ? 0 : 1, 1)
+                        };
+                        wpfRow.Cells.Add(cell);
+                    }
+                    bodyGroup.Rows.Add(wpfRow);
+                }
+                wpfTable.RowGroups.Add(bodyGroup);
+            }
+
+            return wpfTable;
+        }
+
+        private TextAlignment ConvertAlignment(ColumnAlignment align)
+        {
+            return align switch
+            {
+                ColumnAlignment.Center => TextAlignment.Center,
+                ColumnAlignment.Right => TextAlignment.Right,
+                _ => TextAlignment.Left
+            };
+        }
+
+        private Block ConvertList(ListBlock list)
+        {
+            var wpfList = new List
+            {
+                MarkerStyle = list.IsOrdered ? TextMarkerStyle.Decimal : TextMarkerStyle.Disc,
+                StartIndex = list.StartNumber,
+                Margin = new Thickness(0, 4, 0, 14),
+                Padding = new Thickness(24, 0, 0, 0)
+            };
+
+            foreach (var item in list.Items)
+            {
+                var wpfItem = new ListItem();
+
+                if (item.IsTask)
+                {
+                    // Checkbox task item
+                    wpfList.MarkerStyle = TextMarkerStyle.None;
+                    var p = new Paragraph { Margin = new Thickness(0, 2, 0, 2) };
+
+                    var checkBox = new CheckBox
+                    {
+                        IsChecked = item.IsChecked,
+                        IsEnabled = true,
+                        Margin = new Thickness(-18, 0, 8, 0),
+                        VerticalAlignment = VerticalAlignment.Center
+                    };
+                    p.Inlines.Add(new InlineUIContainer(checkBox) { BaselineAlignment = BaselineAlignment.Center });
+
+                    foreach (var inline in item.Inlines)
+                    {
+                        var wpfInline = ConvertInline(inline);
+                        if (wpfInline != null)
+                        {
+                            if (item.IsChecked && wpfInline is Run run)
+                            {
+                                run.Foreground = _mutedBrush;
+                            }
+                            p.Inlines.Add(wpfInline);
+                        }
+                    }
+                    wpfItem.Blocks.Add(p);
+                }
+                else
+                {
+                    var p = new Paragraph { Margin = new Thickness(0, 2, 0, 2) };
+                    foreach (var inline in item.Inlines)
+                    {
+                        var wpfInline = ConvertInline(inline);
+                        if (wpfInline != null) p.Inlines.Add(wpfInline);
+                    }
+                    wpfItem.Blocks.Add(p);
+                }
+
+                foreach (var childBlock in item.Blocks)
+                {
+                    var converted = ConvertBlock(childBlock);
+                    if (converted != null) wpfItem.Blocks.Add(converted);
+                }
+
+                wpfList.ListItems.Add(wpfItem);
+            }
+
+            return wpfList;
+        }
+
+        private Block ConvertThematicBreak()
+        {
+            var line = new Border
+            {
+                Height = 1,
+                Background = _borderBrush,
+                Margin = new Thickness(0, 16, 0, 16),
+                HorizontalAlignment = HorizontalAlignment.Stretch
+            };
+            return new BlockUIContainer(line);
+        }
+
+        private Inline? ConvertInline(MarkdownInline inline)
+        {
+            switch (inline)
+            {
+                case TextInline text:
+                    return new Run(text.Text) { Foreground = _textBrush };
+
+                case BoldInline bold:
+                    var boldSpan = new Bold();
+                    foreach (var c in bold.Children)
+                    {
+                        var ci = ConvertInline(c);
+                        if (ci != null) boldSpan.Inlines.Add(ci);
+                    }
+                    return boldSpan;
+
+                case ItalicInline italic:
+                    var italicSpan = new Italic();
+                    foreach (var c in italic.Children)
+                    {
+                        var ci = ConvertInline(c);
+                        if (ci != null) italicSpan.Inlines.Add(ci);
+                    }
+                    return italicSpan;
+
+                case BoldItalicInline bi:
+                    var biSpan = new Bold(new Italic());
+                    var innerItalic = (Italic)biSpan.Inlines.FirstInline;
+                    foreach (var c in bi.Children)
+                    {
+                        var ci = ConvertInline(c);
+                        if (ci != null) innerItalic.Inlines.Add(ci);
+                    }
+                    return biSpan;
+
+                case StrikethroughInline strike:
+                    var strikeSpan = new Span();
+                    strikeSpan.TextDecorations.Add(TextDecorations.Strikethrough);
+                    foreach (var c in strike.Children)
+                    {
+                        var ci = ConvertInline(c);
+                        if (ci != null) strikeSpan.Inlines.Add(ci);
+                    }
+                    return strikeSpan;
+
+                case HighlightInline hl:
+                    var hlSpan = new Span
+                    {
+                        Background = _isDark ? new SolidColorBrush(Color.FromRgb(102, 85, 0)) : new SolidColorBrush(Color.FromRgb(255, 243, 198)),
+                        Foreground = _isDark ? new SolidColorBrush(Color.FromRgb(255, 230, 100)) : _textBrush
+                    };
+                    foreach (var c in hl.Children)
+                    {
+                        var ci = ConvertInline(c);
+                        if (ci != null) hlSpan.Inlines.Add(ci);
+                    }
+                    return hlSpan;
+
+                case CodeInline code:
+                    var codeBorder = new Border
+                    {
+                        Background = _codeBgBrush,
+                        BorderBrush = _borderBrush,
+                        BorderThickness = new Thickness(1),
+                        CornerRadius = new CornerRadius(3),
+                        Padding = new Thickness(5, 1, 5, 1),
+                        Margin = new Thickness(2, 0, 2, 0),
+                        VerticalAlignment = VerticalAlignment.Center
+                    };
+                    var codeText = new TextBlock
+                    {
+                        Text = code.Code,
+                        FontFamily = new FontFamily("Cascadia Code, Consolas, Courier New, monospace"),
+                        FontSize = 13,
+                        Foreground = _textBrush,
+                        VerticalAlignment = VerticalAlignment.Center
+                    };
+                    codeBorder.Child = codeText;
+                    return new InlineUIContainer(codeBorder) { BaselineAlignment = BaselineAlignment.Center };
+
+                case LinkInline link:
+                    var hyperlink = new Hyperlink
+                    {
+                        Foreground = _linkBrush,
+                        TextDecorations = null,
+                        Cursor = System.Windows.Input.Cursors.Hand,
+                        ToolTip = link.Url
+                    };
+
+                    if (!string.IsNullOrEmpty(link.Url))
+                    {
+                        if (Uri.TryCreate(link.Url, UriKind.RelativeOrAbsolute, out Uri? uri))
+                        {
+                            hyperlink.NavigateUri = uri;
+                        }
+                    }
+
+                    hyperlink.RequestNavigate += (s, e) =>
+                    {
+                        string target = e.Uri.OriginalString;
+                        if (target.StartsWith("#"))
+                        {
+                            AnchorNavigationRequested?.Invoke(this, target.Substring(1));
+                        }
+                        else if (target.EndsWith(".md", StringComparison.OrdinalIgnoreCase) ||
+                                 target.EndsWith(".markdown", StringComparison.OrdinalIgnoreCase) ||
+                                 target.EndsWith(".mdown", StringComparison.OrdinalIgnoreCase) ||
+                                 target.EndsWith(".mkd", StringComparison.OrdinalIgnoreCase))
+                        {
+                            string fullTargetPath = target;
+                            if (!System.IO.Path.IsPathRooted(fullTargetPath) && !string.IsNullOrEmpty(_baseDirectory))
+                            {
+                                fullTargetPath = System.IO.Path.Combine(_baseDirectory, target);
+                            }
+
+                            if (File.Exists(fullTargetPath))
+                            {
+                                FileNavigationRequested?.Invoke(this, fullTargetPath);
+                            }
+                            else
+                            {
+                                try
+                                {
+                                    Process.Start(new ProcessStartInfo(fullTargetPath) { UseShellExecute = true });
+                                }
+                                catch { }
+                            }
+                        }
+                        else
+                        {
+                            try
+                            {
+                                Process.Start(new ProcessStartInfo(target) { UseShellExecute = true });
+                            }
+                            catch
+                            {
+                                // Fail gracefully if browser fails
+                            }
+                        }
+                        e.Handled = true;
+                    };
+
+                    foreach (var c in link.Children)
+                    {
+                        var ci = ConvertInline(c);
+                        if (ci != null) hyperlink.Inlines.Add(ci);
+                    }
+                    return hyperlink;
+
+                case ImageInline img:
+                    return ConvertImageInline(img);
+
+                case LineBreakInline br:
+                    return br.IsHard ? (Inline)new LineBreak() : new Run(" ");
+
+                default:
+                    return null;
+            }
+        }
+
+        private Inline ConvertImageInline(ImageInline img)
+        {
+            string resolvedPath = Uri.UnescapeDataString(img.Url);
+
+            try
+            {
+                if (!Uri.IsWellFormedUriString(resolvedPath, UriKind.Absolute) && !System.IO.Path.IsPathRooted(resolvedPath))
+                {
+                    if (!string.IsNullOrEmpty(_baseDirectory))
+                    {
+                        resolvedPath = System.IO.Path.Combine(_baseDirectory, resolvedPath);
+                    }
+                }
+
+                if (File.Exists(resolvedPath))
+                {
+                    var bi = new BitmapImage();
+                    bi.BeginInit();
+                    bi.CacheOption = BitmapCacheOption.OnLoad;
+                    bi.UriSource = new Uri(resolvedPath, UriKind.Absolute);
+                    bi.EndInit();
+                    bi.Freeze();
+
+                    var imageControl = new Image
+                    {
+                        Source = bi,
+                        Stretch = Stretch.Uniform,
+                        MaxWidth = 800,
+                        Margin = new Thickness(0, 8, 0, 8)
+                    };
+
+                    if (!string.IsNullOrEmpty(img.Title))
+                    {
+                        imageControl.ToolTip = img.Title;
+                    }
+
+                    return new InlineUIContainer(imageControl) { BaselineAlignment = BaselineAlignment.Center };
+                }
+                else if (Uri.TryCreate(img.Url, UriKind.Absolute, out Uri? webUri) && (webUri.Scheme == Uri.UriSchemeHttp || webUri.Scheme == Uri.UriSchemeHttps))
+                {
+                    var bi = new BitmapImage();
+                    bi.BeginInit();
+                    bi.UriSource = webUri;
+                    bi.EndInit();
+
+                    var imageControl = new Image
+                    {
+                        Source = bi,
+                        Stretch = Stretch.Uniform,
+                        MaxWidth = 800,
+                        Margin = new Thickness(0, 8, 0, 8)
+                    };
+                    return new InlineUIContainer(imageControl) { BaselineAlignment = BaselineAlignment.Center };
+                }
+            }
+            catch
+            {
+                // Fallback on image load failure
+            }
+
+            // Fallback placeholder
+            var border = new Border
+            {
+                Background = _codeBgBrush,
+                BorderBrush = _borderBrush,
+                BorderThickness = new Thickness(1),
+                CornerRadius = new CornerRadius(4),
+                Padding = new Thickness(8, 4, 8, 4),
+                Margin = new Thickness(2, 0, 2, 0)
+            };
+            var placeholderText = new TextBlock
+            {
+                Text = "🖼 " + (string.IsNullOrEmpty(img.AltText) ? img.Url : img.AltText),
+                Foreground = _mutedBrush,
+                FontSize = 12
+            };
+            border.Child = placeholderText;
+            return new InlineUIContainer(border) { BaselineAlignment = BaselineAlignment.Center };
+        }
+    }
+}
