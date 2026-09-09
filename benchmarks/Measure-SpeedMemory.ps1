@@ -1,4 +1,4 @@
-﻿# MDPlus vs MarkText Empirical Performance Measurement Script
+# MDPlus vs MarkText Empirical Performance Measurement Script
 param(
     [string]$MdPlusPath = "$PSScriptRoot\..\dist\MDPlus.exe",
     [string]$MarkTextPath = "C:\Users\nickf\AppData\Local\Programs\MarkText\MarkText.exe",
@@ -62,6 +62,15 @@ function Get-Stats([double[]]$values) {
         [math]::Round(($sorted[$sorted.Length / 2 - 1] + $sorted[$sorted.Length / 2]) / 2.0, 2)
     }
     return [PSCustomObject]@{ Min = [math]::Round($min, 2); Max = [math]::Round($max, 2); Avg = $avg; Median = [math]::Round($med, 2) }
+}
+
+function Get-WarmStats([double[]]$values) {
+    if ($values.Length -le 1) {
+        return Get-Stats $values
+    }
+    # Exclude iteration 1 (cold start) so warm stats reflect pure steady-state runs
+    $warm = $values[1..($values.Length - 1)]
+    return Get-Stats $warm
 }
 
 function Measure-MdPlusLaunch([string]$filePath, [int]$count) {
@@ -129,29 +138,35 @@ function Measure-MarkTextLaunch([string]$filePath, [int]$count) {
 Write-Host ">>> STEP 2: Measuring Empty Process Launch Latency (to Window Ready)..." -ForegroundColor Yellow
 Write-Host "  Benchmarking MDPlus Launch ($Iterations runs)..."
 $mdPlusLaunchTimes = Measure-MdPlusLaunch "" $Iterations
-$mdPlusLaunchStats = Get-Stats $mdPlusLaunchTimes
+$mdPlusColdLaunch = $mdPlusLaunchTimes[0]
+$mdPlusWarmStats = Get-WarmStats $mdPlusLaunchTimes
 
 Write-Host "  Benchmarking MarkText Launch ($Iterations runs)..."
 $markTextLaunchTimes = Measure-MarkTextLaunch "" $Iterations
-$markTextLaunchStats = Get-Stats $markTextLaunchTimes
+$markTextColdLaunch = $markTextLaunchTimes[0]
+$markTextWarmStats = Get-WarmStats $markTextLaunchTimes
 
 Write-Host ">>> STEP 3: Measuring Small File Opening Latency ($SmallDoc)..." -ForegroundColor Yellow
 Write-Host "  Benchmarking MDPlus Small File Open ($Iterations runs)..."
 $mdPlusSmallDocTimes = Measure-MdPlusLaunch $SmallDoc $Iterations
-$mdPlusSmallDocStats = Get-Stats $mdPlusSmallDocTimes
+$mdPlusSmallCold = $mdPlusSmallDocTimes[0]
+$mdPlusSmallWarmStats = Get-WarmStats $mdPlusSmallDocTimes
 
 Write-Host "  Benchmarking MarkText Small File Open ($Iterations runs)..."
 $markTextSmallDocTimes = Measure-MarkTextLaunch $SmallDoc $Iterations
-$markTextSmallDocStats = Get-Stats $markTextSmallDocTimes
+$markTextSmallCold = $markTextSmallDocTimes[0]
+$markTextSmallWarmStats = Get-WarmStats $markTextSmallDocTimes
 
 Write-Host ">>> STEP 4: Measuring Large File Opening Latency ($LargeDoc)..." -ForegroundColor Yellow
 Write-Host "  Benchmarking MDPlus Large File Open ($Iterations runs)..."
 $mdPlusLargeDocTimes = Measure-MdPlusLaunch $LargeDoc $Iterations
-$mdPlusLargeDocStats = Get-Stats $mdPlusLargeDocTimes
+$mdPlusLargeCold = $mdPlusLargeDocTimes[0]
+$mdPlusLargeWarmStats = Get-WarmStats $mdPlusLargeDocTimes
 
 Write-Host "  Benchmarking MarkText Large File Open ($Iterations runs)..."
 $markTextLargeDocTimes = Measure-MarkTextLaunch $LargeDoc $Iterations
-$markTextLargeDocStats = Get-Stats $markTextLargeDocTimes
+$markTextLargeCold = $markTextLargeDocTimes[0]
+$markTextLargeWarmStats = Get-WarmStats $markTextLargeDocTimes
 
 Write-Host ">>> STEP 5: Measuring Stabilized Idle Memory & Process Hierarchy on 5,000-Line Document..." -ForegroundColor Yellow
 
@@ -189,6 +204,19 @@ $mtBreakdown = foreach ($p in $allMt) {
 }
 $allMt | Stop-Process -Force -ErrorAction SilentlyContinue
 
+Write-Host ">>> STEP 6: Measuring MDPlus In-Engine AST Parsing & Serialization..." -ForegroundColor Yellow
+$testDll = "$PSScriptRoot\..\tests\bin\Release\net8.0-windows\MDPlus.Tests.dll"
+$parseOutput = ""
+if (Test-Path $testDll) {
+    $testRun = & dotnet $testDll 2>&1 | Out-String
+    if ($testRun -match "\[(\d+) blocks parsed in (\d+)ms\]") {
+        $parseBlocks = $matches[1]
+        $parseMs = $matches[2]
+        $parseOutput = "$parseBlocks blocks parsed in ${parseMs}ms"
+        Write-Host "  MDPlus Native Parser: $parseOutput"
+    }
+}
+
 Write-Host ""
 Write-Host "======================================================================" -ForegroundColor Green
 Write-Host "               EMPIRICAL BENCHMARK SUMMARY TABLE                      " -ForegroundColor Green
@@ -199,59 +227,62 @@ $results = @(
         Metric = "Installed / Binary Size"
         MDPlus = "$mdPlusDiskMB MB (Single binary)"
         MarkText = "$markTextTotalMB MB ($markTextExeMB MB exe)"
-        Delta = "-$([math]::Round(($markTextTotalMB - $mdPlusDiskMB) / $markTextTotalMB * 100, 1))%"
+        Delta = "-$([math]::Round(($markTextTotalMB - $mdPlusDiskMB) / $markTextTotalMB * 100, 1))% (MDPlus smaller)"
     },
     [PSCustomObject]@{
         Metric = "OS Processes at Idle"
         MDPlus = "$mdProcCount (Single native process)"
         MarkText = "$mtProcCount (Electron multi-process)"
-        Delta = "-$([math]::Round(($mtProcCount - $mdProcCount) / $mtProcCount * 100, 1))%"
+        Delta = "-$([math]::Round(($mtProcCount - $mdProcCount) / $mtProcCount * 100, 1))% (MDPlus fewer)"
     },
     [PSCustomObject]@{
         Metric = "Cold Process Launch"
-        MDPlus = "$($mdPlusLaunchTimes[0]) ms"
-        MarkText = "$($markTextLaunchTimes[0]) ms"
-        Delta = if ($markTextLaunchTimes[0] -ne 0) { "$([math]::Round(($mdPlusLaunchTimes[0] - $markTextLaunchTimes[0]) / $markTextLaunchTimes[0] * 100, 1))%" } else { "N/A" }
+        MDPlus = "$mdPlusColdLaunch ms"
+        MarkText = "$markTextColdLaunch ms"
+        Delta = if ($markTextColdLaunch -ne 0) { "+$([math]::Round(($mdPlusColdLaunch - $markTextColdLaunch) / $markTextColdLaunch * 100, 1))%" } else { "N/A" }
     },
     [PSCustomObject]@{
         Metric = "Warm Process Launch (Min)"
-        MDPlus = "$($mdPlusLaunchStats.Min) ms"
-        MarkText = "$($markTextLaunchStats.Min) ms"
-        Delta = if ($markTextLaunchStats.Min -ne 0) { "$([math]::Round(($mdPlusLaunchStats.Min - $markTextLaunchStats.Min) / $markTextLaunchStats.Min * 100, 1))%" } else { "N/A" }
+        MDPlus = "$($mdPlusWarmStats.Min) ms"
+        MarkText = "$($markTextWarmStats.Min) ms"
+        Delta = if ($markTextWarmStats.Min -ne 0) { "+$([math]::Round(($mdPlusWarmStats.Min - $markTextWarmStats.Min) / $markTextWarmStats.Min * 100, 1))%" } else { "N/A" }
     },
     [PSCustomObject]@{
         Metric = "Warm Process Launch (Avg)"
-        MDPlus = "$($mdPlusLaunchStats.Avg) ms"
-        MarkText = "$($markTextLaunchStats.Avg) ms"
-        Delta = if ($markTextLaunchStats.Avg -ne 0) { "$([math]::Round(($mdPlusLaunchStats.Avg - $markTextLaunchStats.Avg) / $markTextLaunchStats.Avg * 100, 1))%" } else { "N/A" }
+        MDPlus = "$($mdPlusWarmStats.Avg) ms"
+        MarkText = "$($markTextWarmStats.Avg) ms"
+        Delta = if ($markTextWarmStats.Avg -ne 0) { "+$([math]::Round(($mdPlusWarmStats.Avg - $markTextWarmStats.Avg) / $markTextWarmStats.Avg * 100, 1))%" } else { "N/A" }
     },
     [PSCustomObject]@{
-        Metric = "Small Doc Open (welcome.md, Avg)"
-        MDPlus = "$($mdPlusSmallDocStats.Avg) ms"
-        MarkText = "$($markTextSmallDocStats.Avg) ms"
-        Delta = if ($markTextSmallDocStats.Avg -ne 0) { "$([math]::Round(($mdPlusSmallDocStats.Avg - $markTextSmallDocStats.Avg) / $markTextSmallDocStats.Avg * 100, 1))%" } else { "N/A" }
+        Metric = "Small Doc Open (welcome.md, Warm Avg)"
+        MDPlus = "$($mdPlusSmallWarmStats.Avg) ms"
+        MarkText = "$($markTextSmallWarmStats.Avg) ms"
+        Delta = if ($markTextSmallWarmStats.Avg -ne 0) { "+$([math]::Round(($mdPlusSmallWarmStats.Avg - $markTextSmallWarmStats.Avg) / $markTextSmallWarmStats.Avg * 100, 1))%" } else { "N/A" }
     },
     [PSCustomObject]@{
-        Metric = "Large Doc Open (5,000 lines, Avg)"
-        MDPlus = "$($mdPlusLargeDocStats.Avg) ms"
-        MarkText = "$($markTextLargeDocStats.Avg) ms"
-        Delta = if ($markTextLargeDocStats.Avg -ne 0) { "$([math]::Round(($mdPlusLargeDocStats.Avg - $markTextLargeDocStats.Avg) / $markTextLargeDocStats.Avg * 100, 1))%" } else { "N/A" }
+        Metric = "Large Doc Open (5,000 lines, Warm Avg)"
+        MDPlus = "$($mdPlusLargeWarmStats.Avg) ms"
+        MarkText = "$($markTextLargeWarmStats.Avg) ms"
+        Delta = if ($markTextLargeWarmStats.Avg -ne 0) { "+$([math]::Round(($mdPlusLargeWarmStats.Avg - $markTextLargeWarmStats.Avg) / $markTextLargeWarmStats.Avg * 100, 1))%" } else { "N/A" }
     },
     [PSCustomObject]@{
         Metric = "Physical Working Set RAM (5k doc idle)"
         MDPlus = "$mdWorkingSetMB MB"
         MarkText = "$mtTotalWorkingSetMB MB"
-        Delta = "-$([math]::Round(($mtTotalWorkingSetMB - $mdWorkingSetMB) / $mtTotalWorkingSetMB * 100, 1))%"
+        Delta = "-$([math]::Round(($mtTotalWorkingSetMB - $mdWorkingSetMB) / $mtTotalWorkingSetMB * 100, 1))% (MDPlus saves $([math]::Round($mtTotalWorkingSetMB - $mdWorkingSetMB, 1)) MB)"
     },
     [PSCustomObject]@{
         Metric = "Private Committed Bytes (5k doc idle)"
         MDPlus = "$mdPrivateMB MB"
         MarkText = "$mtTotalPrivateMB MB"
-        Delta = "-$([math]::Round(($mtTotalPrivateMB - $mdPrivateMB) / $mtTotalPrivateMB * 100, 1))%"
+        Delta = "-$([math]::Round(($mtTotalPrivateMB - $mdPrivateMB) / $mtTotalPrivateMB * 100, 1))% (MDPlus saves $([math]::Round($mtTotalPrivateMB - $mdPrivateMB, 1)) MB)"
     }
 )
 
 $results | Format-Table -AutoSize | Out-String | Write-Host
 Write-Host "Process breakdown for MarkText (5,000-line doc):"
 $mtBreakdown | Format-Table -AutoSize | Out-String | Write-Host
+if ($parseOutput) {
+    Write-Host "Native Engine Performance: MDPlus parsed $parseOutput"
+}
 Write-Host "Benchmark completed successfully."
