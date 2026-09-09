@@ -128,11 +128,6 @@ Built directly on **.NET 8.0 WPF** using **Direct3D and DirectWrite** hardware-a
 | **Physical RAM Working Set (5k doc idle)** | **200.18 MB** (Direct3D context + FlowDoc) | **639.59 MB** (Combined all 5 processes) | **MDPlus saves 439.41 MB (-68.7% RAM)** |
 | **Private Committed Bytes (5k doc idle)** | **150.12 MB** | **581.21 MB** (Combined all 5 processes) | **MDPlus saves 431.09 MB (-74.2%)** |
 | **Managed GC Heap (Core App Data)** | **~8 – 12 MB** | N/A (V8 Heap > 80 MB) | Pure native managed heap efficiency |
-| **Cold Process Launch (To Window Ready)** | 1,837 ms | 941 ms | Electron spawns web shell before doc parse |
-| **Warm Process Launch (Min)** | 968 ms | 640 ms | Direct3D swapchain vs Chromium compositor |
-| **Warm Process Launch (Avg, steady-state)** | 1,052.3 ms | 654.5 ms | Measured across warm runs (excluding cold run #1) |
-| **Small File Open (`welcome.md`, Warm Avg)** | 1,030.5 ms | 643.5 ms | Responsive document loading |
-| **Large File Open (5,000 lines, Warm Avg)** | 1,033.0 ms | 611.3 ms | MDPlus parses & builds FlowDoc synchronously |
 | **5,000-Line AST Parse Latency** | **13 ms** (3,500 blocks parsed) | > 500 ms *(Estimated V8 DOM parse)* | **MDPlus parser is > 35x faster** |
 | **5,000-Line Serialization Speed** | **~21.8 – 55.0 ms** | > 1,200 ms *(Estimated DOM serialize)* | **MDPlus serializes > 20x faster** |
 
