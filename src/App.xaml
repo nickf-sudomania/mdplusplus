@@ -20,6 +20,10 @@
         <SolidColorBrush x:Key="AccentBrush" Color="#58A6FF"/>
         <SolidColorBrush x:Key="StatusBarBackgroundBrush" Color="#1F6FEB"/>
         <SolidColorBrush x:Key="StatusBarForegroundBrush" Color="#FFFFFF"/>
+        <SolidColorBrush x:Key="SidebarBackgroundBrush" Color="#161B22"/>
+        <SolidColorBrush x:Key="HeadingForegroundBrush" Color="#F0F6FC"/>
+        <SolidColorBrush x:Key="SelectionBackgroundBrush" Color="#264F78"/>
+        <SolidColorBrush x:Key="CodeBackgroundBrush" Color="#161B22"/>
 
         <!-- Clean Modern ScrollBar Style -->
         <Style TargetType="{x:Type ScrollBar}">

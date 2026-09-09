@@ -123,6 +123,8 @@ namespace MDPlus.Tests
             RunTest("ThemeManager Dynamic Switching & Notification", TestThemeManagerDynamicSwitchingAndEvents);
             RunTest("ThemeManager Cycling via CycleNextTheme", TestThemeManagerCycling);
             RunTest("MarkdownToWpfConverter Theme Palette Integration", TestMarkdownConverterThemePaletteIntegration);
+            RunTest("Theme Menu Grouping by Dark & Light Submenus", TestThemeMenuGroupingStructure);
+            RunTest("Table of Contents Sidebar Dynamic Theme Contrast & Readability", TestTocThemeReadabilityAndContrast);
 
             // 18. Windows Setup Installer & Prerequisite Bootstrapper Tests
             RunTest("Windows Installer Script Integrity & Shell Association Directives", TestInstallerScriptIntegrity);
@@ -1312,10 +1314,13 @@ End of document.";
                 ThemePreset.GitHubLight,
                 ThemePreset.Nord,
                 ThemePreset.OneDark,
-                ThemePreset.Monokai
+                ThemePreset.Monokai,
+                ThemePreset.OneLight,
+                ThemePreset.SolarizedLight,
+                ThemePreset.QuietLight
             };
 
-            AssertEqual(5, presets.Length, "5 theme presets");
+            AssertEqual(8, presets.Length, "8 theme presets");
 
             foreach (var preset in presets)
             {
@@ -1324,7 +1329,10 @@ End of document.";
                 AssertEqual(preset, palette!.Preset, $"Preset identity {preset}");
                 Assert(!string.IsNullOrEmpty(palette.Name), $"Palette name for {preset}");
 
-                bool expectedIsDark = preset != ThemePreset.GitHubLight;
+                bool expectedIsDark = preset == ThemePreset.GitHubDark ||
+                                      preset == ThemePreset.Nord ||
+                                      preset == ThemePreset.OneDark ||
+                                      preset == ThemePreset.Monokai;
                 AssertEqual(expectedIsDark, palette.IsDark, $"IsDark flag for {preset}");
 
                 // Validate all essential brushes are non-null and frozen
@@ -1375,6 +1383,14 @@ End of document.";
                 AssertEqual(palette.StatusBg.Color, palette.StatusBarBackgroundColor, $"{preset} StatusBarBackgroundColor");
                 AssertEqual(palette.StatusFg.Color, palette.StatusBarForegroundColor, $"{preset} StatusBarForegroundColor");
             }
+
+            // Verify ThemeManager exposes extended palette brushes
+            var tm = ThemeManager.Instance;
+            tm.SetPreset(ThemePreset.GitHubLight);
+            Assert(tm.HeadingForeground != null && tm.HeadingForeground.IsFrozen, "ThemeManager HeadingForeground frozen");
+            Assert(tm.SelectionBackground != null && tm.SelectionBackground.IsFrozen, "ThemeManager SelectionBackground frozen");
+            Assert(tm.CodeBackground != null && tm.CodeBackground.IsFrozen, "ThemeManager CodeBackground frozen");
+            tm.SetPreset(ThemePreset.GitHubDark);
         }
 
         private static void TestThemeWcagAaContrastCompliance()
@@ -1392,7 +1408,10 @@ End of document.";
                 ThemePreset.GitHubLight,
                 ThemePreset.Nord,
                 ThemePreset.OneDark,
-                ThemePreset.Monokai
+                ThemePreset.Monokai,
+                ThemePreset.OneLight,
+                ThemePreset.SolarizedLight,
+                ThemePreset.QuietLight
             };
 
             foreach (var preset in presets)
@@ -1418,6 +1437,17 @@ End of document.";
                 // 5. Heading Text vs Canvas Background (WCAG AA >= 4.5:1)
                 double headingContrast = ThemePalette.CalculateContrast(palette.EditorBg.Color, palette.HeadingFg.Color);
                 Assert(headingContrast >= 4.5, $"{preset} Heading contrast ({headingContrast:F2}:1) must be >= 4.5:1");
+
+                // 6. Sidebar / TOC Heading & Editor Text vs Sidebar Background (WCAG AA >= 4.5:1)
+                double sidebarHeadingContrast = ThemePalette.CalculateContrast(palette.SidebarBg.Color, palette.HeadingFg.Color);
+                Assert(sidebarHeadingContrast >= 4.5, $"{preset} Sidebar Heading contrast ({sidebarHeadingContrast:F2}:1) must be >= 4.5:1");
+
+                double sidebarEditorContrast = ThemePalette.CalculateContrast(palette.SidebarBg.Color, palette.EditorFg.Color);
+                Assert(sidebarEditorContrast >= 4.5, $"{preset} Sidebar Editor contrast ({sidebarEditorContrast:F2}:1) must be >= 4.5:1");
+
+                // 7. Muted Text vs Menu Background (for sidebar header title & buttons) (WCAG AA >= 4.5:1)
+                double mutedMenuContrast = ThemePalette.CalculateContrast(palette.MenuBg.Color, palette.MutedFg.Color);
+                Assert(mutedMenuContrast >= 4.5, $"{preset} MutedFg vs MenuBg ({mutedMenuContrast:F2}:1) must be >= 4.5:1");
             }
         }
 
@@ -1441,7 +1471,7 @@ End of document.";
                     Assert(eventFired, $"ThemeChanged event must fire on SetPreset({preset})");
                     AssertEqual(preset, tm.CurrentPreset, $"CurrentPreset after SetPreset({preset})");
                     AssertEqual(preset, tm.CurrentPalette.Preset, $"CurrentPalette.Preset after SetPreset({preset})");
-                    AssertEqual(preset != ThemePreset.GitHubLight, tm.IsDark, $"IsDark flag after SetPreset({preset})");
+                    AssertEqual(tm.CurrentPalette.IsDark, tm.IsDark, $"IsDark flag after SetPreset({preset})");
                 }
             }
             finally
@@ -1461,6 +1491,9 @@ End of document.";
                 ThemePreset.Nord,
                 ThemePreset.OneDark,
                 ThemePreset.Monokai,
+                ThemePreset.OneLight,
+                ThemePreset.SolarizedLight,
+                ThemePreset.QuietLight,
                 ThemePreset.GitHubDark
             };
 
@@ -1500,6 +1533,123 @@ int x = 42;
                     Assert(flowDoc.Blocks.Count >= 4, $"{preset} document has blocks");
                 }
             }
+        }
+
+        private static void TestThemeMenuGroupingStructure()
+        {
+            // 1. Verify DarkPresets and LightPresets in ThemePalette
+            AssertEqual(4, ThemePalette.DarkPresets.Count, "4 dark presets defined");
+            AssertEqual(4, ThemePalette.LightPresets.Count, "4 light presets defined");
+
+            foreach (var preset in ThemePalette.DarkPresets)
+            {
+                var palette = ThemePalette.GetPalette(preset);
+                Assert(palette.IsDark, $"{preset} must have IsDark == true");
+            }
+
+            foreach (var preset in ThemePalette.LightPresets)
+            {
+                var palette = ThemePalette.GetPalette(preset);
+                Assert(!palette.IsDark, $"{preset} must have IsDark == false");
+            }
+
+            // 2. Verify MainWindow.xaml contains grouped submenus for Dark and Light themes
+            string[] possiblePaths = new[]
+            {
+                System.IO.Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "..", "..", "..", "..", "src", "MainWindow.xaml"),
+                System.IO.Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "..", "..", "..", "src", "MainWindow.xaml"),
+                System.IO.Path.Combine(Environment.CurrentDirectory, "src", "MainWindow.xaml")
+            };
+
+            string xamlPath = possiblePaths.FirstOrDefault(p => System.IO.File.Exists(p)) ?? string.Empty;
+            Assert(!string.IsNullOrEmpty(xamlPath), "MainWindow.xaml must exist");
+            string xamlText = System.IO.File.ReadAllText(xamlPath);
+
+            // Verify MainMenu theme grouping submenus
+            Assert(xamlText.Contains("Name=\"ThemeDarkThemesMenu\""), "MainMenu must contain ThemeDarkThemesMenu submenu");
+            Assert(xamlText.Contains("Name=\"ThemeLightThemesMenu\""), "MainMenu must contain ThemeLightThemesMenu submenu");
+
+            // Verify HamburgerContextMenu theme grouping submenus
+            Assert(xamlText.Contains("Name=\"HamburgerThemeDarkThemesMenu\""), "HamburgerContextMenu must contain HamburgerThemeDarkThemesMenu");
+            Assert(xamlText.Contains("Name=\"HamburgerThemeLightThemesMenu\""), "HamburgerContextMenu must contain HamburgerThemeLightThemesMenu");
+
+            // Verify all presets are present in MainMenu
+            Assert(xamlText.Contains("Name=\"ThemeGitHubDarkItem\""), "ThemeGitHubDarkItem present");
+            Assert(xamlText.Contains("Name=\"ThemeNordItem\""), "ThemeNordItem present");
+            Assert(xamlText.Contains("Name=\"ThemeOneDarkItem\""), "ThemeOneDarkItem present");
+            Assert(xamlText.Contains("Name=\"ThemeMonokaiItem\""), "ThemeMonokaiItem present");
+            Assert(xamlText.Contains("Name=\"ThemeGitHubLightItem\""), "ThemeGitHubLightItem present");
+            Assert(xamlText.Contains("Name=\"ThemeOneLightItem\""), "ThemeOneLightItem present");
+            Assert(xamlText.Contains("Name=\"ThemeSolarizedLightItem\""), "ThemeSolarizedLightItem present");
+            Assert(xamlText.Contains("Name=\"ThemeQuietLightItem\""), "ThemeQuietLightItem present");
+
+            // Verify all presets are present in HamburgerContextMenu
+            Assert(xamlText.Contains("Name=\"HamburgerThemeGitHubDarkItem\""), "HamburgerThemeGitHubDarkItem present");
+            Assert(xamlText.Contains("Name=\"HamburgerThemeNordItem\""), "HamburgerThemeNordItem present");
+            Assert(xamlText.Contains("Name=\"HamburgerThemeOneDarkItem\""), "HamburgerThemeOneDarkItem present");
+            Assert(xamlText.Contains("Name=\"HamburgerThemeMonokaiItem\""), "HamburgerThemeMonokaiItem present");
+            Assert(xamlText.Contains("Name=\"HamburgerThemeGitHubLightItem\""), "HamburgerThemeGitHubLightItem present");
+            Assert(xamlText.Contains("Name=\"HamburgerThemeOneLightItem\""), "HamburgerThemeOneLightItem present");
+            Assert(xamlText.Contains("Name=\"HamburgerThemeSolarizedLightItem\""), "HamburgerThemeSolarizedLightItem present");
+            Assert(xamlText.Contains("Name=\"HamburgerThemeQuietLightItem\""), "HamburgerThemeQuietLightItem present");
+
+            // Verify access keys in Light themes menu do not collide
+            Assert(xamlText.Contains("Header=\"_GitHub Light\""), "MainMenu ThemeGitHubLightItem access key is _G");
+            Assert(xamlText.Contains("Header=\"_One Light\""), "MainMenu ThemeOneLightItem access key is _O");
+            Assert(xamlText.Contains("Header=\"_Solarized Light\""), "MainMenu ThemeSolarizedLightItem access key is _S");
+            Assert(xamlText.Contains("Header=\"_Quiet Light\""), "MainMenu ThemeQuietLightItem access key is _Q");
+        }
+
+        private static void TestTocThemeReadabilityAndContrast()
+        {
+            // 1. Validate GitHub Light TOC high contrast readability
+            var ghLight = ThemePalette.GitHubLight;
+            double ghLightHeadingContrast = ThemePalette.CalculateContrast(ghLight.SidebarBg.Color, ghLight.HeadingFg.Color);
+            double ghLightEditorContrast = ThemePalette.CalculateContrast(ghLight.SidebarBg.Color, ghLight.EditorFg.Color);
+
+            Assert(ghLightHeadingContrast >= 7.0, $"GitHub Light TOC Heading contrast ({ghLightHeadingContrast:F2}:1) must exceed WCAG AAA >= 7:1");
+            Assert(ghLightEditorContrast >= 7.0, $"GitHub Light TOC Editor text contrast ({ghLightEditorContrast:F2}:1) must exceed WCAG AAA >= 7:1");
+
+            // 2. Validate all Light themes satisfy WCAG AA (>= 4.5:1) for TOC sidebar text
+            foreach (var preset in ThemePalette.LightPresets)
+            {
+                var palette = ThemePalette.GetPalette(preset);
+                double headingContrast = ThemePalette.CalculateContrast(palette.SidebarBg.Color, palette.HeadingFg.Color);
+                double editorContrast = ThemePalette.CalculateContrast(palette.SidebarBg.Color, palette.EditorFg.Color);
+                Assert(headingContrast >= 4.5, $"{preset} TOC Heading contrast ({headingContrast:F2}:1) must be >= 4.5:1");
+                Assert(editorContrast >= 4.5, $"{preset} TOC Editor contrast ({editorContrast:F2}:1) must be >= 4.5:1");
+            }
+
+            // 3. Verify MainWindow.xaml TOC markup does not use unreadable hardcoded white/light gray text
+            string[] possiblePaths = new[]
+            {
+                System.IO.Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "..", "..", "..", "..", "src", "MainWindow.xaml"),
+                System.IO.Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "..", "..", "..", "src", "MainWindow.xaml"),
+                System.IO.Path.Combine(Environment.CurrentDirectory, "src", "MainWindow.xaml")
+            };
+
+            string xamlPath = possiblePaths.FirstOrDefault(p => System.IO.File.Exists(p)) ?? string.Empty;
+            Assert(!string.IsNullOrEmpty(xamlPath), "MainWindow.xaml must exist");
+            string xamlText = System.IO.File.ReadAllText(xamlPath);
+
+            // TOC ListBox item template must use dynamic resource brushes, not hardcoded light colors
+            Assert(!xamlText.Contains("<Setter Property=\"Foreground\" Value=\"#ffffff\"/>"),
+                "TOC level 1 must not use hardcoded #ffffff");
+            Assert(!xamlText.Contains("<Setter Property=\"Foreground\" Value=\"#e0e0e0\"/>"),
+                "TOC level 2 must not use hardcoded #e0e0e0");
+
+            Assert(xamlText.Contains("Foreground=\"{DynamicResource ForegroundBrush}\""),
+                "TOC item template must use DynamicResource ForegroundBrush");
+            Assert(xamlText.Contains("Value=\"{DynamicResource HeadingForegroundBrush}\""),
+                "TOC level 1 must use DynamicResource HeadingForegroundBrush");
+            Assert(xamlText.Contains("Name=\"SidebarHeaderBorder\""),
+                "TOC sidebar must have named SidebarHeaderBorder for dynamic theming");
+            Assert(xamlText.Contains("ToolTip=\"{Binding Text}\""),
+                "TOC item template provides ToolTip for truncated headings");
+            Assert(!xamlText.Contains("<TextBlock Text=\"{Binding Text}\" Margin=\"{Binding IndentMargin}\" ToolTip=\"{Binding Text}\" Foreground="),
+                "TOC TextBlock must not locally shadow DataTrigger foreground");
+            Assert(xamlText.Contains("Name=\"ContentSplitter\"") && xamlText.Contains("Background=\"{DynamicResource BorderBrush}\""),
+                "ContentSplitter must use dynamic BorderBrush");
         }
 
         // 18. Windows Setup Installer & Prerequisite Bootstrapper Tests

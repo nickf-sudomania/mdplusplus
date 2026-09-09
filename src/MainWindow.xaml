@@ -83,11 +83,18 @@
                 <MenuItem Header="_Word Wrap" IsCheckable="True" Name="WordWrapMenuItem" Click="ToggleWordWrap_Click" />
                 <Separator />
                 <MenuItem Header="_Theme" Name="ThemeMenu">
-                    <MenuItem Header="_GitHub Dark" Click="ThemePreset_Click" Tag="GitHubDark" IsCheckable="True" Name="ThemeGitHubDarkItem" />
-                    <MenuItem Header="GitHub _Light" Click="ThemePreset_Click" Tag="GitHubLight" IsCheckable="True" Name="ThemeGitHubLightItem" />
-                    <MenuItem Header="_Nord" Click="ThemePreset_Click" Tag="Nord" IsCheckable="True" Name="ThemeNordItem" />
-                    <MenuItem Header="_One Dark" Click="ThemePreset_Click" Tag="OneDark" IsCheckable="True" Name="ThemeOneDarkItem" />
-                    <MenuItem Header="_Monokai" Click="ThemePreset_Click" Tag="Monokai" IsCheckable="True" Name="ThemeMonokaiItem" />
+                    <MenuItem Header="_Dark Themes" Name="ThemeDarkThemesMenu">
+                        <MenuItem Header="_GitHub Dark" Click="ThemePreset_Click" Tag="GitHubDark" IsCheckable="True" Name="ThemeGitHubDarkItem" />
+                        <MenuItem Header="_Nord" Click="ThemePreset_Click" Tag="Nord" IsCheckable="True" Name="ThemeNordItem" />
+                        <MenuItem Header="_One Dark" Click="ThemePreset_Click" Tag="OneDark" IsCheckable="True" Name="ThemeOneDarkItem" />
+                        <MenuItem Header="_Monokai" Click="ThemePreset_Click" Tag="Monokai" IsCheckable="True" Name="ThemeMonokaiItem" />
+                    </MenuItem>
+                    <MenuItem Header="_Light Themes" Name="ThemeLightThemesMenu">
+                        <MenuItem Header="_GitHub Light" Click="ThemePreset_Click" Tag="GitHubLight" IsCheckable="True" Name="ThemeGitHubLightItem" />
+                        <MenuItem Header="_One Light" Click="ThemePreset_Click" Tag="OneLight" IsCheckable="True" Name="ThemeOneLightItem" />
+                        <MenuItem Header="_Solarized Light" Click="ThemePreset_Click" Tag="SolarizedLight" IsCheckable="True" Name="ThemeSolarizedLightItem" />
+                        <MenuItem Header="_Quiet Light" Click="ThemePreset_Click" Tag="QuietLight" IsCheckable="True" Name="ThemeQuietLightItem" />
+                    </MenuItem>
                     <Separator />
                     <MenuItem Header="_Cycle Next Theme" InputGestureText="F8" Click="CycleTheme_Click" />
                 </MenuItem>
@@ -188,11 +195,18 @@
                                 <MenuItem Header="_Word Wrap" IsCheckable="True" Name="HamburgerWordWrapMenuItem" Click="ToggleWordWrap_Click" />
                                 <Separator />
                                 <MenuItem Header="_Theme" Name="HamburgerThemeMenu">
-                                    <MenuItem Header="_GitHub Dark" Click="ThemePreset_Click" Tag="GitHubDark" IsCheckable="True" Name="HamburgerThemeGitHubDarkItem" />
-                                    <MenuItem Header="GitHub _Light" Click="ThemePreset_Click" Tag="GitHubLight" IsCheckable="True" Name="HamburgerThemeGitHubLightItem" />
-                                    <MenuItem Header="_Nord" Click="ThemePreset_Click" Tag="Nord" IsCheckable="True" Name="HamburgerThemeNordItem" />
-                                    <MenuItem Header="_One Dark" Click="ThemePreset_Click" Tag="OneDark" IsCheckable="True" Name="HamburgerThemeOneDarkItem" />
-                                    <MenuItem Header="_Monokai" Click="ThemePreset_Click" Tag="Monokai" IsCheckable="True" Name="HamburgerThemeMonokaiItem" />
+                                    <MenuItem Header="_Dark Themes" Name="HamburgerThemeDarkThemesMenu">
+                                        <MenuItem Header="_GitHub Dark" Click="ThemePreset_Click" Tag="GitHubDark" IsCheckable="True" Name="HamburgerThemeGitHubDarkItem" />
+                                        <MenuItem Header="_Nord" Click="ThemePreset_Click" Tag="Nord" IsCheckable="True" Name="HamburgerThemeNordItem" />
+                                        <MenuItem Header="_One Dark" Click="ThemePreset_Click" Tag="OneDark" IsCheckable="True" Name="HamburgerThemeOneDarkItem" />
+                                        <MenuItem Header="_Monokai" Click="ThemePreset_Click" Tag="Monokai" IsCheckable="True" Name="HamburgerThemeMonokaiItem" />
+                                    </MenuItem>
+                                    <MenuItem Header="_Light Themes" Name="HamburgerThemeLightThemesMenu">
+                                        <MenuItem Header="_GitHub Light" Click="ThemePreset_Click" Tag="GitHubLight" IsCheckable="True" Name="HamburgerThemeGitHubLightItem" />
+                                        <MenuItem Header="_One Light" Click="ThemePreset_Click" Tag="OneLight" IsCheckable="True" Name="HamburgerThemeOneLightItem" />
+                                        <MenuItem Header="_Solarized Light" Click="ThemePreset_Click" Tag="SolarizedLight" IsCheckable="True" Name="HamburgerThemeSolarizedLightItem" />
+                                        <MenuItem Header="_Quiet Light" Click="ThemePreset_Click" Tag="QuietLight" IsCheckable="True" Name="HamburgerThemeQuietLightItem" />
+                                    </MenuItem>
                                     <Separator />
                                     <MenuItem Header="_Cycle Next Theme" InputGestureText="F8" Click="CycleTheme_Click" />
                                 </MenuItem>
@@ -246,39 +260,69 @@
             </Grid.ColumnDefinitions>
 
             <!-- Table of Contents Sidebar -->
-            <Border Grid.Column="0" Name="SidebarBorder" Background="#252526" BorderThickness="0,0,1,0" BorderBrush="#3f3f46">
+            <Border Grid.Column="0" Name="SidebarBorder" Background="{DynamicResource SidebarBackgroundBrush}" BorderThickness="0,0,1,0" BorderBrush="{DynamicResource BorderBrush}">
                 <Grid>
                     <Grid.RowDefinitions>
                         <RowDefinition Height="32" />
                         <RowDefinition Height="*" />
                     </Grid.RowDefinitions>
 
-                    <Border Grid.Row="0" Background="#2d2d30" Padding="12,0,8,0" BorderThickness="0,0,0,1" BorderBrush="#3f3f46">
+                    <Border Grid.Row="0" Name="SidebarHeaderBorder" Background="{DynamicResource MenuBackgroundBrush}" Padding="12,0,8,0" BorderThickness="0,0,0,1" BorderBrush="{DynamicResource BorderBrush}">
                         <Grid VerticalAlignment="Center">
-                            <TextBlock Text="TABLE OF CONTENTS" FontWeight="SemiBold" FontSize="11" Foreground="#888888" VerticalAlignment="Center"/>
-                            <Button Content="✕" Width="20" Height="20" HorizontalAlignment="Right" 
+                            <TextBlock Name="SidebarHeaderTitle" Text="TABLE OF CONTENTS" FontWeight="SemiBold" FontSize="11" Foreground="{DynamicResource MutedForegroundBrush}" VerticalAlignment="Center"/>
+                            <Button Name="SidebarCloseButton" Content="✕" Width="20" Height="20" HorizontalAlignment="Right" 
                                     Click="CloseSidebar_Click" ToolTip="Hide Outline (Ctrl+T)"
-                                    Background="Transparent" Foreground="#888888" BorderThickness="0" Cursor="Hand"/>
+                                    Background="Transparent" Foreground="{DynamicResource MutedForegroundBrush}" BorderThickness="0" Cursor="Hand"/>
                         </Grid>
                     </Border>
 
                     <ListBox Grid.Row="1" Name="TocListBox" Background="Transparent" BorderThickness="0"
+                             Foreground="{DynamicResource ForegroundBrush}"
                              ScrollViewer.HorizontalScrollBarVisibility="Disabled"
                              SelectionChanged="TocListBox_SelectionChanged">
+                        <ListBox.ItemContainerStyle>
+                            <Style TargetType="{x:Type ListBoxItem}">
+                                <Setter Property="Background" Value="Transparent"/>
+                                <Setter Property="BorderThickness" Value="0"/>
+                                <Setter Property="Padding" Value="6,4,6,4"/>
+                                <Setter Property="Margin" Value="2,1,2,1"/>
+                                <Setter Property="Cursor" Value="Hand"/>
+                                <Setter Property="Template">
+                                    <Setter.Value>
+                                        <ControlTemplate TargetType="{x:Type ListBoxItem}">
+                                            <Border x:Name="ItemBorder" Background="{TemplateBinding Background}"
+                                                    BorderThickness="0" CornerRadius="3"
+                                                    Padding="{TemplateBinding Padding}" SnapsToDevicePixels="True">
+                                                <ContentPresenter SnapsToDevicePixels="True"/>
+                                            </Border>
+                                            <ControlTemplate.Triggers>
+                                                <Trigger Property="IsMouseOver" Value="True">
+                                                    <Setter TargetName="ItemBorder" Property="Background" Value="{DynamicResource MenuHoverBackgroundBrush}"/>
+                                                </Trigger>
+                                                <Trigger Property="IsSelected" Value="True">
+                                                    <Setter TargetName="ItemBorder" Property="Background" Value="{DynamicResource SelectionBackgroundBrush}"/>
+                                                </Trigger>
+                                            </ControlTemplate.Triggers>
+                                        </ControlTemplate>
+                                    </Setter.Value>
+                                </Setter>
+                            </Style>
+                        </ListBox.ItemContainerStyle>
                         <ListBox.ItemTemplate>
                             <DataTemplate DataType="{x:Type models:HeadingItem}">
-                                <TextBlock Text="{Binding Text}" Margin="{Binding IndentMargin}"
-                                           Foreground="#cccccc" TextTrimming="CharacterEllipsis" FontSize="13" Cursor="Hand">
+                                <TextBlock Text="{Binding Text}" Margin="{Binding IndentMargin}" ToolTip="{Binding Text}"
+                                           TextTrimming="CharacterEllipsis" FontSize="13" Cursor="Hand">
                                     <TextBlock.Style>
                                         <Style TargetType="TextBlock">
+                                            <Setter Property="Foreground" Value="{DynamicResource ForegroundBrush}"/>
                                             <Style.Triggers>
                                                 <DataTrigger Binding="{Binding Level}" Value="1">
                                                     <Setter Property="FontWeight" Value="Bold"/>
-                                                    <Setter Property="Foreground" Value="#ffffff"/>
+                                                    <Setter Property="Foreground" Value="{DynamicResource HeadingForegroundBrush}"/>
                                                 </DataTrigger>
                                                 <DataTrigger Binding="{Binding Level}" Value="2">
                                                     <Setter Property="FontWeight" Value="SemiBold"/>
-                                                    <Setter Property="Foreground" Value="#e0e0e0"/>
+                                                    <Setter Property="Foreground" Value="{DynamicResource ForegroundBrush}"/>
                                                 </DataTrigger>
                                             </Style.Triggers>
                                         </Style>
@@ -291,7 +335,7 @@
             </Border>
 
             <!-- GridSplitter between TOC and Document -->
-            <GridSplitter Grid.Column="1" Name="SidebarSplitter" Width="5" HorizontalAlignment="Stretch" Background="#333337" Cursor="SizeWE" />
+            <GridSplitter Grid.Column="1" Name="SidebarSplitter" Width="5" HorizontalAlignment="Stretch" Background="{DynamicResource BorderBrush}" Cursor="SizeWE" />
 
             <!-- Document Content Area (Split between Rendered and Raw views) -->
             <Grid Grid.Column="2" Name="ContentGrid" Background="#1e1e1e">
@@ -312,7 +356,7 @@
                                                 PreviewMouseWheel="MarkdownViewer_PreviewMouseWheel"/>
 
                 <!-- Content Splitter (only active in Split View) -->
-                <GridSplitter Grid.Column="1" Name="ContentSplitter" Width="5" HorizontalAlignment="Stretch" Background="#333337" Cursor="SizeWE" Visibility="Collapsed" />
+                <GridSplitter Grid.Column="1" Name="ContentSplitter" Width="5" HorizontalAlignment="Stretch" Background="{DynamicResource BorderBrush}" Cursor="SizeWE" Visibility="Collapsed" />
 
                 <!-- Raw Markdown Text Box (for Raw or Split view) -->
                 <TextBox Grid.Column="2" Name="RawMarkdownTextBox" Visibility="Collapsed"

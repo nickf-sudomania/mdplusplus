@@ -21,13 +21,14 @@ namespace MDPlus.E2E.Tiers
             Console.WriteLine("  Tier 5: Adversarial Hardening (Challenger)");
             Console.WriteLine("==================================================");
 
-            RunTest("Tier5", "T5.1: WCAG AA contrast ratio matrix across all 5 theme presets", TestWCAGContrastMatrixAll5Palettes);
+            RunTest("Tier5", "T5.1: WCAG AA contrast ratio matrix across all 8 theme presets", TestWCAGContrastMatrixAll8Palettes);
             RunTest("Tier5", "T5.2: Multi-resolution icon mipmap binary inspection and decoders", TestAppIconMipmapFramesAndDecoders);
-            RunTest("Tier5", "T5.3: Rapid theme cycling (100 loops / 500 switches) & brush immutability", TestRapidThemeCycling100LoopsThroughAllPresets);
+            RunTest("Tier5", "T5.3: Rapid theme cycling (100 loops / 800 switches) & brush immutability", TestRapidThemeCycling100LoopsThroughAllPresets);
             RunTest("Tier5", "T5.4: Tab lifecycle stress, dirty transitions, and theme resilience", TestTabLifecycleStressAndDirtyTransitions);
+            RunTest("Tier5", "T5.5: TOC sidebar high contrast readability and theme menu grouping", TestTocThemeReadabilityAndMenuGrouping);
         }
 
-        private static void TestWCAGContrastMatrixAll5Palettes()
+        private static void TestWCAGContrastMatrixAll8Palettes()
         {
             var presets = new[]
             {
@@ -35,7 +36,10 @@ namespace MDPlus.E2E.Tiers
                 ThemePreset.GitHubLight,
                 ThemePreset.Nord,
                 ThemePreset.OneDark,
-                ThemePreset.Monokai
+                ThemePreset.Monokai,
+                ThemePreset.OneLight,
+                ThemePreset.SolarizedLight,
+                ThemePreset.QuietLight
             };
 
             foreach (var preset in presets)
@@ -67,6 +71,17 @@ namespace MDPlus.E2E.Tiers
                 // Also verify EditorFg vs TableHeaderBg
                 double tableEditorContrast = ThemePalette.CalculateContrast(palette.EditorFg.Color, palette.TableHeaderBg.Color);
                 AssertTrue(tableEditorContrast >= 4.5, $"{preset} Table EditorFg vs Table Header Bg ({tableEditorContrast:F2}:1) must be >= 4.5:1");
+
+                // 6. Sidebar / TOC Text vs Sidebar Background (WCAG AA >= 4.5:1)
+                double tocHeadingContrast = ThemePalette.CalculateContrast(palette.HeadingFg.Color, palette.SidebarBg.Color);
+                AssertTrue(tocHeadingContrast >= 4.5, $"{preset} TOC HeadingFg vs SidebarBg ({tocHeadingContrast:F2}:1) must be >= 4.5:1");
+
+                double tocEditorContrast = ThemePalette.CalculateContrast(palette.EditorFg.Color, palette.SidebarBg.Color);
+                AssertTrue(tocEditorContrast >= 4.5, $"{preset} TOC EditorFg vs SidebarBg ({tocEditorContrast:F2}:1) must be >= 4.5:1");
+
+                // 7. Sidebar MutedFg (header title / close button) vs MenuBg (header border) (WCAG AA >= 4.5:1)
+                double headerTitleContrast = ThemePalette.CalculateContrast(palette.MutedFg.Color, palette.MenuBg.Color);
+                AssertTrue(headerTitleContrast >= 4.5, $"{preset} Sidebar Header Title (MutedFg) vs MenuBg ({headerTitleContrast:F2}:1) must be >= 4.5:1");
             }
         }
 
@@ -176,13 +191,16 @@ public static void Main() => Console.WriteLine(""Stress"");
                 ThemePreset.GitHubLight,
                 ThemePreset.Nord,
                 ThemePreset.OneDark,
-                ThemePreset.Monokai
+                ThemePreset.Monokai,
+                ThemePreset.OneLight,
+                ThemePreset.SolarizedLight,
+                ThemePreset.QuietLight
             };
 
             var sw = Stopwatch.StartNew();
             int totalSwitches = 0;
 
-            // Execute 100 full loops through all 5 presets = 500 theme changes
+            // Execute 100 full loops through all 8 presets = 800 theme changes
             for (int loop = 0; loop < 100; loop++)
             {
                 for (int p = 0; p < presets.Length; p++)
@@ -224,7 +242,7 @@ public static void Main() => Console.WriteLine(""Stress"");
             }
 
             sw.Stop();
-            AssertEqual(500, totalSwitches, "Should have completed exactly 500 theme switches.");
+            AssertEqual(800, totalSwitches, "Should have completed exactly 800 theme switches.");
 
             // Post-stress GC and memory verification
             GC.Collect();
@@ -321,6 +339,43 @@ public static void Main() => Console.WriteLine(""Stress"");
 
             // Reset preset
             tm.SetPreset(ThemePreset.GitHubDark);
+        }
+
+        private static void TestTocThemeReadabilityAndMenuGrouping()
+        {
+            // 1. Verify GitHub Light TOC contrast exceeds 7:1 (WCAG AAA)
+            var ghLight = ThemePalette.GitHubLight;
+            double ghHeadingContrast = ThemePalette.CalculateContrast(ghLight.SidebarBg.Color, ghLight.HeadingFg.Color);
+            double ghEditorContrast = ThemePalette.CalculateContrast(ghLight.SidebarBg.Color, ghLight.EditorFg.Color);
+            AssertTrue(ghHeadingContrast >= 7.0, $"GitHub Light Heading contrast ({ghHeadingContrast:F2}:1) must exceed WCAG AAA >= 7:1");
+            AssertTrue(ghEditorContrast >= 7.0, $"GitHub Light Editor contrast ({ghEditorContrast:F2}:1) must exceed WCAG AAA >= 7:1");
+
+            // 2. Verify all Light Themes have high TOC contrast
+            foreach (var preset in ThemePalette.LightPresets)
+            {
+                var palette = ThemePalette.GetPalette(preset);
+                double hContrast = ThemePalette.CalculateContrast(palette.SidebarBg.Color, palette.HeadingFg.Color);
+                double eContrast = ThemePalette.CalculateContrast(palette.SidebarBg.Color, palette.EditorFg.Color);
+                AssertTrue(hContrast >= 4.5, $"{preset} TOC Heading contrast ({hContrast:F2}:1) must satisfy WCAG AA >= 4.5:1");
+                AssertTrue(eContrast >= 4.5, $"{preset} TOC Editor contrast ({eContrast:F2}:1) must satisfy WCAG AA >= 4.5:1");
+            }
+
+            // 3. Verify MainWindow.xaml markup includes grouped submenus
+            string repoRoot = GetRepositoryRoot();
+            string xamlPath = Path.Combine(repoRoot, "src", "MainWindow.xaml");
+            AssertTrue(File.Exists(xamlPath), $"MainWindow.xaml must exist at {xamlPath}");
+            string xaml = File.ReadAllText(xamlPath);
+
+            AssertTrue(xaml.Contains("Name=\"ThemeDarkThemesMenu\""), "MainWindow.xaml must include ThemeDarkThemesMenu");
+            AssertTrue(xaml.Contains("Name=\"ThemeLightThemesMenu\""), "MainWindow.xaml must include ThemeLightThemesMenu");
+            AssertTrue(xaml.Contains("Name=\"HamburgerThemeDarkThemesMenu\""), "MainWindow.xaml must include HamburgerThemeDarkThemesMenu");
+            AssertTrue(xaml.Contains("Name=\"HamburgerThemeLightThemesMenu\""), "MainWindow.xaml must include HamburgerThemeLightThemesMenu");
+            AssertTrue(xaml.Contains("Header=\"_GitHub Light\""), "MainMenu ThemeGitHubLightItem access key is _G");
+            AssertTrue(xaml.Contains("Header=\"_One Light\""), "MainMenu ThemeOneLightItem access key is _O");
+            AssertTrue(xaml.Contains("Value=\"{DynamicResource HeadingForegroundBrush}\""), "TOC Level 1 must use DynamicResource HeadingForegroundBrush");
+            AssertTrue(xaml.Contains("Name=\"SidebarHeaderBorder\""), "SidebarHeaderBorder must exist for dynamic theming");
+            AssertTrue(xaml.Contains("ToolTip=\"{Binding Text}\""), "TOC item template provides ToolTip for truncated headings");
+            AssertTrue(xaml.Contains("Name=\"ContentSplitter\"") && xaml.Contains("Background=\"{DynamicResource BorderBrush}\""), "ContentSplitter must use dynamic BorderBrush");
         }
     }
 }

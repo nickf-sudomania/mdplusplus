@@ -65,7 +65,7 @@ namespace MDPlus.Core
         {
             _currentPreset = preset;
             _useLegacyBrushes = false;
-            IsDark = preset != ThemePreset.GitHubLight;
+            IsDark = CurrentPalette.IsDark;
             _mode = IsDark ? AppThemeMode.Dark : AppThemeMode.Light;
 
             UpdateApplicationResources(CurrentPalette);
@@ -129,6 +129,11 @@ namespace MDPlus.Core
             app.Resources["AccentBrush"] = palette.Accent;
             app.Resources["StatusBarBackgroundBrush"] = palette.StatusBg;
             app.Resources["StatusBarForegroundBrush"] = palette.StatusFg;
+
+            app.Resources["SidebarBackgroundBrush"] = palette.SidebarBg;
+            app.Resources["HeadingForegroundBrush"] = palette.HeadingFg;
+            app.Resources["SelectionBackgroundBrush"] = palette.SelectionBg;
+            app.Resources["CodeBackgroundBrush"] = palette.CodeBg;
         }
 
         private bool GetWindowsSystemIsDark()
@@ -194,5 +199,8 @@ namespace MDPlus.Core
         public SolidColorBrush AccentBrush => _useLegacyBrushes ? (IsDark ? DarkAccent : LightAccent) : CurrentPalette.Accent;
         public SolidColorBrush TabActiveBackground => _useLegacyBrushes ? (IsDark ? DarkTabActive : LightTabActive) : CurrentPalette.TabActiveBg;
         public SolidColorBrush TabInactiveBackground => _useLegacyBrushes ? (IsDark ? DarkTabInactive : LightTabInactive) : CurrentPalette.TabInactiveBg;
+        public SolidColorBrush HeadingForeground => CurrentPalette.HeadingFg;
+        public SolidColorBrush SelectionBackground => CurrentPalette.SelectionBg;
+        public SolidColorBrush CodeBackground => CurrentPalette.CodeBg;
     }
 }

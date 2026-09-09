@@ -10,7 +10,10 @@ namespace MDPlus.Core
         GitHubLight,
         Nord,
         OneDark,
-        Monokai
+        Monokai,
+        OneLight,
+        SolarizedLight,
+        QuietLight
     }
 
     public class ThemePalette
@@ -346,7 +349,7 @@ namespace MDPlus.Core
             statusBg: FromHex("#3B4252"),
             statusFg: FromHex("#ECEFF4"),
             border: FromHex("#4C566A"),
-            mutedFg: FromHex("#7B88A1"),
+            mutedFg: FromHex("#A8B6CC"),
             accent: FromHex("#88C0D0"),
             selectionBg: FromHex("#434C5E"),
             codeBg: FromHex("#3B4252"),
@@ -385,7 +388,7 @@ namespace MDPlus.Core
             statusBg: FromHex("#21252B"),
             statusFg: FromHex("#9DA5B4"),
             border: FromHex("#3E4451"),
-            mutedFg: FromHex("#828997"),
+            mutedFg: FromHex("#8D95A5"),
             accent: FromHex("#61AFEF"),
             selectionBg: FromHex("#3E4451"),
             codeBg: FromHex("#21252B"),
@@ -444,13 +447,149 @@ namespace MDPlus.Core
             syntaxProperty: FromHex("#FD971F")
         );
 
+        public static ThemePalette OneLight { get; } = new ThemePalette(
+            ThemePreset.OneLight,
+            "One Light",
+            isDark: false,
+            windowBg: FromHex("#FAFAFA"),
+            editorBg: FromHex("#FAFAFA"),
+            editorFg: FromHex("#383A42"),
+            sidebarBg: FromHex("#F0F0F0"),
+            menuBg: FromHex("#F0F0F0"),
+            menuFg: FromHex("#383A42"),
+            menuHoverBg: FromHex("#E5E5E6"),
+            menuHoverFg: FromHex("#202227"),
+            menuPopupBg: FromHex("#FAFAFA"),
+            menuPopupBorder: FromHex("#DBDBDC"),
+            menuBorder: FromHex("#DBDBDC"),
+            menuSeparator: FromHex("#DBDBDC"),
+            statusBg: FromHex("#006699"),
+            statusFg: FromHex("#FFFFFF"),
+            border: FromHex("#DBDBDC"),
+            mutedFg: FromHex("#696C77"),
+            accent: FromHex("#4078F2"),
+            selectionBg: FromHex("#E5E5E6"),
+            codeBg: FromHex("#F0F0F0"),
+            codeBorder: FromHex("#DBDBDC"),
+            tableHeaderBg: FromHex("#E5E5E6"),
+            tableAltRowBg: FromHex("#F7F7F8"),
+            tableBorder: FromHex("#DBDBDC"),
+            tabActiveBg: FromHex("#FAFAFA"),
+            tabInactiveBg: FromHex("#EAEAEB"),
+            headingFg: FromHex("#202227"),
+            syntaxKeyword: FromHex("#A626A4"),
+            syntaxString: FromHex("#50A14F"),
+            syntaxComment: FromHex("#A0A1A7"),
+            syntaxNumber: FromHex("#986801"),
+            syntaxType: FromHex("#C18401"),
+            syntaxFunction: FromHex("#4078F2"),
+            syntaxProperty: FromHex("#E45649")
+        );
+
+        public static ThemePalette SolarizedLight { get; } = new ThemePalette(
+            ThemePreset.SolarizedLight,
+            "Solarized Light",
+            isDark: false,
+            windowBg: FromHex("#FDF6E3"),
+            editorBg: FromHex("#FDF6E3"),
+            editorFg: FromHex("#073642"),
+            sidebarBg: FromHex("#EEE8D5"),
+            menuBg: FromHex("#EEE8D5"),
+            menuFg: FromHex("#073642"),
+            menuHoverBg: FromHex("#DFD8C2"),
+            menuHoverFg: FromHex("#002B36"),
+            menuPopupBg: FromHex("#FDF6E3"),
+            menuPopupBorder: FromHex("#D3CBB7"),
+            menuBorder: FromHex("#D3CBB7"),
+            menuSeparator: FromHex("#D3CBB7"),
+            statusBg: FromHex("#073642"),
+            statusFg: FromHex("#FDF6E3"),
+            border: FromHex("#D3CBB7"),
+            mutedFg: FromHex("#485F66"),
+            accent: FromHex("#268BD2"),
+            selectionBg: FromHex("#E8E0C8"),
+            codeBg: FromHex("#EEE8D5"),
+            codeBorder: FromHex("#D3CBB7"),
+            tableHeaderBg: FromHex("#E5DEC9"),
+            tableAltRowBg: FromHex("#F5EED9"),
+            tableBorder: FromHex("#D3CBB7"),
+            tabActiveBg: FromHex("#FDF6E3"),
+            tabInactiveBg: FromHex("#EEE8D5"),
+            headingFg: FromHex("#073642"),
+            syntaxKeyword: FromHex("#859900"),
+            syntaxString: FromHex("#2AA198"),
+            syntaxComment: FromHex("#93A1A1"),
+            syntaxNumber: FromHex("#D33682"),
+            syntaxType: FromHex("#B58900"),
+            syntaxFunction: FromHex("#268BD2"),
+            syntaxProperty: FromHex("#CB4B16")
+        );
+
+        public static ThemePalette QuietLight { get; } = new ThemePalette(
+            ThemePreset.QuietLight,
+            "Quiet Light",
+            isDark: false,
+            windowBg: FromHex("#F5F5F5"),
+            editorBg: FromHex("#F5F5F5"),
+            editorFg: FromHex("#333333"),
+            sidebarBg: FromHex("#ECECEC"),
+            menuBg: FromHex("#ECECEC"),
+            menuFg: FromHex("#333333"),
+            menuHoverBg: FromHex("#DADADA"),
+            menuHoverFg: FromHex("#111111"),
+            menuPopupBg: FromHex("#F5F5F5"),
+            menuPopupBorder: FromHex("#D4D4D4"),
+            menuBorder: FromHex("#D4D4D4"),
+            menuSeparator: FromHex("#D4D4D4"),
+            statusBg: FromHex("#70388A"),
+            statusFg: FromHex("#FFFFFF"),
+            border: FromHex("#D4D4D4"),
+            mutedFg: FromHex("#666666"),
+            accent: FromHex("#70388A"),
+            selectionBg: FromHex("#E0D8E8"),
+            codeBg: FromHex("#ECECEC"),
+            codeBorder: FromHex("#D4D4D4"),
+            tableHeaderBg: FromHex("#E0E0E0"),
+            tableAltRowBg: FromHex("#F0F0F0"),
+            tableBorder: FromHex("#D4D4D4"),
+            tabActiveBg: FromHex("#F5F5F5"),
+            tabInactiveBg: FromHex("#E6E6E6"),
+            headingFg: FromHex("#1E1E1E"),
+            syntaxKeyword: FromHex("#7A3E9D"),
+            syntaxString: FromHex("#448C27"),
+            syntaxComment: FromHex("#888888"),
+            syntaxNumber: FromHex("#9C5D27"),
+            syntaxType: FromHex("#A626A4"),
+            syntaxFunction: FromHex("#AA3731"),
+            syntaxProperty: FromHex("#7A3E9D")
+        );
+
+        public static IReadOnlyList<ThemePreset> DarkPresets { get; } = new[]
+        {
+            ThemePreset.GitHubDark,
+            ThemePreset.Nord,
+            ThemePreset.OneDark,
+            ThemePreset.Monokai
+        };
+
+        public static IReadOnlyList<ThemePreset> LightPresets { get; } = new[]
+        {
+            ThemePreset.GitHubLight,
+            ThemePreset.OneLight,
+            ThemePreset.SolarizedLight,
+            ThemePreset.QuietLight
+        };
+
         private static readonly Dictionary<ThemePreset, ThemePalette> Palettes = new Dictionary<ThemePreset, ThemePalette>
         {
             [ThemePreset.GitHubDark] = GitHubDark,
             [ThemePreset.GitHubLight] = GitHubLight,
             [ThemePreset.Nord] = Nord,
             [ThemePreset.OneDark] = OneDark,
-            [ThemePreset.Monokai] = Monokai
+            [ThemePreset.Monokai] = Monokai,
+            [ThemePreset.OneLight] = OneLight,
+            [ThemePreset.SolarizedLight] = SolarizedLight,
+            [ThemePreset.QuietLight] = QuietLight
         };
 
         public static ThemePalette GetPalette(ThemePreset preset)

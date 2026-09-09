@@ -38,7 +38,7 @@ namespace MDPlus.E2E.Tiers
 
             // Feature 3: Themes
             RunTest("Tier1", "F3.1: ThemeManager initialization and mode switching", TestF3_ThemeManagerModes);
-            RunTest("Tier1", "F3.2: 5 Theme presets inspection and palette contracts", TestF3_ThemePresets);
+            RunTest("Tier1", "F3.2: 8 Theme presets inspection and palette contracts", TestF3_ThemePresets);
             RunTest("Tier1", "F3.3: ThemeChanged event dispatch and notification", TestF3_ThemeChangedEvent);
             RunTest("Tier1", "F3.4: Zero-restart dynamic runtime theme switching", TestF3_DynamicSwitching);
             RunTest("Tier1", "F3.5: Color palette brush immutability and freezing", TestF3_BrushImmutability);
@@ -379,6 +379,9 @@ int a = 1;
                 AssertTrue(names.Contains("Nord"), "Preset Nord should exist.");
                 AssertTrue(names.Contains("OneDark"), "Preset OneDark should exist.");
                 AssertTrue(names.Contains("Monokai"), "Preset Monokai should exist.");
+                AssertTrue(names.Contains("OneLight"), "Preset OneLight should exist.");
+                AssertTrue(names.Contains("SolarizedLight"), "Preset SolarizedLight should exist.");
+                AssertTrue(names.Contains("QuietLight"), "Preset QuietLight should exist.");
             }
             else
             {

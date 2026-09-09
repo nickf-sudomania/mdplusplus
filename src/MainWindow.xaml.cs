@@ -947,6 +947,27 @@ Console.WriteLine($""Parsed {doc.Blocks.Count} blocks in 2ms!"");
 
             SidebarBorder.Background = palette.SidebarBg;
             SidebarBorder.BorderBrush = palette.Border;
+            if (SidebarHeaderBorder != null)
+            {
+                SidebarHeaderBorder.Background = palette.MenuBg;
+                SidebarHeaderBorder.BorderBrush = palette.Border;
+            }
+            if (SidebarHeaderTitle != null)
+            {
+                SidebarHeaderTitle.Foreground = palette.MutedFg;
+            }
+            if (SidebarCloseButton != null)
+            {
+                SidebarCloseButton.Foreground = palette.MutedFg;
+            }
+            if (SidebarSplitter != null)
+            {
+                SidebarSplitter.Background = palette.Border;
+            }
+            if (ContentSplitter != null)
+            {
+                ContentSplitter.Background = palette.Border;
+            }
 
             ContentGrid.Background = palette.EditorBg;
             WelcomeScreen.Background = palette.EditorBg;
@@ -1492,16 +1513,22 @@ Console.WriteLine($""Parsed {doc.Blocks.Count} blocks in 2ms!"");
         {
             var preset = ThemeManager.Instance.CurrentPreset;
             if (ThemeGitHubDarkItem != null) ThemeGitHubDarkItem.IsChecked = preset == ThemePreset.GitHubDark;
-            if (ThemeGitHubLightItem != null) ThemeGitHubLightItem.IsChecked = preset == ThemePreset.GitHubLight;
             if (ThemeNordItem != null) ThemeNordItem.IsChecked = preset == ThemePreset.Nord;
             if (ThemeOneDarkItem != null) ThemeOneDarkItem.IsChecked = preset == ThemePreset.OneDark;
             if (ThemeMonokaiItem != null) ThemeMonokaiItem.IsChecked = preset == ThemePreset.Monokai;
+            if (ThemeGitHubLightItem != null) ThemeGitHubLightItem.IsChecked = preset == ThemePreset.GitHubLight;
+            if (ThemeOneLightItem != null) ThemeOneLightItem.IsChecked = preset == ThemePreset.OneLight;
+            if (ThemeSolarizedLightItem != null) ThemeSolarizedLightItem.IsChecked = preset == ThemePreset.SolarizedLight;
+            if (ThemeQuietLightItem != null) ThemeQuietLightItem.IsChecked = preset == ThemePreset.QuietLight;
 
             if (HamburgerThemeGitHubDarkItem != null) HamburgerThemeGitHubDarkItem.IsChecked = preset == ThemePreset.GitHubDark;
-            if (HamburgerThemeGitHubLightItem != null) HamburgerThemeGitHubLightItem.IsChecked = preset == ThemePreset.GitHubLight;
             if (HamburgerThemeNordItem != null) HamburgerThemeNordItem.IsChecked = preset == ThemePreset.Nord;
             if (HamburgerThemeOneDarkItem != null) HamburgerThemeOneDarkItem.IsChecked = preset == ThemePreset.OneDark;
             if (HamburgerThemeMonokaiItem != null) HamburgerThemeMonokaiItem.IsChecked = preset == ThemePreset.Monokai;
+            if (HamburgerThemeGitHubLightItem != null) HamburgerThemeGitHubLightItem.IsChecked = preset == ThemePreset.GitHubLight;
+            if (HamburgerThemeOneLightItem != null) HamburgerThemeOneLightItem.IsChecked = preset == ThemePreset.OneLight;
+            if (HamburgerThemeSolarizedLightItem != null) HamburgerThemeSolarizedLightItem.IsChecked = preset == ThemePreset.SolarizedLight;
+            if (HamburgerThemeQuietLightItem != null) HamburgerThemeQuietLightItem.IsChecked = preset == ThemePreset.QuietLight;
         }
 
         private void ToggleMenuBar_Click(object sender, RoutedEventArgs e)
@@ -1684,7 +1711,7 @@ Console.WriteLine($""Parsed {doc.Blocks.Count} blocks in 2ms!"");
 | **Ctrl + 3** | Raw Markdown View Only |
 | **Ctrl + +** / **Ctrl + -** | Zoom In / Out |
 | **Ctrl + 0** | Reset Zoom to 100% |
-| **F8** | Toggle Dark / Light Theme |
+| **F8** | Cycle Theme (Dark & Light) |
 | **F11** | Toggle Full Screen |
 | **Ctrl + P** | Print Document |
 | **Ctrl + Shift + S** | Export to Standalone HTML |
