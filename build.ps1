@@ -342,6 +342,9 @@ $setupHash  MDPlus-Setup.exe
             Get-ChildItem -Path $distPath -File | Where-Object { $_.Extension -ne ".pdb" } | ForEach-Object {
                 Copy-Item $_.FullName -Destination $releasesDir -Force
             }
+            if (Test-Path (Join-Path $PSScriptRoot "sample_docs")) {
+                Copy-Item (Join-Path $PSScriptRoot "sample_docs") -Destination (Join-Path $releasesDir "sample_docs") -Recurse -Force
+            }
         }
 
         Write-Host "`n=======================================================" -ForegroundColor Green

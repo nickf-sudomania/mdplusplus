@@ -18,7 +18,7 @@ namespace MDPlus.Controls
         private string _lastSearchText = string.Empty;
         private bool _lastMatchCase = false;
         private Point _mouseDownPos;
-        private bool _isMouseDownOnHyperlink;
+        private Hyperlink? _mouseDownHyperlink;
 
         public static readonly DependencyProperty ZoomProperty =
             DependencyProperty.Register(nameof(Zoom), typeof(double), typeof(MarkdownScrollViewer),
@@ -160,16 +160,42 @@ namespace MDPlus.Controls
         {
             try
             {
-                TextPointer? pointer = GetPositionFromPoint(point, snapToText: false);
+                TextPointer? pointer = GetPositionFromPoint(point, snapToText: true);
                 if (pointer == null) return null;
 
                 DependencyObject? current = pointer.Parent;
+                Hyperlink? foundHyperlink = null;
                 while (current != null)
                 {
-                    if (current is Hyperlink hyperlink) return hyperlink;
+                    if (current is Hyperlink hyperlink)
+                    {
+                        foundHyperlink = hyperlink;
+                        break;
+                    }
                     if (current is TextElement te) current = te.Parent;
                     else if (current is FrameworkElement fe) current = fe.Parent;
                     else break;
+                }
+
+                if (foundHyperlink == null) return null;
+
+                // Validate character bounding box to avoid false positives in empty space
+                // (e.g. clicking in right margin/whitespace on the same horizontal row as a link).
+                Rect rectFwd = pointer.GetCharacterRect(LogicalDirection.Forward);
+                Rect rectBwd = pointer.GetCharacterRect(LogicalDirection.Backward);
+                Rect charRect = Rect.Union(rectFwd, rectBwd);
+
+                // Allow 6px horizontal and 4px vertical tolerance for line padding and font margins
+                const double toleranceX = 6.0;
+                const double toleranceY = 4.0;
+                double minX = charRect.Left - toleranceX;
+                double maxX = charRect.Right + toleranceX;
+                double minY = charRect.Top - toleranceY;
+                double maxY = charRect.Bottom + toleranceY;
+
+                if (point.X >= minX && point.X <= maxX && point.Y >= minY && point.Y <= maxY)
+                {
+                    return foundHyperlink;
                 }
             }
             catch
@@ -192,29 +218,56 @@ namespace MDPlus.Controls
 
         protected override void OnPreviewMouseLeftButtonDown(MouseButtonEventArgs e)
         {
-            base.OnPreviewMouseLeftButtonDown(e);
             _mouseDownPos = e.GetPosition(this);
-            var link = FindHyperlink(_mouseDownPos, e.OriginalSource);
-            _isMouseDownOnHyperlink = (link != null);
+            _mouseDownHyperlink = FindHyperlink(_mouseDownPos, e.OriginalSource);
+
+            if (_mouseDownHyperlink != null)
+            {
+                CaptureMouse();
+                e.Handled = true;
+                return;
+            }
+
+            base.OnPreviewMouseLeftButtonDown(e);
         }
 
         protected override void OnPreviewMouseLeftButtonUp(MouseButtonEventArgs e)
         {
-            base.OnPreviewMouseLeftButtonUp(e);
-            if (_isMouseDownOnHyperlink)
+            try
             {
-                Point pos = e.GetPosition(this);
-                if (Math.Abs(pos.X - _mouseDownPos.X) < 6 && Math.Abs(pos.Y - _mouseDownPos.Y) < 6)
+                if (_mouseDownHyperlink != null)
                 {
-                    var link = FindHyperlink(pos, e.OriginalSource);
-                    if (link != null)
+                    Point pos = e.GetPosition(this);
+                    if (Math.Abs(pos.X - _mouseDownPos.X) <= 6 && Math.Abs(pos.Y - _mouseDownPos.Y) <= 6)
                     {
+                        var link = _mouseDownHyperlink;
+                        _mouseDownHyperlink = null;
+                        if (IsMouseCaptured)
+                        {
+                            ReleaseMouseCapture();
+                        }
                         link.DoClick();
                         e.Handled = true;
+                        return;
                     }
                 }
-                _isMouseDownOnHyperlink = false;
             }
+            finally
+            {
+                _mouseDownHyperlink = null;
+                if (IsMouseCaptured)
+                {
+                    ReleaseMouseCapture();
+                }
+            }
+
+            base.OnPreviewMouseLeftButtonUp(e);
+        }
+
+        protected override void OnLostMouseCapture(MouseEventArgs e)
+        {
+            base.OnLostMouseCapture(e);
+            _mouseDownHyperlink = null;
         }
 
         public bool ScrollToAnchor(string anchor)

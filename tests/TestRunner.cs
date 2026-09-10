@@ -189,6 +189,7 @@ namespace MDPlus.Tests
             RunTest("MarkdownScrollViewer Anchor Scrolling Across Visual Tree", TestMarkdownScrollViewerScrollToAnchor);
             RunTest("In-Reader Navigation OpenFilesInNewTab Tab Reuse & Replacement", TestOpenDocumentTabManagementBehavior);
             RunTest("MarkdownScrollViewer Hyperlink Hand Cursor & Click Routing", TestMarkdownScrollViewerCursorAndClickHandling);
+            RunTest("In-Reader Navigation Missing File Feedback & Sample Docs Fallback", TestNavigationFailedAndSampleDocsFallback);
 
             sw.Stop();
 
@@ -4005,6 +4006,44 @@ SHA-256: 4444444444444444444444444444444444444444444444444444444444444444
 
             var foundFromCodeBorder = viewer.FindHyperlinkFromSource(codeBorder);
             AssertEqual(codeHyperlink, foundFromCodeBorder, "FindHyperlinkFromSource on Border inside InlineUIContainer must resolve parent Hyperlink");
+        }
+
+        private static void TestNavigationFailedAndSampleDocsFallback()
+        {
+            // 1. NavigationFailed event fires when target markdown file is missing
+            string tempDir = Path.Combine(Path.GetTempPath(), $"mdplus_navfail_{Guid.NewGuid():N}");
+            Directory.CreateDirectory(tempDir);
+            try
+            {
+                var converter = new MarkdownToWpfConverter(tempDir, ThemePalette.GitHubDark);
+                string? missingFileTarget = null;
+                string? successFileTarget = null;
+                converter.FileNavigationRequested += (s, e) => successFileTarget = e.FilePath;
+                converter.NavigationFailed += (s, missingPath) => missingFileTarget = missingPath;
+
+                converter.HandleNavigation("missing_doc.md");
+                Assert(successFileTarget == null, "FileNavigationRequested must not fire for missing file");
+                Assert(missingFileTarget != null && missingFileTarget.EndsWith("missing_doc.md"), "NavigationFailed must fire with missing file path");
+
+                // 2. Sample docs fallback for untitled document (empty baseDirectory)
+                var untitledConverter = new MarkdownToWpfConverter(string.Empty, ThemePalette.GitHubLight);
+                string? resolvedSample = null;
+                untitledConverter.FileNavigationRequested += (s, e) => resolvedSample = e.FilePath;
+
+                untitledConverter.HandleNavigation("gfm_features.md");
+                if (resolvedSample != null)
+                {
+                    Assert(File.Exists(resolvedSample), "Resolved sample doc must exist on disk");
+                    Assert(resolvedSample.EndsWith("gfm_features.md"), "Resolved path must point to gfm_features.md");
+                }
+            }
+            finally
+            {
+                if (Directory.Exists(tempDir))
+                {
+                    try { Directory.Delete(tempDir, true); } catch { }
+                }
+            }
         }
     }
 }

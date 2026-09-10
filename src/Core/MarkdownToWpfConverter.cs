@@ -33,6 +33,7 @@ namespace MDPlus.Core
 
         public event EventHandler<string>? AnchorNavigationRequested;
         public event EventHandler<FileNavigationEventArgs>? FileNavigationRequested;
+        public event EventHandler<string>? NavigationFailed;
 
         private DateTime _lastNavigationTime = DateTime.MinValue;
         private string _lastNavigationTarget = string.Empty;
@@ -1027,7 +1028,7 @@ namespace MDPlus.Core
 
                 if (!File.Exists(fullTargetPath))
                 {
-                    // Fallback: check relative to AppDomain base or sample_docs
+                    // Fallback 1: check relative to AppDomain base directory
                     string appDomainPath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, pathWithoutAnchor);
                     if (File.Exists(appDomainPath))
                     {
@@ -1035,10 +1036,20 @@ namespace MDPlus.Core
                     }
                     else
                     {
+                        // Fallback 2: check inside sample_docs in AppDomain base directory
                         string samplePath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "sample_docs", Path.GetFileName(pathWithoutAnchor));
                         if (File.Exists(samplePath))
                         {
                             fullTargetPath = samplePath;
+                        }
+                        else
+                        {
+                            // Fallback 3: check inside sample_docs in current working directory
+                            string cwdSamplePath = Path.Combine(Directory.GetCurrentDirectory(), "sample_docs", Path.GetFileName(pathWithoutAnchor));
+                            if (File.Exists(cwdSamplePath))
+                            {
+                                fullTargetPath = cwdSamplePath;
+                            }
                         }
                     }
                 }
@@ -1046,6 +1057,11 @@ namespace MDPlus.Core
                 if (File.Exists(fullTargetPath))
                 {
                     FileNavigationRequested?.Invoke(this, new FileNavigationEventArgs(fullTargetPath, targetAnchor));
+                    return;
+                }
+                else
+                {
+                    NavigationFailed?.Invoke(this, fullTargetPath);
                     return;
                 }
             }

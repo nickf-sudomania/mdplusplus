@@ -215,7 +215,13 @@ namespace MDPlus
 
         public void OpenDocument(string filePath, string? anchor = null, bool activate = true, bool saveSession = true, bool? openInNewTab = null)
         {
-            if (string.IsNullOrEmpty(filePath) || !File.Exists(filePath)) return;
+            if (string.IsNullOrEmpty(filePath)) return;
+
+            if (!File.Exists(filePath))
+            {
+                StatusFileText.Text = $"File not found: {Path.GetFileName(filePath)}";
+                return;
+            }
 
             string fullPath = Path.GetFullPath(filePath);
 
@@ -452,7 +458,19 @@ Plugins can be enabled or disabled instantly via the Plugins menu without restar
             converter.FileNavigationRequested += (s, e) =>
             {
                 bool? forceNewTab = Keyboard.Modifiers.HasFlag(ModifierKeys.Control) ? true : null;
-                OpenDocument(e.FilePath, e.Anchor, openInNewTab: forceNewTab);
+                string targetPath = e.FilePath;
+                string? targetAnchor = e.Anchor;
+                Dispatcher.BeginInvoke(new Action(() =>
+                {
+                    OpenDocument(targetPath, targetAnchor, openInNewTab: forceNewTab);
+                }), System.Windows.Threading.DispatcherPriority.Normal);
+            };
+            converter.NavigationFailed += (s, missingPath) =>
+            {
+                Dispatcher.BeginInvoke(new Action(() =>
+                {
+                    StatusFileText.Text = $"File not found: {Path.GetFileName(missingPath)}";
+                }), System.Windows.Threading.DispatcherPriority.Normal);
             };
             tab.FlowDocument = converter.Convert(tab.Document);
         }
