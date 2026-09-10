@@ -2715,6 +2715,7 @@ SHA-256: 8888888888888888888888888888888888888888888888888888888888888888
                 var psi = UpdateService.CreateInstallerProcessStartInfo(tempInstaller);
                 AssertEqual(tempInstaller, psi.FileName, "ProcessStartInfo.FileName matches installer path");
                 Assert(psi.UseShellExecute, "ProcessStartInfo.UseShellExecute is true");
+                AssertEqual(System.IO.Path.GetDirectoryName(tempInstaller), psi.WorkingDirectory, "ProcessStartInfo.WorkingDirectory is set to installer folder");
                 if (Environment.OSVersion.Platform == PlatformID.Win32NT)
                 {
                     AssertEqual("runas", psi.Verb, "ProcessStartInfo.Verb is 'runas' on Windows NT for UAC elevation");
@@ -3023,12 +3024,18 @@ SHA-256: 4444444444444444444444444444444444444444444444444444444444444444
                 var psi = UpdateService.CreateInstallerProcessStartInfo(dummyExe);
                 AssertEqual(dummyExe, psi.FileName, "Installer path matches");
                 Assert(psi.UseShellExecute, "UseShellExecute must be true");
+                AssertEqual(System.IO.Path.GetDirectoryName(dummyExe), psi.WorkingDirectory, "WorkingDirectory must be set to installer folder");
                 if (Environment.OSVersion.Platform == PlatformID.Win32NT)
                 {
                     AssertEqual("runas", psi.Verb, "UAC elevation verb 'runas' is configured on Windows NT");
                 }
 
-                // 2. Verify LaunchInstallerAndExit catches UAC cancellation (code 1223) without calling exitApp
+                // 2. Verify TryLaunchInstaller and LaunchInstallerAndExit catch UAC cancellation (code 1223) without calling exitApp
+                bool tryCancel = UpdateService.TryLaunchInstaller(
+                    dummyExe,
+                    startProcess: p => throw new System.ComponentModel.Win32Exception(1223, "The operation was canceled by the user"));
+                Assert(!tryCancel, "TryLaunchInstaller must return false when UAC elevation is canceled by user");
+
                 bool exitCalled = false;
                 UpdateService.LaunchInstallerAndExit(
                     dummyExe,
@@ -3037,15 +3044,20 @@ SHA-256: 4444444444444444444444444444444444444444444444444444444444444444
 
                 Assert(!exitCalled, "Application must NOT exit when UAC prompt is canceled by user (1223)");
 
-                // 3. Verify LaunchInstallerAndExit executes exitApp on successful process launch
+                // 3. Verify TryLaunchInstaller and LaunchInstallerAndExit execute exitApp on successful process launch
                 bool launched = false;
+                bool trySuccess = UpdateService.TryLaunchInstaller(
+                    dummyExe,
+                    startProcess: p => { launched = true; });
+                Assert(trySuccess, "TryLaunchInstaller must return true on successful process start");
+                Assert(launched, "Installer process start hook was invoked");
+
                 bool exitSuccess = false;
                 UpdateService.LaunchInstallerAndExit(
                     dummyExe,
-                    startProcess: p => { launched = true; },
+                    startProcess: p => { },
                     exitApp: () => { exitSuccess = true; });
 
-                Assert(launched, "Installer process start hook was invoked");
                 Assert(exitSuccess, "exitApp hook was invoked after installer launch");
 
                 // 4. Verify UpdateDialog.xaml.cs contains VerifiedInstallerPath and DialogResult flow
@@ -3061,7 +3073,7 @@ SHA-256: 4444444444444444444444444444444444444444444444444444444444444444
                 Assert(updateCs.Contains("VerifiedInstallerPath = result.InstallerPath;"), "UpdateDialog sets VerifiedInstallerPath");
                 Assert(updateCs.Contains("DialogResult = true;"), "UpdateDialog sets DialogResult for owner window");
 
-                // 5. Verify MainWindow.xaml.cs contains CloseAndLaunchInstaller and avoids broken if (!IsLoaded)
+                // 5. Verify MainWindow.xaml.cs contains CloseAndLaunchInstaller, avoids broken if (!IsLoaded), and launches before closing
                 string[] mainPaths = new[]
                 {
                     System.IO.Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "..", "..", "..", "..", "src", "MainWindow.xaml.cs"),
@@ -3073,6 +3085,7 @@ SHA-256: 4444444444444444444444444444444444444444444444444444444444444444
                 string mainCs = System.IO.File.ReadAllText(mainCsPath);
                 Assert(mainCs.Contains("CloseAndLaunchInstaller"), "MainWindow contains CloseAndLaunchInstaller");
                 Assert(mainCs.Contains("Closed += closedHandler;"), "CloseAndLaunchInstaller attaches Closed handler");
+                Assert(mainCs.Contains("TryLaunchInstaller(installerPath)"), "CloseAndLaunchInstaller launches installer before closing window");
                 Assert(!mainCs.Contains("if (!IsLoaded)\r\n                                                UpdateService.LaunchInstallerAndExit") &&
                        !mainCs.Contains("if (!IsLoaded)\n                                                UpdateService.LaunchInstallerAndExit"),
                        "MainWindow does not contain broken if (!IsLoaded) launch check");

@@ -715,10 +715,13 @@ namespace MDPlus.Core
                 throw new FileNotFoundException("Installer not found: " + installerPath);
             }
 
+            string workingDir = Path.GetDirectoryName(installerPath) ?? Path.GetTempPath();
+
             var startInfo = new ProcessStartInfo
             {
                 FileName = installerPath,
-                UseShellExecute = true
+                UseShellExecute = true,
+                WorkingDirectory = workingDir
             };
 
             if (Environment.OSVersion.Platform == PlatformID.Win32NT)
@@ -727,6 +730,87 @@ namespace MDPlus.Core
             }
 
             return startInfo;
+        }
+
+        /// <summary>
+        /// Attempts to start the installer process with UAC elevation, falling back to standard execution
+        /// if elevation is blocked by policy. Returns true if the process successfully started,
+        /// or false if the user cancelled the UAC elevation prompt (error 1223).
+        /// </summary>
+        public static bool TryLaunchInstaller(
+            string installerPath,
+            Action<ProcessStartInfo>? startProcess = null)
+        {
+            var startInfo = CreateInstallerProcessStartInfo(installerPath);
+
+            try
+            {
+                if (startProcess != null)
+                {
+                    startProcess(startInfo);
+                    return true;
+                }
+                else
+                {
+                    try
+                    {
+                        Process.Start(startInfo);
+                        return true;
+                    }
+                    catch (System.ComponentModel.Win32Exception ex) when (ex.NativeErrorCode == 1223)
+                    {
+                        // User cancelled the UAC elevation prompt (ERROR_CANCELLED = 1223).
+                        return false;
+                    }
+                    catch (System.ComponentModel.Win32Exception)
+                    {
+                        // If execution failed due to elevation policy, fallback to standard execution without runas
+                        try
+                        {
+                            var fallbackInfo = new ProcessStartInfo
+                            {
+                                FileName = installerPath,
+                                UseShellExecute = true,
+                                WorkingDirectory = Path.GetDirectoryName(installerPath) ?? Path.GetTempPath()
+                            };
+                            Process.Start(fallbackInfo);
+                            return true;
+                        }
+                        catch (System.ComponentModel.Win32Exception ex) when (ex.NativeErrorCode == 1223)
+                        {
+                            return false;
+                        }
+                    }
+                }
+            }
+            catch (System.ComponentModel.Win32Exception ex) when (ex.NativeErrorCode == 1223)
+            {
+                return false;
+            }
+        }
+
+        /// <summary>
+        /// Safely shuts down the WPF application and cleanly terminates the process.
+        /// </summary>
+        public static void ExitApplication()
+        {
+            if (Application.Current != null)
+            {
+                try
+                {
+                    if (Application.Current.Dispatcher.CheckAccess())
+                    {
+                        Application.Current.Shutdown();
+                    }
+                    else
+                    {
+                        Application.Current.Dispatcher.Invoke(() => Application.Current.Shutdown());
+                    }
+                }
+                catch { }
+            }
+
+            Environment.Exit(0);
         }
 
         /// <summary>
@@ -739,59 +823,7 @@ namespace MDPlus.Core
             Action<ProcessStartInfo>? startProcess = null,
             Action? exitApp = null)
         {
-            var startInfo = CreateInstallerProcessStartInfo(installerPath);
-
-            bool launched = false;
-            try
-            {
-                if (startProcess != null)
-                {
-                    startProcess(startInfo);
-                    launched = true;
-                }
-                else
-                {
-                    try
-                    {
-                        Process.Start(startInfo);
-                        launched = true;
-                    }
-                    catch (System.ComponentModel.Win32Exception ex) when (ex.NativeErrorCode == 1223)
-                    {
-                        // User cancelled the UAC elevation prompt (ERROR_CANCELLED = 1223).
-                        // Do not terminate or exit the application.
-                        return;
-                    }
-                    catch (System.ComponentModel.Win32Exception)
-                    {
-                        // If execution failed due to elevation policy, fallback to standard execution without runas
-                        try
-                        {
-                            var fallbackInfo = new ProcessStartInfo
-                            {
-                                FileName = installerPath,
-                                UseShellExecute = true
-                            };
-                            Process.Start(fallbackInfo);
-                            launched = true;
-                        }
-                        catch (System.ComponentModel.Win32Exception ex) when (ex.NativeErrorCode == 1223)
-                        {
-                            return;
-                        }
-                        catch
-                        {
-                            throw;
-                        }
-                    }
-                }
-            }
-            catch (System.ComponentModel.Win32Exception ex) when (ex.NativeErrorCode == 1223)
-            {
-                // User cancelled UAC prompt
-                return;
-            }
-
+            bool launched = TryLaunchInstaller(installerPath, startProcess);
             if (!launched) return;
 
             if (exitApp != null)
@@ -800,16 +832,7 @@ namespace MDPlus.Core
                 return;
             }
 
-            if (Application.Current != null)
-            {
-                try
-                {
-                    Application.Current.Dispatcher.Invoke(() => Application.Current.Shutdown());
-                }
-                catch { }
-            }
-
-            Environment.Exit(0);
+            ExitApplication();
         }
     }
 }

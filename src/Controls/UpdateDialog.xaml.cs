@@ -129,8 +129,14 @@ namespace MDPlus.Controls
             }
 
             _downloadCts?.Cancel();
-            DialogResult = false;
-            Close();
+            try
+            {
+                DialogResult = false;
+            }
+            catch (InvalidOperationException)
+            {
+                Close();
+            }
         }
 
         private async void UpdateNow_Click(object sender, RoutedEventArgs e)
@@ -163,6 +169,8 @@ namespace MDPlus.Controls
 
                     await Task.Delay(300);
 
+                    if (!IsLoaded) return;
+
                     VerifiedInstallerPath = result.InstallerPath;
 
                     if (Owner is MainWindow mainWindow && mainWindow.IsLoaded)
@@ -174,8 +182,13 @@ namespace MDPlus.Controls
                         catch (InvalidOperationException)
                         {
                             Close();
-                            UpdateService.LaunchInstallerAndExit(result.InstallerPath);
+                            mainWindow.CloseAndLaunchInstaller(result.InstallerPath);
                         }
+                    }
+                    else if (Application.Current?.MainWindow is MainWindow appMain && appMain.IsLoaded)
+                    {
+                        Close();
+                        appMain.CloseAndLaunchInstaller(result.InstallerPath);
                     }
                     else
                     {

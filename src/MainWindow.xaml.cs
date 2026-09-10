@@ -1737,10 +1737,53 @@ Console.WriteLine($""Parsed {doc.Blocks.Count} blocks in 2ms!"");
             dlg.ShowDialog();
         }
 
-        private void CloseAndLaunchInstaller(string installerPath)
+        internal void CloseAndLaunchInstaller(string installerPath)
         {
             if (string.IsNullOrEmpty(installerPath)) return;
 
+            // 1. If any tabs are dirty, prompt user to save or cancel before launching installer
+            foreach (var tab in _tabs.ToList())
+            {
+                if (tab.IsDirty)
+                {
+                    SetActiveTab(tab);
+                    string name = !string.IsNullOrEmpty(tab.Title) ? tab.Title : tab.FileName;
+                    var result = MessageBox.Show(
+                        $"Do you want to save changes to '{name}' before updating?",
+                        "MDPlus Update",
+                        MessageBoxButton.YesNoCancel,
+                        MessageBoxImage.Question);
+
+                    if (result == MessageBoxResult.Yes)
+                    {
+                        if (!SaveTab(tab)) return;
+                    }
+                    else if (result == MessageBoxResult.No)
+                    {
+                        tab.IsDirty = false;
+                    }
+                    else if (result == MessageBoxResult.Cancel)
+                    {
+                        return;
+                    }
+                }
+            }
+
+            // 2. Commit session state and settings
+            SaveSessionState();
+            _settings.Save();
+
+            // 3. Launch installer FIRST to verify UAC elevation before destroying the window
+            bool launched = UpdateService.TryLaunchInstaller(installerPath);
+            if (!launched)
+            {
+                // User cancelled UAC prompt; keep the window open and inform the user
+                StatusFileText.Text = "Update cancelled by user.";
+                UpdateStatusBar();
+                return;
+            }
+
+            // 4. Installer process has started; now close window and exit cleanly
             bool isClosed = false;
             EventHandler closedHandler = (s, e) => isClosed = true;
             Closed += closedHandler;
@@ -1755,7 +1798,7 @@ Console.WriteLine($""Parsed {doc.Blocks.Count} blocks in 2ms!"");
 
             if (isClosed)
             {
-                UpdateService.LaunchInstallerAndExit(installerPath);
+                UpdateService.ExitApplication();
             }
         }
 
