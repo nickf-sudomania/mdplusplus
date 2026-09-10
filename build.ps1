@@ -343,7 +343,11 @@ $setupHash  MDPlus-Setup.exe
                 Copy-Item $_.FullName -Destination $releasesDir -Force
             }
             if (Test-Path (Join-Path $PSScriptRoot "sample_docs")) {
-                Copy-Item (Join-Path $PSScriptRoot "sample_docs") -Destination (Join-Path $releasesDir "sample_docs") -Recurse -Force
+                $targetSampleDocs = Join-Path $releasesDir "sample_docs"
+                if (-not (Test-Path $targetSampleDocs)) {
+                    New-Item -ItemType Directory -Path $targetSampleDocs | Out-Null
+                }
+                Copy-Item (Join-Path $PSScriptRoot "sample_docs\*") -Destination $targetSampleDocs -Recurse -Force
             }
         }
 

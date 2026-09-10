@@ -3893,6 +3893,8 @@ SHA-256: 4444444444444444444444444444444444444444444444444444444444444444
             Assert(viewer.ScrollToAnchor("#"), "Empty hash anchor fallback should succeed");
             // Test non-existent anchor
             Assert(!viewer.ScrollToAnchor("non-existent"), "Non-existent anchor must return false");
+            // Test empty anchor
+            Assert(!viewer.ScrollToAnchor(""), "Empty anchor must return false");
         }
 
         private static void TestOpenDocumentTabManagementBehavior()
@@ -4006,6 +4008,10 @@ SHA-256: 4444444444444444444444444444444444444444444444444444444444444444
 
             var foundFromCodeBorder = viewer.FindHyperlinkFromSource(codeBorder);
             AssertEqual(codeHyperlink, foundFromCodeBorder, "FindHyperlinkFromSource on Border inside InlineUIContainer must resolve parent Hyperlink");
+
+            // 7. Far-off / out-of-bounds coordinates must return null
+            Assert(viewer.FindHyperlink(new Point(9999, 9999)) == null, "Far point lookup must return null");
+            Assert(viewer.FindHyperlink(new Point(-100, -100)) == null, "Negative point lookup must return null");
         }
 
         private static void TestNavigationFailedAndSampleDocsFallback()
@@ -4025,17 +4031,37 @@ SHA-256: 4444444444444444444444444444444444444444444444444444444444444444
                 Assert(successFileTarget == null, "FileNavigationRequested must not fire for missing file");
                 Assert(missingFileTarget != null && missingFileTarget.EndsWith("missing_doc.md"), "NavigationFailed must fire with missing file path");
 
-                // 2. Sample docs fallback for untitled document (empty baseDirectory)
+                // 2. Non-markdown files (security blocking)
+                string? blockedTarget = null;
+                converter.FileNavigationRequested += (s, e) => blockedTarget = e.FilePath;
+                converter.HandleNavigation("payload.exe");
+                Assert(blockedTarget == null, "Executable navigation must be blocked");
+                converter.HandleNavigation("manual.pdf");
+                Assert(blockedTarget == null, "Non-markdown file navigation must be blocked");
+
+                // 3. Query string and anchor resolution
+                string queryDoc = Path.Combine(tempDir, "query_doc.md");
+                File.WriteAllText(queryDoc, "# Query Target\n## Sub Heading");
+                string? queryResolvedPath = null;
+                string? queryResolvedAnchor = null;
+                converter.FileNavigationRequested += (s, e) =>
+                {
+                    queryResolvedPath = e.FilePath;
+                    queryResolvedAnchor = e.Anchor;
+                };
+                converter.HandleNavigation("query_doc.md?version=2&source=test#sub-heading");
+                AssertEqual(Path.GetFullPath(queryDoc), queryResolvedPath, "Query string must be stripped to resolve target file");
+                AssertEqual("sub-heading", queryResolvedAnchor, "Anchor must be extracted from URL with query string");
+
+                // 4. Sample docs fallback for untitled document (empty baseDirectory)
                 var untitledConverter = new MarkdownToWpfConverter(string.Empty, ThemePalette.GitHubLight);
                 string? resolvedSample = null;
                 untitledConverter.FileNavigationRequested += (s, e) => resolvedSample = e.FilePath;
 
                 untitledConverter.HandleNavigation("gfm_features.md");
-                if (resolvedSample != null)
-                {
-                    Assert(File.Exists(resolvedSample), "Resolved sample doc must exist on disk");
-                    Assert(resolvedSample.EndsWith("gfm_features.md"), "Resolved path must point to gfm_features.md");
-                }
+                Assert(resolvedSample != null, "Resolved sample doc must not be null for untitled document");
+                Assert(File.Exists(resolvedSample), "Resolved sample doc must exist on disk");
+                Assert(resolvedSample!.EndsWith("gfm_features.md"), "Resolved path must point to gfm_features.md");
             }
             finally
             {

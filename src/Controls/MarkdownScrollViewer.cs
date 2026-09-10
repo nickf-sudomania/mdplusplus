@@ -185,6 +185,8 @@ namespace MDPlus.Controls
                 Rect rectBwd = pointer.GetCharacterRect(LogicalDirection.Backward);
                 Rect charRect = Rect.Union(rectFwd, rectBwd);
 
+                if (charRect.IsEmpty) return null;
+
                 // Allow 6px horizontal and 4px vertical tolerance for line padding and font margins
                 const double toleranceX = 6.0;
                 const double toleranceY = 4.0;

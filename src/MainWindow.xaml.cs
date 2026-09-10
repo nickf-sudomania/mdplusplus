@@ -219,7 +219,9 @@ namespace MDPlus
 
             if (!File.Exists(filePath))
             {
-                StatusFileText.Text = $"File not found: {Path.GetFileName(filePath)}";
+                string fileName = filePath;
+                try { fileName = Path.GetFileName(filePath); } catch { }
+                StatusFileText.Text = $"File not found: {(string.IsNullOrEmpty(fileName) ? filePath : fileName)}";
                 return;
             }
 
@@ -469,7 +471,9 @@ Plugins can be enabled or disabled instantly via the Plugins menu without restar
             {
                 Dispatcher.BeginInvoke(new Action(() =>
                 {
-                    StatusFileText.Text = $"File not found: {Path.GetFileName(missingPath)}";
+                    string fileName = missingPath;
+                    try { fileName = Path.GetFileName(missingPath); } catch { }
+                    StatusFileText.Text = $"File not found: {(string.IsNullOrEmpty(fileName) ? missingPath : fileName)}";
                 }), System.Windows.Threading.DispatcherPriority.Normal);
             };
             tab.FlowDocument = converter.Convert(tab.Document);
