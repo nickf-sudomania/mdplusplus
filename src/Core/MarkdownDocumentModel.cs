@@ -118,6 +118,7 @@ namespace MDPlus.Core
         public string Content { get; set; } = string.Empty;
         public Dictionary<string, string> Attributes { get; set; } = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
         public List<MarkdownBlock> Blocks { get; set; } = new List<MarkdownBlock>();
+        public List<MarkdownInline> Inlines { get; set; } = new List<MarkdownInline>();
 
         public HtmlBlock() { }
         public HtmlBlock(string rawHtml, string tag = "")

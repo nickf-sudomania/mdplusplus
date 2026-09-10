@@ -176,6 +176,7 @@ namespace MDPlus.Tests
             RunTest("LaTeX and HTML FlowDocument Serialization Round-Trip", TestLatexAndHtmlFlowDocumentSerializationRoundTrip);
             RunTest("Plugin Runtime Toggle Behavior and Raw Fallback", TestPluginRuntimeToggleBehavior);
             RunTest("Empirical Performance Benchmark: LaTeX & HTML Zero-Overhead", TestEmpiricalPerformanceBenchmarkWithLatexAndHtmlPlugins);
+            RunTest("LaTeX and HTML Edge Cases, Regression Guards & Symbol Typography", TestLatexAndHtmlEdgeCasesAndRegressions);
 
             sw.Stop();
 
@@ -3004,19 +3005,19 @@ SHA-256: 4444444444444444444444444444444444444444444444444444444444444444
             }
 
             Assert(result.IsSuccess, "Check for updates should succeed against live GitHub: " + (result.ErrorMessage ?? ""));
-            Assert(result.IsUpdateAvailable, "v1.02 must be detected as a newer release for v1.01");
-            AssertEqual("v1.02", result.LatestVersion, "Latest version must be v1.02");
+            Assert(result.IsUpdateAvailable, "A newer release must be detected for v1.01");
+            Assert(result.LatestVersion != null && UpdateService.CompareVersions(result.LatestVersion, "1.01") > 0, "Latest version must be newer than 1.01");
             Assert(!string.IsNullOrEmpty(result.SetupDownloadUrl), "Setup download URL must be populated");
             Assert(result.SetupDownloadUrl!.EndsWith("MDPlus-Setup.exe"), "Setup download URL must point to MDPlus-Setup.exe");
             Assert(!string.IsNullOrEmpty(result.ChecksumsDownloadUrl), "Checksums URL must be populated");
 
-            // Verify that for a user already running 1.02, it correctly detects no update available
-            var task102 = updateService.CheckForUpdatesAsync("1.02");
-            task102.Wait();
-            var result102 = task102.Result;
-            if (result102.IsSuccess)
+            // Verify that for a user already running the latest version, it correctly detects no update available
+            var taskLatest = updateService.CheckForUpdatesAsync(result.LatestVersion!);
+            taskLatest.Wait();
+            var resultLatest = taskLatest.Result;
+            if (resultLatest.IsSuccess)
             {
-                Assert(!result102.IsUpdateAvailable, "v1.02 running should be recognized as up-to-date against v1.02");
+                Assert(!resultLatest.IsUpdateAvailable, "Running latest version should be recognized as up-to-date");
             }
         }
 
@@ -3312,6 +3313,84 @@ SHA-256: 4444444444444444444444444444444444444444444444444444444444444444
 
             Console.Write($" [2,000 plain lines parsed in {plainParseTimeMs}ms] ");
             Assert(plainParseTimeMs < 100, $"Plain document parsing must be under 100ms, actual: {plainParseTimeMs}ms");
+        }
+
+        private static void TestLatexAndHtmlEdgeCasesAndRegressions()
+        {
+            var parser = new MarkdownParser();
+
+            // 1. Triple dollar single line ($$$) must not throw ArgumentOutOfRangeException
+            var docDollar = parser.Parse("$$$\nSome text\n$$$");
+            Assert(docDollar.Blocks.Count > 0, "Triple dollar must not crash parser");
+
+            // 2. Space after '<' must not be parsed as HTML inline
+            string compMd = "if (a < b && c > d) return;";
+            var docComp = parser.Parse(compMd);
+            var pComp = docComp.Blocks[0] as ParagraphBlock;
+            Assert(pComp != null, "Paragraph expected");
+            Assert(!pComp!.Inlines.Any(i => i is HtmlInline), "Space after < must not be parsed as HtmlInline");
+
+            // 3. Round-trip fidelity for <b>, <i>, <br> in MarkdownSerializer
+            string mixedHtml = "Hello <b>bold</b> and <i>italic</i> and line<br>break.";
+            var docMixed = parser.Parse(mixedHtml);
+            var converter = new MarkdownToWpfConverter(AppDomain.CurrentDomain.BaseDirectory, ThemePalette.GitHubDark, enableLatex: true, enableHtml: true);
+            var flowMixed = converter.Convert(docMixed);
+            string serializedMixed = MarkdownSerializer.Serialize(flowMixed!);
+            Assert(serializedMixed.Contains("<b>bold</b>"), "MarkdownSerializer must preserve <b>");
+            Assert(serializedMixed.Contains("<i>italic</i>"), "MarkdownSerializer must preserve <i>");
+            Assert(serializedMixed.Contains("<br>"), "MarkdownSerializer must preserve <br>");
+
+            // 4. Empty HTML block preservation
+            string emptyDiv = "<div id=\"marker\"></div>";
+            var docEmpty = parser.Parse(emptyDiv);
+            var flowEmpty = converter.Convert(docEmpty);
+            string serializedEmpty = MarkdownSerializer.Serialize(flowEmpty!);
+            Assert(serializedEmpty.Contains("<div id=\"marker\"></div>"), "MarkdownSerializer must preserve empty HTML block");
+
+            // 5. Nested markdown inside HTML block
+            string nestedHtml = "<div>\n\n### Inner Title\n\nSome **bold** inside.\n\n</div>";
+            var docNested = parser.Parse(nestedHtml);
+            Assert(docNested.Blocks[0] is HtmlBlock, "Must parse as HtmlBlock");
+            var hbNested = (HtmlBlock)docNested.Blocks[0];
+            Assert(hbNested.Blocks.Count >= 2, "Inner blocks inside HTML block must be parsed");
+            Assert(hbNested.Blocks[0] is HeadingBlock, "First inner block must be HeadingBlock");
+            var flowNested = converter.Convert(docNested);
+            Assert(flowNested != null, "Flow document with nested HTML blocks must convert");
+
+            // 6. <center> block and inline
+            string centerBlock = "<center>\n\nCentered content\n\n</center>";
+            var docCenter = parser.Parse(centerBlock);
+            Assert(docCenter.Blocks[0] is HtmlBlock, "Must parse <center> as HtmlBlock");
+            var flowCenter = converter.Convert(docCenter);
+            Assert(flowCenter != null, "FlowDocument for center must convert");
+
+            // 7. Extended LaTeX symbols and quote glyph
+            var uiEllipses = LatexMathRenderer.RenderMath("1, \\ldots, n \\quad a_1 + \\cdots + a_k", ThemePalette.GitHubDark, 14, false);
+            Assert(uiEllipses != null, "Latex renderer must support \\ldots and \\cdots");
+
+            var uiArrows = LatexMathRenderer.RenderMath("A \\implies B \\iff C \\to D", ThemePalette.GitHubDark, 14, false);
+            Assert(uiArrows != null, "Latex renderer must support \\implies, \\iff, \\to");
+
+            var uiPrime = LatexMathRenderer.RenderMath("f'(x) + g''(x)", ThemePalette.GitHubDark, 14, false);
+            Assert(uiPrime != null, "Latex renderer must support prime symbol f'(x)");
+
+            var uiSymbols = LatexMathRenderer.RenderMath("\\angle ABC = 90^\\circ, L_1 \\perp L_2, L_3 \\parallel L_4", ThemePalette.GitHubDark, 14, false);
+            Assert(uiSymbols != null, "Latex renderer must support \\angle, \\perp, \\parallel");
+
+            // 8. Graceful handling of unclosed braces and environments
+            var uiUnclosedBrace = LatexMathRenderer.RenderMath("\\text{unclosed text", ThemePalette.GitHubDark, 14, false);
+            Assert(uiUnclosedBrace != null, "Latex renderer must not crash on unclosed brace");
+
+            var uiUnclosedEnv = LatexMathRenderer.RenderMath("\\begin{matrix} 1 & 2 \\\\ 3 & 4", ThemePalette.GitHubDark, 14, false);
+            Assert(uiUnclosedEnv != null, "Latex renderer must not crash on unclosed matrix environment");
+
+            // 9. Script vertical alignment
+            var uiSupOnly = LatexMathRenderer.RenderMath("x^2", ThemePalette.GitHubDark, 14, false);
+            Assert(uiSupOnly != null, "Superscript only must render");
+            var uiSubOnly = LatexMathRenderer.RenderMath("x_1", ThemePalette.GitHubDark, 14, false);
+            Assert(uiSubOnly != null, "Subscript only must render");
+            var uiBoth = LatexMathRenderer.RenderMath("x_1^2", ThemePalette.GitHubDark, 14, false);
+            Assert(uiBoth != null, "Subscript and superscript must render");
         }
 
         private class MockHttpMessageHandler : System.Net.Http.HttpMessageHandler

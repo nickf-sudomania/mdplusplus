@@ -207,7 +207,20 @@ namespace MDPlus.Core
 
                 case "br":
                 {
-                    return new LineBreak();
+                    return new LineBreak
+                    {
+                        Tag = new HtmlInlineTag { RawHtml = html.RawHtml, Tag = "br" }
+                    };
+                }
+
+                case "center":
+                {
+                    var span = new Span
+                    {
+                        Tag = new HtmlInlineTag { RawHtml = html.RawHtml, Tag = "center" }
+                    };
+                    PopulateChildren(span, html, convertChild, fgBrush);
+                    return span;
                 }
 
                 case "a":
@@ -489,7 +502,8 @@ namespace MDPlus.Core
         public static Block RenderHtmlBlock(
             HtmlBlock html,
             ThemePalette palette,
-            Func<MarkdownBlock, Block?> convertBlock)
+            Func<MarkdownBlock, Block?> convertBlock,
+            Func<MarkdownInline, Inline?>? convertInline = null)
         {
             string tag = (html.Tag ?? string.Empty).ToLowerInvariant();
             var borderBrush = palette?.Border ?? Brushes.Gray;
@@ -596,7 +610,15 @@ namespace MDPlus.Core
                         };
                     }
 
-                    if (!string.IsNullOrWhiteSpace(html.Content))
+                    if (html.Inlines.Count > 0 && convertInline != null)
+                    {
+                        foreach (var inline in html.Inlines)
+                        {
+                            var ci = convertInline(inline);
+                            if (ci != null) p.Inlines.Add(ci);
+                        }
+                    }
+                    else if (!string.IsNullOrWhiteSpace(html.Content))
                     {
                         p.Inlines.Add(new Run(html.Content) { Foreground = palette?.EditorFg ?? Brushes.White });
                     }
@@ -606,12 +628,19 @@ namespace MDPlus.Core
 
                 case "div":
                 case "section":
+                case "center":
+                case "article":
                 {
                     var section = new Section
                     {
                         Margin = new Thickness(0, 4, 0, 12),
                         Tag = new HtmlBlockTag { RawHtml = html.RawHtml, Tag = tag }
                     };
+
+                    if (tag == "center")
+                    {
+                        section.TextAlignment = TextAlignment.Center;
+                    }
 
                     if (html.Blocks.Count > 0)
                     {
@@ -627,6 +656,7 @@ namespace MDPlus.Core
                         {
                             Margin = new Thickness(0, 0, 0, 8)
                         };
+                        if (tag == "center") p.TextAlignment = TextAlignment.Center;
                         section.Blocks.Add(p);
                     }
 

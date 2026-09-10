@@ -147,7 +147,7 @@ namespace MDPlus.Core
         {
             if (_enableHtml)
             {
-                return HtmlWpfRenderer.RenderHtmlBlock(html, _palette, ConvertBlock);
+                return HtmlWpfRenderer.RenderHtmlBlock(html, _palette, ConvertBlock, ConvertInline);
             }
             else
             {

@@ -51,6 +51,9 @@ namespace MDPlus.Core
             { "neq", "≠" }, { "ne", "≠" }, { "approx", "≈" }, { "equiv", "≡" },
             { "sim", "∼" }, { "simeq", "≃" }, { "cong", "≅" }, { "propto", "∝" },
             { "ll", "≪" }, { "gg", "≫" },
+            { "angle", "∠" }, { "perp", "⊥" }, { "parallel", "∥" }, { "mid", "|" },
+            { "prime", "′" }, { "dagger", "†" }, { "ddagger", "‡" }, { "aleph", "ℵ" },
+            { "oplus", "⊕" }, { "otimes", "⊗" }, { "odot", "⊙" },
 
             // Sets & Logic
             { "in", "∈" }, { "notin", "∉" }, { "ni", "∋" },
@@ -59,6 +62,9 @@ namespace MDPlus.Core
             { "forall", "∀" }, { "exists", "∃" }, { "nexists", "∄" },
             { "neg", "¬" }, { "land", "∧" }, { "lor", "∨" },
 
+            // Ellipses & Dots
+            { "dots", "…" }, { "ldots", "…" }, { "cdots", "⋯" }, { "vdots", "⋮" }, { "ddots", "⋱" },
+
             // Calculus & Analysis
             { "infty", "∞" }, { "partial", "∂" }, { "nabla", "∇" },
             { "hbar", "ℏ" }, { "ell", "ℓ" },
@@ -66,6 +72,7 @@ namespace MDPlus.Core
             // Arrows
             { "to", "→" }, { "rightarrow", "→" }, { "leftarrow", "←" },
             { "Rightarrow", "⇒" }, { "Leftarrow", "⇐" }, { "Leftrightarrow", "⇔" },
+            { "iff", "⟺" }, { "implies", "⟹" }, { "leftrightarrow", "↔" }, { "gets", "←" },
             { "mapsto", "↦" }, { "uparrow", "↑" }, { "downarrow", "↓" },
 
             // Delimiters
@@ -324,6 +331,8 @@ namespace MDPlus.Core
                 string op = c.ToString();
                 switch (c)
                 {
+                    case '\'':
+                        return CreateGlyph("′", fg, fontSize, isItalic: false);
                     case '+':
                     case '-':
                     case '=':
@@ -527,7 +536,7 @@ namespace MDPlus.Core
                         if (c == '{') depth++;
                         else if (c == '}') depth--;
                     }
-                    int end = _pos - 1;
+                    int end = depth == 0 ? _pos - 1 : _pos;
                     return end > start ? _src.Substring(start, end - start) : string.Empty;
                 }
 
@@ -549,7 +558,7 @@ namespace MDPlus.Core
             {
                 string endCmd = "\\end{" + env + "}";
                 int endIdx = _src.IndexOf(endCmd, _pos, StringComparison.Ordinal);
-                string envContent = endIdx > _pos ? _src.Substring(_pos, endIdx - _pos) : string.Empty;
+                string envContent = endIdx >= _pos ? _src.Substring(_pos, endIdx - _pos) : _src.Substring(_pos);
                 _pos = endIdx >= 0 ? endIdx + endCmd.Length : _len;
 
                 var grid = new Grid { VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(4, 2, 4, 2) };
@@ -790,6 +799,10 @@ namespace MDPlus.Core
                     "dot" => "˙",
                     "ddot" => "¨",
                     "tilde" => "~",
+                    "acute" => "´",
+                    "grave" => "`",
+                    "check" => "ˇ",
+                    "breve" => "˘",
                     _ => ""
                 };
 
@@ -830,12 +843,12 @@ namespace MDPlus.Core
                 grid.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
                 grid.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
 
-                Grid.SetColumn((FrameworkElement)baseElement, 0);
+                Grid.SetColumn(baseElement, 0);
                 grid.Children.Add(baseElement);
 
                 var scriptsGrid = new Grid
                 {
-                    VerticalAlignment = VerticalAlignment.Center,
+                    VerticalAlignment = (sup != null && sub != null) ? VerticalAlignment.Center : (sup != null ? VerticalAlignment.Top : VerticalAlignment.Bottom),
                     Margin = new Thickness(1, 0, 0, 0)
                 };
                 scriptsGrid.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });

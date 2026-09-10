@@ -65,7 +65,7 @@ namespace MDPlus.Core
                 string trimmedLine = line.Trim();
                 if (trimmedLine.StartsWith("$$"))
                 {
-                    if (trimmedLine.Length > 2 && trimmedLine.EndsWith("$$"))
+                    if (trimmedLine.Length >= 4 && trimmedLine.EndsWith("$$"))
                     {
                         string expr = trimmedLine.Substring(2, trimmedLine.Length - 4).Trim();
                         doc.Blocks.Add(new MathBlock(expr));
@@ -1123,12 +1123,13 @@ namespace MDPlus.Core
         private static readonly HashSet<string> KnownInlineHtmlTags = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
         {
             "kbd", "sub", "sup", "b", "strong", "i", "em", "u", "mark", "del", "s", "strike",
-            "code", "span", "font", "br", "hr", "a", "img", "abbr", "cite", "small", "var", "samp"
+            "code", "span", "font", "br", "hr", "a", "img", "abbr", "cite", "small", "var", "samp", "center"
         };
 
         private static readonly HashSet<string> KnownBlockHtmlTags = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
         {
-            "details", "div", "section", "article", "header", "footer", "figure", "figcaption", "p", "table", "style", "hr"
+            "details", "div", "section", "article", "header", "footer", "figure", "figcaption", "p", "table", "style", "hr",
+            "center", "blockquote", "pre", "ul", "ol", "li", "h1", "h2", "h3", "h4", "h5", "h6"
         };
 
         private static readonly Regex HtmlAttrRegex = new Regex(
@@ -1155,6 +1156,10 @@ namespace MDPlus.Core
         private HtmlInline? TryParseHtmlInline(string text, int startIndex, int openCloseTag, out int nextIndex)
         {
             nextIndex = startIndex;
+            if (startIndex + 1 >= openCloseTag) return null;
+            char firstChar = text[startIndex + 1];
+            if (!char.IsLetter(firstChar) && firstChar != '/') return null;
+
             string tagHeader = text.Substring(startIndex + 1, openCloseTag - (startIndex + 1)).Trim();
             if (string.IsNullOrEmpty(tagHeader) || tagHeader.StartsWith("/"))
                 return null;
@@ -1265,7 +1270,7 @@ namespace MDPlus.Core
             if (tag == "details")
             {
                 // Extract <summary> if present
-                var summaryMatch = Regex.Match(fullHtml, @"<summary>(.*?)</summary>", RegexOptions.IgnoreCase | RegexOptions.Singleline);
+                var summaryMatch = Regex.Match(fullHtml, @"<summary\b[^>]*>(.*?)</summary>", RegexOptions.IgnoreCase | RegexOptions.Singleline);
                 if (summaryMatch.Success)
                 {
                     block.Attributes["summary"] = summaryMatch.Groups[1].Value.Trim();
@@ -1302,6 +1307,19 @@ namespace MDPlus.Core
                 else
                 {
                     block.Content = fullHtml;
+                }
+
+                if (!string.IsNullOrWhiteSpace(block.Content))
+                {
+                    if (tag == "p")
+                    {
+                        block.Inlines = ParseInlines(block.Content);
+                    }
+                    else
+                    {
+                        var innerDoc = Parse(block.Content);
+                        block.Blocks = innerDoc.Blocks;
+                    }
                 }
             }
 

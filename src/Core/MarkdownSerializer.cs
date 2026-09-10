@@ -338,6 +338,11 @@ namespace MDPlus.Core
             {
                 case Bold bold:
                 {
+                    if (bold.Tag is HtmlInlineTag hit)
+                    {
+                        sb.Append(hit.RawHtml);
+                        break;
+                    }
                     var childCtx = ctx;
                     childCtx.InBold = true;
                     var innerSb = RentScratch();
@@ -355,6 +360,11 @@ namespace MDPlus.Core
 
                 case Italic italic:
                 {
+                    if (italic.Tag is HtmlInlineTag hit)
+                    {
+                        sb.Append(hit.RawHtml);
+                        break;
+                    }
                     var childCtx = ctx;
                     childCtx.InItalic = true;
                     var innerSb = RentScratch();
@@ -382,8 +392,15 @@ namespace MDPlus.Core
                     SerializeRun(run, sb, ctx);
                     break;
 
-                case LineBreak _:
-                    sb.Append("  \n");
+                case LineBreak lb:
+                    if (lb.Tag is HtmlInlineTag hitLb)
+                    {
+                        sb.Append(hitLb.RawHtml);
+                    }
+                    else
+                    {
+                        sb.Append("  \n");
+                    }
                     break;
 
                 case InlineUIContainer uic:
@@ -525,7 +542,7 @@ namespace MDPlus.Core
 
         private static void SerializeSection(Section s, StringBuilder sb)
         {
-            if (s == null || s.Blocks.Count == 0) return;
+            if (s == null) return;
 
             // 0. Check if HTML block
             if (s.Tag is HtmlBlockTag hbt)
@@ -533,6 +550,8 @@ namespace MDPlus.Core
                 sb.Append(hbt.RawHtml);
                 return;
             }
+
+            if (s.Blocks.Count == 0) return;
 
             // 1. Callout alert detection
             if (TryGetCallout(s, out CalloutType calloutType, out string calloutTitle, out bool skipHeaderPara))
