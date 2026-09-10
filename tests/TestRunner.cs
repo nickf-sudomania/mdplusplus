@@ -177,6 +177,7 @@ namespace MDPlus.Tests
             RunTest("Plugin Runtime Toggle Behavior and Raw Fallback", TestPluginRuntimeToggleBehavior);
             RunTest("Empirical Performance Benchmark: LaTeX & HTML Zero-Overhead", TestEmpiricalPerformanceBenchmarkWithLatexAndHtmlPlugins);
             RunTest("LaTeX and HTML Edge Cases, Regression Guards & Symbol Typography", TestLatexAndHtmlEdgeCasesAndRegressions);
+            RunTest("Measure Baseline Alignment", TestMeasureBaselineAlignment);
 
             sw.Stop();
 
@@ -3391,6 +3392,90 @@ SHA-256: 4444444444444444444444444444444444444444444444444444444444444444
             Assert(uiSubOnly != null, "Subscript only must render");
             var uiBoth = LatexMathRenderer.RenderMath("x_1^2", ThemePalette.GitHubDark, 14, false);
             Assert(uiBoth != null, "Subscript and superscript must render");
+        }
+
+        private static void TestMeasureBaselineAlignment()
+        {
+            // 1. Verify LatexMathRenderer inline container margin and alignment
+            var mathInlineElem = LatexMathRenderer.RenderMath("A = k \\times B", ThemePalette.GitHubDark, 14.5, isDisplay: false);
+            Assert(mathInlineElem is Border, "Inline math element must be wrapped in a Border container");
+            var mathBorder = (Border)mathInlineElem;
+            Assert(mathBorder.Margin.Top == 3 && mathBorder.Margin.Bottom == -3,
+                $"Inline math border must have calibrated baseline margin (3, -3), got ({mathBorder.Margin.Top}, {mathBorder.Margin.Bottom})");
+
+            // 2. Verify MarkdownToWpfConverter inline code span margin and baseline alignment
+            var parser = new MarkdownParser();
+            var docCode = parser.Parse("Text `BaseDomainGenerator.get_applied_q` more text");
+            var converter = new MarkdownToWpfConverter("", ThemePalette.GitHubDark, enableLatex: true, enableHtml: true);
+            var flowDocCode = converter.Convert(docCode);
+            var paraCode = (Paragraph)flowDocCode.Blocks.FirstBlock!;
+            var uicCode = paraCode.Inlines.OfType<InlineUIContainer>().FirstOrDefault();
+            Assert(uicCode != null, "Inline code span must produce an InlineUIContainer");
+            Assert(uicCode!.BaselineAlignment == BaselineAlignment.Center, "Inline code container must have BaselineAlignment.Center");
+            Assert(uicCode.Child is Border, "Inline code container child must be a Border");
+            var codeBorder = (Border)uicCode.Child!;
+            Assert(codeBorder.Margin.Top == 2.5 && codeBorder.Margin.Bottom == -2.5,
+                $"Inline code border must have calibrated baseline margin (2.5, -2.5), got ({codeBorder.Margin.Top}, {codeBorder.Margin.Bottom})");
+
+            // 3. Verify MarkdownToWpfConverter inline math span margin and baseline alignment
+            var docMath = parser.Parse("Ratio ($A = k \\times B$, find $A$).");
+            var flowDocMath = converter.Convert(docMath);
+            var paraMath = (Paragraph)flowDocMath.Blocks.FirstBlock!;
+            var uicMathList = paraMath.Inlines.OfType<InlineUIContainer>().ToList();
+            Assert(uicMathList.Count == 2, $"Expected 2 inline math containers, got {uicMathList.Count}");
+            foreach (var uicMath in uicMathList)
+            {
+                Assert(uicMath.BaselineAlignment == BaselineAlignment.Center, "Inline math container must have BaselineAlignment.Center");
+                Assert(uicMath.Child is Border, "Inline math container child must be a Border");
+                var mb = (Border)uicMath.Child;
+                Assert(mb.Margin.Top == 3 && mb.Margin.Bottom == -3,
+                    $"Inline math border must have calibrated baseline margin (3, -3), got ({mb.Margin.Top}, {mb.Margin.Bottom})");
+            }
+
+            // 4. Verify HtmlWpfRenderer kbd and code tags
+            var kbdInline = new HtmlInline { RawHtml = "<kbd>Ctrl</kbd>", Tag = "kbd", Content = "Ctrl" };
+            var kbdResult = HtmlWpfRenderer.RenderHtmlInline(kbdInline, ThemePalette.GitHubDark, null, null);
+            Assert(kbdResult is InlineUIContainer, "HTML kbd tag must render as InlineUIContainer");
+            var uicKbd = (InlineUIContainer)kbdResult;
+            Assert(uicKbd.BaselineAlignment == BaselineAlignment.Center, "HTML kbd container must have BaselineAlignment.Center");
+            var kbdBorder = (Border)uicKbd.Child;
+            Assert(kbdBorder.Margin.Top == 2.5 && kbdBorder.Margin.Bottom == -2.5,
+                $"HTML kbd border must have calibrated baseline margin (2.5, -2.5), got ({kbdBorder.Margin.Top}, {kbdBorder.Margin.Bottom})");
+
+            var htmlCodeInline = new HtmlInline { RawHtml = "<code>test</code>", Tag = "code", Content = "test" };
+            var htmlCodeResult = HtmlWpfRenderer.RenderHtmlInline(htmlCodeInline, ThemePalette.GitHubDark, null, null);
+            Assert(htmlCodeResult is InlineUIContainer, "HTML code tag must render as InlineUIContainer");
+            var uicHtmlCode = (InlineUIContainer)htmlCodeResult;
+            Assert(uicHtmlCode.BaselineAlignment == BaselineAlignment.Center, "HTML code container must have BaselineAlignment.Center");
+            var htmlCodeBorder = (Border)uicHtmlCode.Child;
+            Assert(htmlCodeBorder.Margin.Top == 2.5 && htmlCodeBorder.Margin.Bottom == -2.5,
+                $"HTML code border must have calibrated baseline margin (2.5, -2.5), got ({htmlCodeBorder.Margin.Top}, {htmlCodeBorder.Margin.Bottom})");
+
+            // 5. Render full user scenario directly using production converter to generate final visual verification artifact
+            string userMarkdown =
+                "* Regardless of whether the module covers Fractions, the code produces identical word problems defined in `BaseDomainGenerator.get_applied_q` (`domain_generators.py` line 142):\n" +
+                "* **M01 (qn 71)**: Two-variable ratio comparison ($A = k \\times B$, total given; find $A$).\n" +
+                "* **M02 (qn 72)**: Two-week gathering sum with difference ($W^2 = W^1 + d$, total both weeks).\n" +
+                "* **M05 (qn 75)**: Equal end-state internal transfer ($A - t = B + t$; difference asked = 0).\n" +
+                "* Keyboard shortcut: press <kbd>Ctrl</kbd> + <kbd>Shift</kbd> + <kbd>P</kbd> to inspect.";
+
+            var fullDoc = parser.Parse(userMarkdown);
+            var productionFlowDoc = converter.Convert(fullDoc);
+
+            var rtb = new RichTextBox
+            {
+                Width = 850,
+                Background = new SolidColorBrush(Color.FromRgb(24, 26, 32)),
+                BorderThickness = new Thickness(0),
+                Document = productionFlowDoc,
+                IsReadOnly = true
+            };
+
+            rtb.Measure(new Size(850, 2000));
+            rtb.Arrange(new Rect(0, 0, 850, rtb.DesiredSize.Height));
+            rtb.UpdateLayout();
+
+            Assert(rtb.ActualWidth > 0 && rtb.ActualHeight > 0, "RichTextBox layout measurement must succeed for baseline-aligned document");
         }
 
         private class MockHttpMessageHandler : System.Net.Http.HttpMessageHandler

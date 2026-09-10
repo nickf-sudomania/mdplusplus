@@ -152,6 +152,7 @@ namespace MDPlus.Core
                 {
                     Background = Brushes.Transparent,
                     Padding = new Thickness(1, 0, 1, 0),
+                    Margin = new Thickness(1, 3, 1, -3),
                     VerticalAlignment = VerticalAlignment.Center,
                     ToolTip = "$" + latex + "$",
                     Child = mathContent

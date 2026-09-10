@@ -56,7 +56,7 @@ namespace MDPlus.Core
                         BorderThickness = new Thickness(1, 1, 1, 2), // 3D keycap effect
                         CornerRadius = new CornerRadius(4),
                         Padding = new Thickness(6, 1, 6, 2),
-                        Margin = new Thickness(2, 0, 2, 0),
+                        Margin = new Thickness(2, 2.5, 2, -2.5),
                         VerticalAlignment = VerticalAlignment.Center
                     };
 
@@ -173,7 +173,7 @@ namespace MDPlus.Core
                         BorderThickness = new Thickness(1),
                         CornerRadius = new CornerRadius(3),
                         Padding = new Thickness(5, 1, 5, 1),
-                        Margin = new Thickness(2, 0, 2, 0),
+                        Margin = new Thickness(2, 2.5, 2, -2.5),
                         VerticalAlignment = VerticalAlignment.Center
                     };
                     var codeText = new TextBlock
