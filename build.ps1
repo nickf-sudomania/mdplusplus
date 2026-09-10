@@ -162,11 +162,15 @@ switch ($Action) {
             if (-not $found) { $newLines += "$setupHash  MDPlus-Setup.exe" }
             $newContent = ($newLines -join "`n") + "`n"
             Set-Content -Path $sumsFile -Value $newContent
-            $nppChecksum = Join-Path $distPath "MDPlus.1.0.0.checksums.sha256"
+            $nppChecksum = Join-Path $distPath "MDPlus.1.01.checksums.sha256"
             if (Test-Path $nppChecksum) {
                 Set-Content -Path $nppChecksum -Value $newContent
             }
-            Write-Host "Updated SHA256SUMS.txt and MDPlus.1.0.0.checksums.sha256 with installer hash." -ForegroundColor DarkGray
+            $nppChecksumLegacy = Join-Path $distPath "MDPlus.1.0.0.checksums.sha256"
+            if (Test-Path $nppChecksumLegacy) {
+                Set-Content -Path $nppChecksumLegacy -Value $newContent
+            }
+            Write-Host "Updated SHA256SUMS.txt and MDPlus checksums manifests with installer hash." -ForegroundColor DarkGray
         }
 
         Write-Host "`nSHA-256: $setupHash  MDPlus-Setup.exe" -ForegroundColor DarkCyan
@@ -207,13 +211,14 @@ switch ($Action) {
         Remove-Item $stagingDir -Recurse -Force
 
         # 3. Package source code archive (Notepad++ source release style)
-        Write-Host "`n[INFO] Creating source code release archive (MDPlus-1.0.0-src.zip)..." -ForegroundColor Yellow
-        $srcZipPath = Join-Path $distPath "MDPlus-1.0.0-src.zip"
+        $appVersion = "1.01"
+        Write-Host "`n[INFO] Creating source code release archive (MDPlus-$appVersion-src.zip)..." -ForegroundColor Yellow
+        $srcZipPath = Join-Path $distPath "MDPlus-$appVersion-src.zip"
         if (Test-Path $srcZipPath) {
             Remove-Item $srcZipPath -Force
         }
 
-        $srcStagingDir = Join-Path $distPath "src_staging\MDPlus-1.0.0-src"
+        $srcStagingDir = Join-Path $distPath "src_staging\MDPlus-$appVersion-src"
         if (Test-Path (Join-Path $distPath "src_staging")) { Remove-Item (Join-Path $distPath "src_staging") -Recurse -Force }
         New-Item -ItemType Directory -Path $srcStagingDir | Out-Null
 
@@ -237,6 +242,7 @@ switch ($Action) {
         Copy-Item (Join-Path $PSScriptRoot "LICENSE") -Destination $srcStagingDir
 
         Compress-Archive -Path "$srcStagingDir\*" -DestinationPath $srcZipPath -Force
+        Copy-Item $srcZipPath -Destination (Join-Path $distPath "MDPlus-1.0.0-src.zip") -Force
         Remove-Item (Join-Path $distPath "src_staging") -Recurse -Force
 
         # 4. Package Windows Setup Installer with .NET 8 bootstrapper
@@ -252,6 +258,7 @@ switch ($Action) {
         # Write individual hash files
         Set-Content -Path (Join-Path $distPath "MDPlus.exe.sha256") -Value "$exeHash  MDPlus.exe"
         Set-Content -Path (Join-Path $distPath "MDPlus-win-x64.zip.sha256") -Value "$zipHash  MDPlus-win-x64.zip"
+        Set-Content -Path (Join-Path $distPath "MDPlus-$appVersion-src.zip.sha256") -Value "$srcHash  MDPlus-$appVersion-src.zip"
         Set-Content -Path (Join-Path $distPath "MDPlus-1.0.0-src.zip.sha256") -Value "$srcHash  MDPlus-1.0.0-src.zip"
         Set-Content -Path (Join-Path $distPath "MDPlus-Setup.exe.sha256") -Value "$setupHash  MDPlus-Setup.exe"
 
@@ -259,10 +266,11 @@ switch ($Action) {
         $checksumContent = @"
 $exeHash  MDPlus.exe
 $zipHash  MDPlus-win-x64.zip
-$srcHash  MDPlus-1.0.0-src.zip
+$srcHash  MDPlus-$appVersion-src.zip
 $setupHash  MDPlus-Setup.exe
 "@
         Set-Content -Path (Join-Path $distPath "SHA256SUMS.txt") -Value $checksumContent
+        Set-Content -Path (Join-Path $distPath "MDPlus.$appVersion.checksums.sha256") -Value $checksumContent
         Set-Content -Path (Join-Path $distPath "MDPlus.1.0.0.checksums.sha256") -Value $checksumContent
 
         Write-Host "`n=======================================================" -ForegroundColor Green
@@ -275,9 +283,9 @@ $setupHash  MDPlus-Setup.exe
         Write-Host "    SHA-256: $setupHash" -ForegroundColor DarkCyan
         Write-Host "  • MDPlus-win-x64.zip" -ForegroundColor Cyan
         Write-Host "    SHA-256: $zipHash" -ForegroundColor DarkCyan
-        Write-Host "  • MDPlus-1.0.0-src.zip (Source Code Archive)" -ForegroundColor Cyan
+        Write-Host "  • MDPlus-$appVersion-src.zip (Source Code Archive)" -ForegroundColor Cyan
         Write-Host "    SHA-256: $srcHash" -ForegroundColor DarkCyan
-        Write-Host "  • MDPlus.1.0.0.checksums.sha256 (Notepad++ Checksum Standard)" -ForegroundColor Gray
+        Write-Host "  • MDPlus.$appVersion.checksums.sha256 (Notepad++ Checksum Standard)" -ForegroundColor Gray
         Write-Host "  • SHA256SUMS.txt (Master Checksum Manifest)" -ForegroundColor Gray
         Write-Host ""
         Write-Host "To verify download integrity, run:" -ForegroundColor Gray

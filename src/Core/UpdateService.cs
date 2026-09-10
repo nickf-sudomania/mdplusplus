@@ -65,12 +65,21 @@ namespace MDPlus.Core
         }
 
         /// <summary>
-        /// Gets the currently executing application version as a clean semantic version string (e.g. "1.0.0").
+        /// Gets the currently executing application version as a clean semantic version string (e.g. "1.01").
         /// </summary>
         public static string GetCurrentVersion()
         {
-            var ver = typeof(UpdateService).Assembly.GetName().Version;
-            if (ver == null) return "1.0.0";
+            var assembly = typeof(UpdateService).Assembly;
+            var infoVerAttr = System.Reflection.CustomAttributeExtensions.GetCustomAttribute<System.Reflection.AssemblyInformationalVersionAttribute>(assembly);
+            if (infoVerAttr != null && !string.IsNullOrWhiteSpace(infoVerAttr.InformationalVersion))
+            {
+                string infoVer = infoVerAttr.InformationalVersion.Trim();
+                int plusIdx = infoVer.IndexOf('+');
+                if (plusIdx > 0) infoVer = infoVer.Substring(0, plusIdx);
+                return infoVer;
+            }
+            var ver = assembly.GetName().Version;
+            if (ver == null) return "1.01";
             return $"{ver.Major}.{ver.Minor}.{Math.Max(0, ver.Build)}";
         }
 

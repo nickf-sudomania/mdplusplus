@@ -85,13 +85,13 @@ jobs:
             dist/MDPlus.exe
             dist/MDPlus-Setup.exe
             dist/MDPlus-win-x64.zip
-            dist/MDPlus-1.0.0-src.zip
+            dist/MDPlus-*-src.zip
             dist/SHA256SUMS.txt
-            dist/MDPlus.1.0.0.checksums.sha256
+            dist/MDPlus.*.checksums.sha256
             dist/MDPlus.exe.sha256
             dist/MDPlus-Setup.exe.sha256
             dist/MDPlus-win-x64.zip.sha256
-            dist/MDPlus-1.0.0-src.zip.sha256
+            dist/MDPlus-*-src.zip.sha256
           body: |
             ## MDPlus Release
 

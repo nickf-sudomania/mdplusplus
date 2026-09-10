@@ -4,7 +4,7 @@
 ; =====================================================================
 
 #define MyAppName "MDPlus"
-#define MyAppVersion "1.0.0"
+#define MyAppVersion "1.01"
 #define MyAppPublisher "MDPlus"
 #define MyAppURL "https://github.com/nickf-sudomania/mdplusplus"
 #define MyAppExeName "MDPlus.exe"
@@ -16,7 +16,7 @@
 AppId={{E67BD82D-C178-43B3-9F93-78B43DF331B2}
 AppName={#MyAppName}
 AppVersion={#MyAppVersion}
-AppVerName={#MyAppName} {#MyAppVersion}
+AppVerName={#MyAppName} v{#MyAppVersion}
 AppPublisher={#MyAppPublisher}
 AppPublisherURL={#MyAppURL}
 AppSupportURL={#MyAppURL}
@@ -29,7 +29,7 @@ OutputDir=..\dist
 OutputBaseFilename=MDPlus-Setup
 SetupIconFile=..\src\Resources\AppIcon.ico
 UninstallDisplayIcon={app}\{#MyAppExeName}
-UninstallDisplayName={#MyAppName} {#MyAppVersion}
+UninstallDisplayName={#MyAppName} v{#MyAppVersion}
 Compression=lzma2/ultra64
 SolidCompression=yes
 WizardStyle=modern dynamic
@@ -38,10 +38,10 @@ PrivilegesRequiredOverridesAllowed=dialog commandline
 ArchitecturesAllowed=x64compatible
 ArchitecturesInstallIn64BitMode=x64compatible
 ChangesAssociations=yes
-VersionInfoVersion=1.0.0.0
+VersionInfoVersion=1.0.1.0
 VersionInfoCompany={#MyAppPublisher}
 VersionInfoDescription=MDPlus Setup Installer
-VersionInfoProductVersion=1.0.0.0
+VersionInfoProductVersion=1.0.1.0
 VersionInfoProductName=MDPlus Markdown Viewer
 CloseApplications=yes
 RestartApplications=no

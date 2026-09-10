@@ -401,7 +401,7 @@ Console.WriteLine($""Parsed {doc.Blocks.Count} blocks in 2ms!"");
                 MarkdownViewer.Document = null;
                 RawMarkdownTextBox.Text = string.Empty;
                 TocListBox.ItemsSource = null;
-                Title = "MDPlus";
+                Title = $"MDPlus v{UpdateService.GetCurrentVersion().TrimStart('v', 'V')}";
                 UpdateStatusBar();
                 RebuildTabStrip();
                 return;
@@ -1812,8 +1812,9 @@ Console.WriteLine($""Parsed {doc.Blocks.Count} blocks in 2ms!"");
                 ? HashService.ComputeSha256(currentExe)
                 : "Development Build";
 
+            string ver = UpdateService.GetCurrentVersion().TrimStart('v', 'V');
             MessageBox.Show(
-                "MDPlus - Native Windows Markdown Viewer\nVersion 1.0.0\n\n" +
+                $"MDPlus - Native Windows Markdown Viewer\nVersion v{ver}\n\n" +
                 "A fast, lightweight desktop Markdown display application designed with the simplicity and performance of Notepad and Notepad++.\n\n" +
                 $"Current Executable SHA-256 Digest:\n{sha256}\n\n" +
                 "Project & Release Hashes:\nhttps://github.com/nickf-sudomania/mdplusplus\n\n" +
