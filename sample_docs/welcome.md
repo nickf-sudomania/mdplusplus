@@ -2,7 +2,7 @@
 title: "Welcome to MDPlus"
 author: "Nick"
 date: "2026-09-09"
-version: "1.01"
+version: "1.02"
 category: "Documentation"
 ---
 
