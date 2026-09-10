@@ -32,6 +32,12 @@ namespace MDPlus.Models
         public bool EnableHtmlRendering { get; set; } = true;
 
         /// <summary>
+        /// When true (default), launching MDPlus with a file when an instance is already running
+        /// opens the file in a new tab of the existing window rather than spawning a new window.
+        /// </summary>
+        public bool OpenFilesInNewTab { get; set; } = true;
+
+        /// <summary>
         /// Whether to automatically check for updates on startup (at most once every 24 hours).
         /// </summary>
         public bool CheckForUpdatesOnStartup { get; set; } = true;

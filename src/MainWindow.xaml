@@ -102,6 +102,8 @@
             </MenuItem>
 
             <MenuItem Header="_Tools">
+                <MenuItem Header="Open Files in _New Tab" IsCheckable="True" Name="OpenFilesInNewTabMenuItem" Click="OpenFilesInNewTab_Click" />
+                <Separator />
                 <MenuItem Header="Verify File _Integrity (SHA-256)..." Click="ToolsVerifyIntegrity_Click" />
             </MenuItem>
 
@@ -219,6 +221,8 @@
                             </MenuItem>
 
                             <MenuItem Header="_Tools">
+                                <MenuItem Header="Open Files in _New Tab" IsCheckable="True" Name="HamburgerOpenFilesInNewTabMenuItem" Click="OpenFilesInNewTab_Click" />
+                                <Separator />
                                 <MenuItem Header="Verify File _Integrity (SHA-256)..." Click="ToolsVerifyIntegrity_Click" />
                             </MenuItem>
 

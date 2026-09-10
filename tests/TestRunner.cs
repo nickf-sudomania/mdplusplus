@@ -178,6 +178,9 @@ namespace MDPlus.Tests
             RunTest("Empirical Performance Benchmark: LaTeX & HTML Zero-Overhead", TestEmpiricalPerformanceBenchmarkWithLatexAndHtmlPlugins);
             RunTest("LaTeX and HTML Edge Cases, Regression Guards & Symbol Typography", TestLatexAndHtmlEdgeCasesAndRegressions);
             RunTest("Measure Baseline Alignment", TestMeasureBaselineAlignment);
+            RunTest("LaTeX Math Recursive Font Modifiers, Overline, & Escapes", TestLatexBoldFormattingAndEscapes);
+            RunTest("Native HTML Table Block Rendering & Layout", TestHtmlTableRendering);
+            RunTest("Single-Instance Multi-Tab Mode & Preference Serialization", TestSingleInstanceAndMultiTabSettings);
 
             sw.Stop();
 
@@ -3476,6 +3479,154 @@ SHA-256: 4444444444444444444444444444444444444444444444444444444444444444
             rtb.UpdateLayout();
 
             Assert(rtb.ActualWidth > 0 && rtb.ActualHeight > 0, "RichTextBox layout measurement must succeed for baseline-aligned document");
+        }
+
+        private static void TestLatexBoldFormattingAndEscapes()
+        {
+            // 1. Verify \mathbf{\$1,187.91\text{M}} renders cleanly without verbatim \text{M} or raw backslashes
+            var boldMath = LatexMathRenderer.RenderMath(@"\mathbf{\$1,187.91\text{M}}", ThemePalette.GitHubDark, 16, isDisplay: true);
+            Assert(boldMath != null, "RenderMath for mathbf with inner text must succeed");
+
+            string combinedText = ExtractTextFromVisual(boldMath);
+            Assert(combinedText.Contains("$1,187.91M") || (combinedText.Contains("$") && combinedText.Contains("1,187.91") && combinedText.Contains("M")),
+                $"Rendered mathbf should contain unescaped '$1,187.91M', got: '{combinedText}'");
+            Assert(!combinedText.Contains(@"\text"), $"Rendered mathbf must not contain verbatim '\\text', got: '{combinedText}'");
+            Assert(!combinedText.Contains(@"\$"), $"Rendered mathbf must not contain verbatim '\\$', got: '{combinedText}'");
+
+            bool hasBold = HasFontWeightBold(boldMath);
+            Assert(hasBold, "Rendered mathbf elements must have FontWeights.Bold applied");
+
+            // 2. Verify \mathbf{34.22\%} renders unescaped % symbol without backslash
+            var boldPercent = LatexMathRenderer.RenderMath(@"\mathbf{34.22\%}", ThemePalette.GitHubDark, 16, isDisplay: false);
+            string percentText = ExtractTextFromVisual(boldPercent);
+            Assert(percentText.Contains("34.22%") || (percentText.Contains("34.22") && percentText.Contains("%")),
+                $"Rendered mathbf percent should contain '34.22%', got: '{percentText}'");
+            Assert(!percentText.Contains(@"\%"), $"Rendered mathbf percent must not contain verbatim '\\%', got: '{percentText}'");
+
+            // 3. Verify \overline{Beat}^{90-day} renders an overline container with attached superscript
+            var overlineMath = LatexMathRenderer.RenderMath(@"\overline{Beat}^{90-day}", ThemePalette.GitHubDark, 16, isDisplay: false);
+            string overlineText = ExtractTextFromVisual(overlineMath);
+            Assert(!overlineText.StartsWith("overline", StringComparison.OrdinalIgnoreCase),
+                $"Rendered overline must not contain verbatim word 'overline', got: '{overlineText}'");
+            Assert(overlineText.Contains("Beat") && overlineText.Contains("90") && overlineText.Contains("day"),
+                $"Rendered overline must contain both base 'Beat' and superscript '90'/'day', got: '{overlineText}'");
+
+            // 4. Verify comma-formatted numbers like \$1,140.00\text{M}
+            var commaMath = LatexMathRenderer.RenderMath(@"\$1,140.00\text{M}", ThemePalette.GitHubDark, 16, isDisplay: true);
+            string commaText = ExtractTextFromVisual(commaMath);
+            Assert(commaText.Contains("1,140.00"), $"Rendered math must preserve comma formatted number '1,140.00', got: '{commaText}'");
+            Assert(!commaText.Contains(@"\text"), $"Rendered math must not contain literal '\\text', got: '{commaText}'");
+
+            // 5. Test full complex equation from user's screenshot
+            string fullEquation = @"Adjusted Q3 2026 Target = Active Q3 Guidance Midpoint\times(1 + \overline{Beat}^{90-day}) = \$1,140.00\text{M}\times(1 + 0.0420) = \mathbf{\$1,187.91\text{M}}";
+            var fullVisual = LatexMathRenderer.RenderMath(fullEquation, ThemePalette.GitHubDark, 16, isDisplay: true);
+            string fullRendered = ExtractTextFromVisual(fullVisual);
+            Assert(!fullRendered.Contains(@"\text"), $"Full equation must not contain verbatim '\\text', got: '{fullRendered}'");
+            Assert(!fullRendered.Contains(@"\$"), $"Full equation must not contain verbatim '\\$', got: '{fullRendered}'");
+            Assert(!fullRendered.Contains("overlineBeat"), $"Full equation must not contain 'overlineBeat', got: '{fullRendered}'");
+        }
+
+        private static void TestHtmlTableRendering()
+        {
+            string htmlTable =
+                "<table>\n" +
+                "  <thead>\n" +
+                "    <tr><th align=\"left\">Metric</th><th align=\"right\">Value</th></tr>\n" +
+                "  </thead>\n" +
+                "  <tbody>\n" +
+                "    <tr><td>Revenue Target</td><td align=\"right\">$1,187.91M</td></tr>\n" +
+                "    <tr><td>YoY Growth</td><td align=\"right\">34.22%</td></tr>\n" +
+                "  </tbody>\n" +
+                "</table>";
+
+            var parser = new MarkdownParser();
+            var doc = parser.Parse(htmlTable);
+            Assert(doc.Blocks.Count == 1, $"HTML table should parse into 1 block, got {doc.Blocks.Count}");
+            Assert(doc.Blocks[0] is HtmlBlock, "Parsed block should be HtmlBlock");
+
+            var htmlBlock = (HtmlBlock)doc.Blocks[0];
+            Assert(htmlBlock.Tag.Equals("table", StringComparison.OrdinalIgnoreCase), $"HtmlBlock tag should be 'table', got '{htmlBlock.Tag}'");
+
+            var converter = new MarkdownToWpfConverter(".", ThemePalette.GitHubDark, enableLatex: true, enableHtml: true);
+            var flowDoc = converter.Convert(doc);
+
+            Assert(flowDoc.Blocks.Count == 1, $"FlowDocument should contain 1 block for HTML table, got {flowDoc.Blocks.Count}");
+            Assert(flowDoc.Blocks.FirstBlock is WpfTable, "FirstBlock of rendered HTML table must be a WPF Table");
+
+            var table = (WpfTable)flowDoc.Blocks.FirstBlock;
+            Assert(table.Columns.Count == 2, $"Table should have 2 columns, got {table.Columns.Count}");
+            Assert(table.RowGroups.Count > 0, "Table should have row groups");
+            Assert(table.RowGroups[0].Rows.Count == 3, $"Table should have 3 rows (1 header + 2 data), got {table.RowGroups[0].Rows.Count}");
+        }
+
+        private static void TestSingleInstanceAndMultiTabSettings()
+        {
+            var settings = new AppSettings();
+            Assert(settings.OpenFilesInNewTab == true, "OpenFilesInNewTab must default to true");
+
+            // Test serialization
+            string json = System.Text.Json.JsonSerializer.Serialize(settings);
+            Assert(json.Contains("\"OpenFilesInNewTab\":true") || json.Contains("\"OpenFilesInNewTab\": true"), "JSON must include OpenFilesInNewTab: true");
+
+            settings.OpenFilesInNewTab = false;
+            string jsonFalse = System.Text.Json.JsonSerializer.Serialize(settings);
+            var deserialized = System.Text.Json.JsonSerializer.Deserialize<AppSettings>(jsonFalse);
+            Assert(deserialized != null && deserialized.OpenFilesInNewTab == false, "Deserialized setting must preserve false");
+
+            // Test CLI arguments resolution
+            var resolvedFiles = App.ResolveStartupFiles(settings, new[] { "sample_docs\\welcome.md" });
+            Assert(resolvedFiles.Count == 1, $"ResolveStartupFiles should resolve 1 explicit file argument, got {resolvedFiles.Count}");
+        }
+
+        private static string ExtractTextFromVisual(UIElement? element)
+        {
+            var sb = new StringBuilder();
+            if (element != null)
+            {
+                ExtractTextRecursive(element, sb);
+            }
+            return sb.ToString();
+        }
+
+        private static void ExtractTextRecursive(UIElement? element, StringBuilder sb)
+        {
+            if (element == null) return;
+            if (element is TextBlock tb)
+            {
+                sb.Append(tb.Text);
+            }
+            else if (element is Panel panel)
+            {
+                foreach (UIElement child in panel.Children)
+                {
+                    ExtractTextRecursive(child, sb);
+                }
+            }
+            else if (element is Border border && border.Child != null)
+            {
+                ExtractTextRecursive(border.Child, sb);
+            }
+        }
+
+        private static bool HasFontWeightBold(UIElement? element)
+        {
+            if (element == null) return false;
+            if (element is TextBlock tb && tb.FontWeight == FontWeights.Bold)
+            {
+                return true;
+            }
+            if (element is Panel panel)
+            {
+                foreach (UIElement child in panel.Children)
+                {
+                    if (HasFontWeightBold(child)) return true;
+                }
+            }
+            if (element is Border border && border.Child != null)
+            {
+                if (HasFontWeightBold(border.Child)) return true;
+            }
+            return false;
         }
 
         private class MockHttpMessageHandler : System.Net.Http.HttpMessageHandler

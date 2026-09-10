@@ -78,6 +78,8 @@ namespace MDPlus.Core
             // Delimiters
             { "langle", "⟨" }, { "rangle", "⟩" },
             { "{", "{" }, { "}", "}" },
+            { "$", "$" }, { "%", "%" }, { "_", "_" }, { "&", "&" }, { "#", "#" },
+            { "dollar", "$" }, { "percent", "%" },
 
             // Blackboard Bold Shortcuts
             { "Re", "ℜ" }, { "Im", "ℑ" },
@@ -166,21 +168,33 @@ namespace MDPlus.Core
             private readonly string _src;
             private int _pos;
             private readonly int _len;
+            private readonly FontWeight _fontWeight;
+            private readonly FontStyle? _fontStyleOverride;
+            private readonly FontFamily? _fontFamilyOverride;
 
-            public MathLexer(string src)
+            public MathLexer(string src, FontWeight? fontWeight = null, FontStyle? fontStyleOverride = null, FontFamily? fontFamilyOverride = null)
             {
                 _src = src;
                 _pos = 0;
                 _len = src.Length;
+                _fontWeight = fontWeight ?? FontWeights.Normal;
+                _fontStyleOverride = fontStyleOverride;
+                _fontFamilyOverride = fontFamilyOverride;
             }
 
             private char Peek() => _pos < _len ? _src[_pos] : '\0';
             private char Read() => _pos < _len ? _src[_pos++] : '\0';
             private bool IsEof => _pos >= _len;
 
-            private void SkipWhitespace()
+            private bool SkipWhitespace()
             {
-                while (_pos < _len && char.IsWhiteSpace(_src[_pos])) _pos++;
+                bool hadWhitespace = false;
+                while (_pos < _len && char.IsWhiteSpace(_src[_pos]))
+                {
+                    hadWhitespace = true;
+                    _pos++;
+                }
+                return hadWhitespace;
             }
 
             public UIElement ParseExpression(Brush fg, double fontSize, bool isDisplay)
@@ -191,9 +205,11 @@ namespace MDPlus.Core
                     VerticalAlignment = VerticalAlignment.Center
                 };
 
+                bool lastWasWordOrNum = false;
+
                 while (!IsEof)
                 {
-                    SkipWhitespace();
+                    bool hadSpace = SkipWhitespace();
                     if (IsEof) break;
 
                     char c = Peek();
@@ -202,10 +218,17 @@ namespace MDPlus.Core
                         break;
                     }
 
+                    bool currentIsWordOrNum = char.IsLetterOrDigit(c) || c == '\\';
+                    if (hadSpace && lastWasWordOrNum && currentIsWordOrNum && panel.Children.Count > 0)
+                    {
+                        panel.Children.Add(new Border { Width = Math.Max(2.5, fontSize * 0.25) });
+                    }
+
                     var item = ParseItem(fg, fontSize, isDisplay);
                     if (item != null)
                     {
                         panel.Children.Add(item);
+                        lastWasWordOrNum = currentIsWordOrNum;
                     }
                 }
 
@@ -313,9 +336,21 @@ namespace MDPlus.Core
                 if (char.IsDigit(c))
                 {
                     var sb = new StringBuilder();
-                    while (!IsEof && (char.IsDigit(Peek()) || Peek() == '.'))
+                    while (!IsEof)
                     {
-                        sb.Append(Read());
+                        char p = Peek();
+                        if (char.IsDigit(p) || p == '.')
+                        {
+                            sb.Append(Read());
+                        }
+                        else if (p == ',' && _pos + 1 < _len && char.IsDigit(_src[_pos + 1]))
+                        {
+                            sb.Append(Read());
+                        }
+                        else
+                        {
+                            break;
+                        }
                     }
                     return CreateGlyph(sb.ToString(), fg, fontSize, isItalic: false);
                 }
@@ -430,27 +465,68 @@ namespace MDPlus.Core
                 }
 
                 // 5. Text and Font Modifiers: \text{...}, \mathrm{...}, \mathbf{...}
-                if (cmd == "text" || cmd == "mathrm" || cmd == "mathbf" || cmd == "mathit" || cmd == "textbf")
+                if (cmd == "text" || cmd == "textrm")
                 {
                     string inner = ReadArgumentText();
-                    bool bold = cmd == "mathbf" || cmd == "textbf";
-                    bool italic = cmd == "mathit";
+                    string unescaped = UnescapeTextMode(inner);
                     var tb = new TextBlock
                     {
-                        Text = inner,
+                        Text = unescaped,
                         Foreground = fg,
                         FontSize = fontSize,
-                        FontFamily = cmd == "text" ? TextFont : MathFont,
-                        FontWeight = bold ? FontWeights.Bold : FontWeights.Normal,
-                        FontStyle = italic ? FontStyles.Italic : FontStyles.Normal,
+                        FontFamily = TextFont,
+                        FontWeight = _fontWeight,
+                        FontStyle = _fontStyleOverride ?? FontStyles.Normal,
                         VerticalAlignment = VerticalAlignment.Center
                     };
                     return tb;
                 }
 
-                // 6. Spacing Commands
+                if (cmd == "mathbf" || cmd == "textbf" || cmd == "boldsymbol" || cmd == "bm")
+                {
+                    string inner = ReadArgumentText();
+                    var childLexer = new MathLexer(inner, FontWeights.Bold, _fontStyleOverride, _fontFamilyOverride);
+                    return childLexer.ParseExpression(fg, fontSize, isDisplay);
+                }
+
+                if (cmd == "mathit" || cmd == "textit")
+                {
+                    string inner = ReadArgumentText();
+                    var childLexer = new MathLexer(inner, _fontWeight, FontStyles.Italic, _fontFamilyOverride);
+                    return childLexer.ParseExpression(fg, fontSize, isDisplay);
+                }
+
+                if (cmd == "mathrm")
+                {
+                    string inner = ReadArgumentText();
+                    var childLexer = new MathLexer(inner, _fontWeight, FontStyles.Normal, MathFont);
+                    return childLexer.ParseExpression(fg, fontSize, isDisplay);
+                }
+
+                // 6. Overline & Underline: \overline{...}, \underline{...}
+                if (cmd == "overline" || cmd == "underline")
+                {
+                    var arg = ParseArgument(fg, fontSize, isDisplay);
+                    bool isOver = cmd == "overline";
+                    double barThickness = Math.Max(1.2, fontSize * 0.08);
+                    var border = new Border
+                    {
+                        BorderThickness = isOver ? new Thickness(0, barThickness, 0, 0) : new Thickness(0, 0, 0, barThickness),
+                        BorderBrush = fg,
+                        Padding = isOver ? new Thickness(0, 1.5, 0, 0) : new Thickness(0, 0, 0, 1.5),
+                        Margin = new Thickness(1, 0, 1, 0),
+                        VerticalAlignment = VerticalAlignment.Center,
+                        Child = arg
+                    };
+                    return border;
+                }
+
+                // 7. Spacing Commands
                 if (cmd == "quad") return new Border { Width = fontSize * 0.8 };
                 if (cmd == "qquad") return new Border { Width = fontSize * 1.6 };
+                if (cmd == "enspace") return new Border { Width = fontSize * 0.5 };
+                if (cmd == "thinspace") return new Border { Width = fontSize * 0.25 };
+                if (cmd == "space") return new Border { Width = fontSize * 0.3 };
 
                 // 7. Accents: \hat{x}, \vec{x}, \bar{x}, \dot{x}, \ddot{x}, \tilde{x}
                 if (cmd == "hat" || cmd == "vec" || cmd == "bar" || cmd == "dot" || cmd == "ddot" || cmd == "tilde")
@@ -645,15 +721,41 @@ namespace MDPlus.Core
                 return grid;
             }
 
-            private static TextBlock CreateGlyph(string text, Brush fg, double fontSize, bool isItalic)
+            private static string UnescapeTextMode(string text)
             {
+                if (string.IsNullOrEmpty(text)) return text;
+                var sb = new StringBuilder(text.Length);
+                for (int i = 0; i < text.Length; i++)
+                {
+                    if (text[i] == '\\' && i + 1 < text.Length)
+                    {
+                        char next = text[i + 1];
+                        if (next == '$' || next == '%' || next == '&' || next == '_' || next == '#' ||
+                            next == '{' || next == '}' || next == '\\')
+                        {
+                            sb.Append(next == '\\' ? ' ' : next);
+                            i++;
+                            continue;
+                        }
+                    }
+                    sb.Append(text[i]);
+                }
+                return sb.ToString();
+            }
+
+            private TextBlock CreateGlyph(string text, Brush fg, double fontSize, bool isItalic)
+            {
+                FontStyle style = _fontStyleOverride ?? (isItalic ? FontStyles.Italic : FontStyles.Normal);
+                FontFamily family = _fontFamilyOverride ?? MathFont;
+
                 return new TextBlock
                 {
                     Text = text,
                     Foreground = fg,
                     FontSize = fontSize,
-                    FontFamily = MathFont,
-                    FontStyle = isItalic ? FontStyles.Italic : FontStyles.Normal,
+                    FontFamily = family,
+                    FontWeight = _fontWeight,
+                    FontStyle = style,
                     VerticalAlignment = VerticalAlignment.Center
                 };
             }

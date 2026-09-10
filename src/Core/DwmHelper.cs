@@ -206,5 +206,69 @@ namespace MDPlus.Core
                 return false;
             }
         }
+
+        [DllImport("user32.dll")]
+        [return: MarshalAs(UnmanagedType.Bool)]
+        private static extern bool SetForegroundWindow(IntPtr hWnd);
+
+        [DllImport("user32.dll")]
+        private static extern bool ShowWindow(IntPtr hWnd, int nCmdShow);
+
+        [DllImport("user32.dll")]
+        [return: MarshalAs(UnmanagedType.Bool)]
+        private static extern bool IsIconic(IntPtr hWnd);
+
+        private const int SW_RESTORE = 9;
+        private const int SW_SHOW = 5;
+
+        /// <summary>
+        /// Restores and activates a window, bringing it reliably to the foreground.
+        /// </summary>
+        public static void BringWindowToForeground(Window window)
+        {
+            if (window == null) return;
+            try
+            {
+                if (window.Dispatcher != null && !window.Dispatcher.CheckAccess())
+                {
+                    window.Dispatcher.Invoke(() => BringWindowToForeground(window));
+                    return;
+                }
+
+                var helper = new WindowInteropHelper(window);
+                IntPtr hwnd = helper.Handle;
+                if (hwnd != IntPtr.Zero)
+                {
+                    if (IsIconic(hwnd) || window.WindowState == WindowState.Minimized)
+                    {
+                        ShowWindow(hwnd, SW_RESTORE);
+                        window.WindowState = WindowState.Normal;
+                    }
+                    else
+                    {
+                        ShowWindow(hwnd, SW_SHOW);
+                    }
+                    SetForegroundWindow(hwnd);
+                }
+
+                if (window.Visibility != Visibility.Visible)
+                {
+                    window.Show();
+                }
+                window.Activate();
+                window.Topmost = true;
+                window.Topmost = false;
+                window.Focus();
+            }
+            catch
+            {
+                try
+                {
+                    if (window.WindowState == WindowState.Minimized) window.WindowState = WindowState.Normal;
+                    window.Activate();
+                }
+                catch { }
+            }
+        }
     }
 }

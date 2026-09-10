@@ -79,6 +79,7 @@ namespace MDPlus
             RawMarkdownTextBox.TextWrapping = _settings.WordWrap ? TextWrapping.Wrap : TextWrapping.NoWrap;
 
             UpdatePluginMenuChecks();
+            UpdateOpenFilesInNewTabMenuChecks();
 
             Width = _settings.WindowWidth;
             Height = _settings.WindowHeight;
@@ -1544,6 +1545,29 @@ Plugins can be enabled or disabled instantly via the Plugins menu without restar
             if (HamburgerThemeOneLightItem != null) HamburgerThemeOneLightItem.IsChecked = preset == ThemePreset.OneLight;
             if (HamburgerThemeSolarizedLightItem != null) HamburgerThemeSolarizedLightItem.IsChecked = preset == ThemePreset.SolarizedLight;
             if (HamburgerThemeQuietLightItem != null) HamburgerThemeQuietLightItem.IsChecked = preset == ThemePreset.QuietLight;
+        }
+
+        public void OpenFile(string filePath)
+        {
+            OpenDocument(filePath, activate: true, saveSession: true);
+        }
+
+        public void RestoreAndActivateWindow()
+        {
+            DwmHelper.BringWindowToForeground(this);
+        }
+
+        private void UpdateOpenFilesInNewTabMenuChecks()
+        {
+            if (OpenFilesInNewTabMenuItem != null) OpenFilesInNewTabMenuItem.IsChecked = _settings.OpenFilesInNewTab;
+            if (HamburgerOpenFilesInNewTabMenuItem != null) HamburgerOpenFilesInNewTabMenuItem.IsChecked = _settings.OpenFilesInNewTab;
+        }
+
+        private void OpenFilesInNewTab_Click(object sender, RoutedEventArgs e)
+        {
+            _settings.OpenFilesInNewTab = !_settings.OpenFilesInNewTab;
+            _settings.Save();
+            UpdateOpenFilesInNewTabMenuChecks();
         }
 
         private void UpdatePluginMenuChecks()

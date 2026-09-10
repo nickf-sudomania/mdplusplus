@@ -246,13 +246,13 @@ switch ($Action) {
         Remove-Item (Join-Path $distPath "src_staging") -Recurse -Force
 
         # 4. Compile Inno Setup Windows installer if ISCC.exe is installed
-        $innoCompiler = "C:\Users\nickf\AppData\Local\Programs\Inno Setup 6\ISCC.exe"
+        $innoCompiler = Get-InnoSetupCompiler
         $issScript = Join-Path $PSScriptRoot "installer\MDPlus.iss"
 
-        if (Test-Path $innoCompiler) {
+        if ($innoCompiler -and (Test-Path $innoCompiler)) {
             Write-Host "`n[INFO] Compiling Windows Setup Installer (MDPlus-Setup.exe)..." -ForegroundColor Yellow
             Write-Host "Using Inno Setup Compiler: $innoCompiler" -ForegroundColor Gray
-            & $innoCompiler $issScript | Out-Null
+            & $innoCompiler $issScript /O"$distPath" /F"MDPlus-Setup" | Out-Null
             $setupPath = Join-Path $distPath "MDPlus-Setup.exe"
             if (Test-Path $setupPath) {
                 Write-Host "[SUCCESS] Windows Setup Installer generated: $setupPath" -ForegroundColor Green
@@ -260,7 +260,7 @@ switch ($Action) {
                 Write-Warning "Inno Setup compilation finished but '$setupPath' was not found."
             }
         } else {
-            Write-Warning "Inno Setup compiler not found at '$innoCompiler'. Skipping setup installer build."
+            Write-Warning "Inno Setup compiler not found. Skipping setup installer build."
         }
 
         # 5. Generate cryptographic SHA-256 hashes (Notepad++ release integrity standard)

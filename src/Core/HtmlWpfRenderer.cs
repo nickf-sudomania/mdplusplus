@@ -8,6 +8,7 @@ using System.Windows.Controls;
 using System.Windows.Documents;
 using System.Windows.Media;
 using System.Windows.Media.Imaging;
+using System.Text.RegularExpressions;
 
 namespace MDPlus.Core
 {
@@ -679,6 +680,11 @@ namespace MDPlus.Core
                     };
                 }
 
+                case "table":
+                {
+                    return RenderHtmlTable(html, palette);
+                }
+
                 default:
                 {
                     // Generic block
@@ -705,6 +711,131 @@ namespace MDPlus.Core
                     return section;
                 }
             }
+        }
+
+        private static Block RenderHtmlTable(
+            HtmlBlock html,
+            ThemePalette? palette)
+        {
+            var borderBrush = palette?.Border ?? Brushes.Gray;
+            var headerBg = palette?.IsDark == true
+                ? new SolidColorBrush(Color.FromRgb(30, 35, 42))
+                : new SolidColorBrush(Color.FromRgb(240, 242, 245));
+            var altRowBg = palette?.IsDark == true
+                ? new SolidColorBrush(Color.FromArgb(40, 255, 255, 255))
+                : new SolidColorBrush(Color.FromArgb(20, 0, 0, 0));
+            var fgBrush = palette?.EditorFg ?? Brushes.Black;
+            var headingFg = palette?.HeadingFg ?? fgBrush;
+
+            var wpfTable = new Table
+            {
+                CellSpacing = 0,
+                Margin = new Thickness(0, 8, 0, 18),
+                BorderBrush = borderBrush,
+                BorderThickness = new Thickness(1),
+                Tag = new HtmlBlockTag { RawHtml = html.RawHtml, Tag = "table" }
+            };
+
+            var rows = new List<(bool isHeader, List<(string content, TextAlignment align, bool isTh)> cells)>();
+
+            var trMatches = Regex.Matches(html.RawHtml, @"<tr\b[^>]*>(.*?)</tr>", RegexOptions.IgnoreCase | RegexOptions.Singleline);
+            if (trMatches.Count == 0)
+            {
+                trMatches = Regex.Matches(html.RawHtml, @"<tr\b[^>]*>([\s\S]*?)(?=<tr|</table|$)", RegexOptions.IgnoreCase);
+            }
+
+            int maxCols = 0;
+            foreach (Match tr in trMatches)
+            {
+                string rowHtml = tr.Groups[1].Value;
+                var cellMatches = Regex.Matches(rowHtml, @"<(td|th)\b([^>]*)>(.*?)(?:</\1>|(?=<(?:td|th)|$))", RegexOptions.IgnoreCase | RegexOptions.Singleline);
+                var rowCells = new List<(string content, TextAlignment align, bool isTh)>();
+                bool hasTh = false;
+
+                foreach (Match c in cellMatches)
+                {
+                    bool isTh = c.Groups[1].Value.Equals("th", StringComparison.OrdinalIgnoreCase);
+                    if (isTh) hasTh = true;
+                    string attrsStr = c.Groups[2].Value;
+                    string cellInner = c.Groups[3].Value.Trim();
+
+                    var attrs = MarkdownParser.ParseHtmlAttributes(attrsStr);
+                    TextAlignment align = TextAlignment.Left;
+                    if (attrs.TryGetValue("align", out string? alignVal))
+                    {
+                        align = alignVal.ToLowerInvariant() switch
+                        {
+                            "center" => TextAlignment.Center,
+                            "right" => TextAlignment.Right,
+                            _ => TextAlignment.Left
+                        };
+                    }
+                    else if (attrs.TryGetValue("style", out string? styleVal) && styleVal.Contains("text-align", StringComparison.OrdinalIgnoreCase))
+                    {
+                        if (styleVal.Contains("center", StringComparison.OrdinalIgnoreCase)) align = TextAlignment.Center;
+                        else if (styleVal.Contains("right", StringComparison.OrdinalIgnoreCase)) align = TextAlignment.Right;
+                    }
+
+                    string cleanText = Regex.Replace(cellInner, @"<[^>]+>", " ").Trim();
+                    cleanText = System.Net.WebUtility.HtmlDecode(cleanText);
+
+                    rowCells.Add((cleanText, align, isTh));
+                }
+
+                if (rowCells.Count > maxCols) maxCols = rowCells.Count;
+                rows.Add((hasTh, rowCells));
+            }
+
+            if (maxCols == 0) maxCols = 1;
+            for (int i = 0; i < maxCols; i++)
+            {
+                wpfTable.Columns.Add(new TableColumn());
+            }
+
+            var rowGroup = new TableRowGroup();
+            int rowIndex = 0;
+
+            foreach (var r in rows)
+            {
+                var row = new System.Windows.Documents.TableRow();
+                if (r.isHeader)
+                {
+                    row.Background = headerBg;
+                }
+                else if (rowIndex % 2 == 1)
+                {
+                    row.Background = altRowBg;
+                }
+
+                for (int col = 0; col < maxCols; col++)
+                {
+                    string text = col < r.cells.Count ? r.cells[col].content : "";
+                    var align = col < r.cells.Count ? r.cells[col].align : TextAlignment.Left;
+                    bool isTh = r.isHeader || (col < r.cells.Count && r.cells[col].isTh);
+
+                    var p = new Paragraph(new Run(text))
+                    {
+                        FontWeight = isTh ? FontWeights.SemiBold : FontWeights.Normal,
+                        Foreground = isTh ? headingFg : fgBrush,
+                        TextAlignment = align,
+                        Margin = new Thickness(0)
+                    };
+
+                    var cell = new System.Windows.Documents.TableCell(p)
+                    {
+                        Padding = new Thickness(12, 8, 12, 8),
+                        BorderBrush = borderBrush,
+                        BorderThickness = new Thickness(0, 0, 1, 1)
+                    };
+                    row.Cells.Add(cell);
+                }
+
+                rowGroup.Rows.Add(row);
+                rowIndex++;
+            }
+
+            wpfTable.RowGroups.Add(rowGroup);
+            return wpfTable;
         }
     }
 }
