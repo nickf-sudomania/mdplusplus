@@ -3,6 +3,7 @@ using System.Diagnostics;
 using System.Threading;
 using System.Threading.Tasks;
 using System.Windows;
+using System.Windows.Documents;
 using System.Windows.Media;
 using MDPlus.Core;
 
@@ -15,6 +16,7 @@ namespace MDPlus.Controls
         private CancellationTokenSource? _downloadCts;
 
         public string? VerifiedInstallerPath { get; private set; }
+        public FlowDocument? RenderedNotesDocument => HighlightsViewer.Document;
 
         public UpdateDialog(UpdateCheckResult updateInfo, UpdateService? updateService = null)
         {
@@ -46,22 +48,54 @@ namespace MDPlus.Controls
             TitleTextBlock.Text = $"MDPlus {latest} is Available!";
             VersionSubtext.Text = $"Release tag: {latest} (currently running: v{current.TrimStart('v', 'V')}).";
 
-            string highlights = _updateInfo.ReleaseHighlights;
-            if (string.IsNullOrWhiteSpace(highlights))
-            {
-                highlights = "No release notes provided for this version.";
-            }
-            HighlightsTextBox.Text = highlights;
-
-            if (string.IsNullOrEmpty(_updateInfo.ReleaseUrl))
-            {
-                ReleaseNotesButton.Visibility = Visibility.Collapsed;
-            }
+            RenderReleaseNotes();
 
             if (string.IsNullOrEmpty(_updateInfo.SetupDownloadUrl))
             {
                 UpdateNowButton.IsEnabled = false;
                 UpdateNowButton.ToolTip = "Installer binary is not available for this release.";
+            }
+        }
+
+        private void RenderReleaseNotes()
+        {
+            string rawNotes = _updateInfo.ReleaseHighlights;
+            if (string.IsNullOrWhiteSpace(rawNotes))
+            {
+                rawNotes = "*No release notes provided for this version.*";
+            }
+
+            try
+            {
+                var parser = new MarkdownParser();
+                var doc = parser.Parse(rawNotes);
+                var palette = ThemeManager.Instance.CurrentPalette;
+                var converter = new MarkdownToWpfConverter(
+                    AppDomain.CurrentDomain.BaseDirectory,
+                    palette,
+                    enableLatex: true,
+                    enableHtml: true);
+
+                var flowDoc = converter.Convert(doc);
+                flowDoc.PagePadding = new Thickness(16, 12, 16, 16);
+                flowDoc.FontSize = 13;
+                flowDoc.LineHeight = 22;
+                flowDoc.Background = Brushes.Transparent;
+                flowDoc.Foreground = palette.EditorFg;
+
+                HighlightsViewer.Document = flowDoc;
+            }
+            catch
+            {
+                var palette = ThemeManager.Instance.CurrentPalette;
+                var flowDoc = new FlowDocument(new Paragraph(new Run(rawNotes)))
+                {
+                    PagePadding = new Thickness(16, 12, 16, 16),
+                    FontSize = 13,
+                    Foreground = palette.EditorFg,
+                    Background = Brushes.Transparent
+                };
+                HighlightsViewer.Document = flowDoc;
             }
         }
 
@@ -73,10 +107,11 @@ namespace MDPlus.Controls
             HeaderBorder.Background = palette.SidebarBg;
             HeaderBorder.BorderBrush = palette.Border;
 
-            HighlightsBorder.Background = palette.CodeBg;
+            HighlightsBorder.Background = palette.EditorBg;
             HighlightsBorder.BorderBrush = palette.Border;
             HighlightsLabel.Foreground = palette.MutedFg;
-            HighlightsTextBox.Foreground = palette.EditorFg;
+
+            RenderReleaseNotes();
 
             FooterBorder.Background = palette.SidebarBg;
             FooterBorder.BorderBrush = palette.Border;
@@ -89,32 +124,10 @@ namespace MDPlus.Controls
             LaterButton.Foreground = palette.MenuFg;
             LaterButton.BorderBrush = palette.Border;
 
-            ReleaseNotesButton.Background = palette.MenuHoverBg;
-            ReleaseNotesButton.Foreground = palette.MenuFg;
-            ReleaseNotesButton.BorderBrush = palette.Border;
-
             DownloadProgressBar.Foreground = palette.Accent;
             DownloadProgressBar.Background = palette.Border;
 
             DwmHelper.ApplyTitleBarTheme(this, palette);
-        }
-
-        private void ReleaseNotes_Click(object sender, RoutedEventArgs e)
-        {
-            if (!string.IsNullOrEmpty(_updateInfo.ReleaseUrl))
-            {
-                try
-                {
-                    Process.Start(new ProcessStartInfo(_updateInfo.ReleaseUrl) { UseShellExecute = true });
-                }
-                catch (Exception ex)
-                {
-                    if (IsLoaded)
-                    {
-                        MessageBox.Show(this, $"Failed to open release URL: {ex.Message}", "Open Browser Error", MessageBoxButton.OK, MessageBoxImage.Warning);
-                    }
-                }
-            }
         }
 
         private void Later_Click(object sender, RoutedEventArgs e)

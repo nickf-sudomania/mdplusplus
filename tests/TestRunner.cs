@@ -11,6 +11,7 @@ using System.Windows.Documents;
 using System.Windows.Media;
 using MDPlus.Core;
 using MDPlus.Models;
+using MDPlus.Controls;
 
 using WpfTable = System.Windows.Documents.Table;
 using WpfTableCell = System.Windows.Documents.TableCell;
@@ -181,6 +182,7 @@ namespace MDPlus.Tests
             RunTest("LaTeX Math Recursive Font Modifiers, Overline, & Escapes", TestLatexBoldFormattingAndEscapes);
             RunTest("Native HTML Table Block Rendering & Layout", TestHtmlTableRendering);
             RunTest("Single-Instance Multi-Tab Mode & Preference Serialization", TestSingleInstanceAndMultiTabSettings);
+            RunTest("Update Dialog Rendered Release Notes & Removed Button", TestUpdateDialogRenderedReleaseNotes);
 
             sw.Stop();
 
@@ -2810,7 +2812,8 @@ SHA-256: 8888888888888888888888888888888888888888888888888888888888888888
             string updateXaml = System.IO.File.ReadAllText(updateXamlPath);
             Assert(updateXaml.Contains("Name=\"UpdateNowButton\""), "UpdateDialog.xaml has UpdateNowButton");
             Assert(updateXaml.Contains("Name=\"LaterButton\""), "UpdateDialog.xaml has LaterButton");
-            Assert(updateXaml.Contains("Name=\"ReleaseNotesButton\""), "UpdateDialog.xaml has ReleaseNotesButton");
+            Assert(!updateXaml.Contains("Name=\"ReleaseNotesButton\""), "UpdateDialog.xaml must not have separate ReleaseNotesButton");
+            Assert(updateXaml.Contains("Name=\"HighlightsViewer\""), "UpdateDialog.xaml must have HighlightsViewer for rendered release notes");
         }
 
         private static void TestUpdateServiceVersionedAssetPriorityOverOtherSetups()
@@ -2974,7 +2977,8 @@ SHA-256: 4444444444444444444444444444444444444444444444444444444444444444
             string updateXaml = System.IO.File.ReadAllText(updateXamlPath);
             Assert(updateXaml.Contains("IsDefault=\"True\""), "UpdateNowButton has IsDefault='True'");
             Assert(updateXaml.Contains("IsCancel=\"True\""), "LaterButton has IsCancel='True'");
-            Assert(updateXaml.Contains("VerticalScrollBarVisibility=\"Auto\""), "HighlightsTextBox has VerticalScrollBarVisibility='Auto'");
+            Assert(updateXaml.Contains("VerticalScrollBarVisibility=\"Auto\""), "HighlightsViewer has VerticalScrollBarVisibility='Auto'");
+            Assert(updateXaml.Contains("IsToolBarVisible=\"False\""), "HighlightsViewer has IsToolBarVisible='False'");
         }
 
         private static void TestUpdateServiceNotFoundGracefulHandling()
@@ -3576,6 +3580,34 @@ SHA-256: 4444444444444444444444444444444444444444444444444444444444444444
             // Test CLI arguments resolution
             var resolvedFiles = App.ResolveStartupFiles(settings, new[] { "sample_docs\\welcome.md" });
             Assert(resolvedFiles.Count == 1, $"ResolveStartupFiles should resolve 1 explicit file argument, got {resolvedFiles.Count}");
+        }
+
+        private static void TestUpdateDialogRenderedReleaseNotes()
+        {
+            if (Application.Current == null)
+            {
+                new Application();
+            }
+
+            var updateInfo = new UpdateCheckResult
+            {
+                IsSuccess = true,
+                IsUpdateAvailable = true,
+                LatestVersion = "v1.06",
+                CurrentVersion = "1.03",
+                ReleaseHighlights = "## MDPlus Release\n\n### 📦 Official Windows Installer\nDownload `MDPlus-Setup.exe` for an effortless automated installation:\n- **Prerequisite Bootstrapper:** Automatically detects .NET 8\n- **Shell Integration:** Registers Windows file associations\n\n$$\\mathbf{34.22\\%}$$"
+            };
+
+            var dialog = new UpdateDialog(updateInfo);
+            Assert(dialog.RenderedNotesDocument != null, "UpdateDialog must have a non-null RenderedNotesDocument");
+            var doc = dialog.RenderedNotesDocument!;
+            Assert(doc.Blocks.Count >= 3, $"RenderedNotesDocument should have multiple blocks (headings, lists, math), got {doc.Blocks.Count}");
+
+            // Verify rendered document has Heading and List blocks rather than raw text
+            bool hasHeading = doc.Blocks.Any(b => b is System.Windows.Documents.Paragraph p && p.FontSize >= 17);
+            bool hasList = doc.Blocks.Any(b => b is System.Windows.Documents.List);
+            Assert(hasHeading, "Rendered release notes should contain styled heading block");
+            Assert(hasList, "Rendered release notes should contain styled list block");
         }
 
         private static string ExtractTextFromVisual(UIElement? element)
