@@ -169,6 +169,7 @@ namespace MDPlus.Tests
             RunTest("Update Service Locked Destination File Recovery", TestUpdateServiceLockedDestinationFileFallback);
             RunTest("DWM Window Reset & Update Dialog Keyboard Accessibility", TestDwmHelperResetWindowAndFullscreenLifecycle);
             RunTest("Update Service 404 Not Found Graceful Up-To-Date Handling", TestUpdateServiceNotFoundGracefulHandling);
+            RunTest("Update Service Live GitHub Release v1.02 Detection", TestUpdateServiceLiveGitHubReleaseV102Detection);
 
             sw.Stop();
 
@@ -2963,6 +2964,40 @@ SHA-256: 4444444444444444444444444444444444444444444444444444444444444444
             Assert(result.IsSuccess, "404 on releases/latest must be treated as successful up-to-date check");
             Assert(!result.IsUpdateAvailable, "No update should be available on 404");
             AssertEqual("1.0.0", result.CurrentVersion, "Current version preserved");
+        }
+
+        private static void TestUpdateServiceLiveGitHubReleaseV102Detection()
+        {
+            var updateService = new UpdateService();
+            var task = updateService.CheckForUpdatesAsync("1.01");
+            task.Wait();
+            var result = task.Result;
+
+            // Gracefully handle rate-limits or offline environments
+            if (!result.IsSuccess && result.ErrorMessage != null && 
+                (result.ErrorMessage.Contains("rate limit", StringComparison.OrdinalIgnoreCase) ||
+                 result.ErrorMessage.Contains("connection", StringComparison.OrdinalIgnoreCase) ||
+                 result.ErrorMessage.Contains("host", StringComparison.OrdinalIgnoreCase)))
+            {
+                Console.Write(" [NETWORK/RATE-LIMITED, SKIPPED] ");
+                return;
+            }
+
+            Assert(result.IsSuccess, "Check for updates should succeed against live GitHub: " + (result.ErrorMessage ?? ""));
+            Assert(result.IsUpdateAvailable, "v1.02 must be detected as a newer release for v1.01");
+            AssertEqual("v1.02", result.LatestVersion, "Latest version must be v1.02");
+            Assert(!string.IsNullOrEmpty(result.SetupDownloadUrl), "Setup download URL must be populated");
+            Assert(result.SetupDownloadUrl!.EndsWith("MDPlus-Setup.exe"), "Setup download URL must point to MDPlus-Setup.exe");
+            Assert(!string.IsNullOrEmpty(result.ChecksumsDownloadUrl), "Checksums URL must be populated");
+
+            // Verify that for a user already running 1.02, it correctly detects no update available
+            var task102 = updateService.CheckForUpdatesAsync("1.02");
+            task102.Wait();
+            var result102 = task102.Result;
+            if (result102.IsSuccess)
+            {
+                Assert(!result102.IsUpdateAvailable, "v1.02 running should be recognized as up-to-date against v1.02");
+            }
         }
 
         private class MockHttpMessageHandler : System.Net.Http.HttpMessageHandler
