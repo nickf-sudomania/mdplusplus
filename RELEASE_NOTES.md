@@ -1,6 +1,17 @@
 # MDPlus Release Notes
 
-## Version 1.07 (Latest)
+## Version 1.08 (Latest)
+
+See [docs/RELEASE_NOTES_v1.08.md](docs/RELEASE_NOTES_v1.08.md) for full details.
+
+### Highlights
+- **Hardened Mouse Capture & Click Routing:** Explicit mouse capture and cached hyperlink routing on `PreviewMouseLeftButtonDown` in `MarkdownScrollViewer`, preventing WPF's text editor drag-selection engine from intercepting link clicks.
+- **Bounded Hit-Testing & Empty Margin Protection:** `GetPositionFromPoint(point, snapToText: true)` combined with character bounding box validation (`pointer.GetCharacterRect`) and `charRect.IsEmpty` guarding ensures empty whitespace to the right of lines never triggers hyperlinks, while nested inline code spans (`[`code()`](api.md)`) hit-test with pinpoint precision.
+- **Asynchronous Document Loading:** Dispatches tab replacement via `Dispatcher.BeginInvoke(...)` so mouse events finish cleanly before the document visual tree is replaced.
+- **Missing File Feedback:** Non-existent markdown documents trigger a clear status bar notification (`File not found: <filename>`) rather than failing silently, while executables (`.exe`, `.pdf`) are safely blocked.
+- **Packaging Sanitation:** Fixed `build.ps1` to eliminate recursive subdirectory nesting during release publishing.
+
+## Version 1.07
 
 See [docs/RELEASE_NOTES_v1.07.md](docs/RELEASE_NOTES_v1.07.md) for full details.
 

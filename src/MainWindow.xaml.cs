@@ -408,7 +408,7 @@ Console.WriteLine($""Parsed {doc.Blocks.Count} blocks in 2ms!"");
 > [!TIP]
 > Press **Ctrl+2** to toggle Split View and inspect the raw markdown syntax side by side with the formatted document!
 
-### 🔬 Rendering Plugins (v1.07)
+### 🔬 Rendering Plugins (v1.08)
 
 - **Vector LaTeX Math:** $E = mc^2$ and $\int_{-\infty}^{\infty} e^{-x^2} dx = \sqrt{\pi}$
 - **Display Formulas:**

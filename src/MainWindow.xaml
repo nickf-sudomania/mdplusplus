@@ -6,7 +6,7 @@
         xmlns:controls="clr-namespace:MDPlus.Controls"
         xmlns:models="clr-namespace:MDPlus.Models"
         mc:Ignorable="d"
-        Title="MDPlus v1.07 - Markdown Viewer" 
+        Title="MDPlus v1.08 - Markdown Viewer" 
         Icon="pack://application:,,,/Resources/AppIcon.ico"
         Height="760" Width="1160"
         MinHeight="400" MinWidth="600"
