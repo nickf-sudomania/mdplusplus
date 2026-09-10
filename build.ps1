@@ -162,9 +162,13 @@ switch ($Action) {
             if (-not $found) { $newLines += "$setupHash  MDPlus-Setup.exe" }
             $newContent = ($newLines -join "`n") + "`n"
             Set-Content -Path $sumsFile -Value $newContent
-            $nppChecksum = Join-Path $distPath "MDPlus.1.06.checksums.sha256"
+            $nppChecksum = Join-Path $distPath "MDPlus.1.07.checksums.sha256"
             if (Test-Path $nppChecksum) {
                 Set-Content -Path $nppChecksum -Value $newContent
+            }
+            $nppChecksum106 = Join-Path $distPath "MDPlus.1.06.checksums.sha256"
+            if (Test-Path $nppChecksum106) {
+                Set-Content -Path $nppChecksum106 -Value $newContent
             }
             $nppChecksum103 = Join-Path $distPath "MDPlus.1.03.checksums.sha256"
             if (Test-Path $nppChecksum103) {
@@ -223,7 +227,7 @@ switch ($Action) {
         Remove-Item $stagingDir -Recurse -Force
 
         # 3. Package source code archive (Notepad++ source release style)
-        $appVersion = "1.06"
+        $appVersion = "1.07"
         Write-Host "`n[INFO] Creating source code release archive (MDPlus-$appVersion-src.zip)..." -ForegroundColor Yellow
         $srcZipPath = Join-Path $distPath "MDPlus-$appVersion-src.zip"
         if (Test-Path $srcZipPath) {
@@ -275,6 +279,7 @@ switch ($Action) {
         Set-Content -Path (Join-Path $distPath "MDPlus.exe.sha256") -Value "$exeHash  MDPlus.exe"
         Set-Content -Path (Join-Path $distPath "MDPlus-win-x64.zip.sha256") -Value "$zipHash  MDPlus-win-x64.zip"
         Set-Content -Path (Join-Path $distPath "MDPlus-$appVersion-src.zip.sha256") -Value "$srcHash  MDPlus-$appVersion-src.zip"
+        Set-Content -Path (Join-Path $distPath "MDPlus-1.06-src.zip.sha256") -Value "$srcHash  MDPlus-1.06-src.zip"
         Set-Content -Path (Join-Path $distPath "MDPlus-1.03-src.zip.sha256") -Value "$srcHash  MDPlus-1.03-src.zip"
         Set-Content -Path (Join-Path $distPath "MDPlus-1.02-src.zip.sha256") -Value "$srcHash  MDPlus-1.02-src.zip"
         Set-Content -Path (Join-Path $distPath "MDPlus-1.01-src.zip.sha256") -Value "$srcHash  MDPlus-1.01-src.zip"
@@ -290,6 +295,14 @@ $setupHash  MDPlus-Setup.exe
 "@
         Set-Content -Path (Join-Path $distPath "SHA256SUMS.txt") -Value $checksumContent
         Set-Content -Path (Join-Path $distPath "MDPlus.$appVersion.checksums.sha256") -Value $checksumContent
+
+        $checksumContent106 = @"
+$exeHash  MDPlus.exe
+$zipHash  MDPlus-win-x64.zip
+$srcHash  MDPlus-1.06-src.zip
+$setupHash  MDPlus-Setup.exe
+"@
+        Set-Content -Path (Join-Path $distPath "MDPlus.1.06.checksums.sha256") -Value $checksumContent106
 
         $checksumContent103 = @"
 $exeHash  MDPlus.exe
@@ -322,6 +335,14 @@ $srcHash  MDPlus-1.0.0-src.zip
 $setupHash  MDPlus-Setup.exe
 "@
         Set-Content -Path (Join-Path $distPath "MDPlus.1.0.0.checksums.sha256") -Value $checksumContent100
+
+        # Sync to releases directory if present
+        $releasesDir = Join-Path $PSScriptRoot "releases"
+        if (Test-Path $releasesDir) {
+            Get-ChildItem -Path $distPath -File | Where-Object { $_.Extension -ne ".pdb" } | ForEach-Object {
+                Copy-Item $_.FullName -Destination $releasesDir -Force
+            }
+        }
 
         Write-Host "`n=======================================================" -ForegroundColor Green
         Write-Host " [SUCCESS] Publish & Hash Generation Complete!" -ForegroundColor Green

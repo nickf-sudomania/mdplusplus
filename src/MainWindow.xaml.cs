@@ -123,7 +123,7 @@ namespace MDPlus
 
                 for (int i = 0; i < startupFiles.Count; i++)
                 {
-                    OpenDocument(startupFiles[i], activate: false, saveSession: false);
+                    OpenDocument(startupFiles[i], activate: false, saveSession: false, openInNewTab: true);
                     loadedAny = true;
                 }
 
@@ -213,7 +213,7 @@ namespace MDPlus
             }
         }
 
-        public void OpenDocument(string filePath, string? anchor = null, bool activate = true, bool saveSession = true)
+        public void OpenDocument(string filePath, string? anchor = null, bool activate = true, bool saveSession = true, bool? openInNewTab = null)
         {
             if (string.IsNullOrEmpty(filePath) || !File.Exists(filePath)) return;
 
@@ -230,6 +230,10 @@ namespace MDPlus
                 if (!string.IsNullOrEmpty(anchor))
                 {
                     MarkdownViewer.ScrollToAnchor(anchor);
+                    Dispatcher.BeginInvoke(new Action(() =>
+                    {
+                        MarkdownViewer.ScrollToAnchor(anchor);
+                    }), System.Windows.Threading.DispatcherPriority.Loaded);
                 }
                 return;
             }
@@ -253,7 +257,54 @@ namespace MDPlus
 
                 RenderDocumentTab(tab);
 
-                _tabs.Add(tab);
+                bool shouldOpenInNewTab = openInNewTab ?? _settings.OpenFilesInNewTab;
+
+                // If user has a single clean untitled/welcome tab, reuse it rather than creating extra tab
+                if (_tabs.Count == 1 && string.IsNullOrEmpty(_tabs[0].FilePath) && !_tabs[0].IsDirty)
+                {
+                    _tabs[0] = tab;
+                }
+                else if (shouldOpenInNewTab)
+                {
+                    _tabs.Add(tab);
+                }
+                else
+                {
+                    // Open in current tab: replace _activeTab if present
+                    if (_activeTab != null)
+                    {
+                        if (_activeTab.IsDirty)
+                        {
+                            if (!CloseTab(_activeTab))
+                            {
+                                return;
+                            }
+                            _tabs.Add(tab);
+                        }
+                        else
+                        {
+                            if (!string.IsNullOrEmpty(_activeTab.FilePath))
+                            {
+                                _fileWatcher.UnwatchFile(_activeTab.FilePath);
+                            }
+
+                            int activeIdx = _tabs.IndexOf(_activeTab);
+                            if (activeIdx >= 0)
+                            {
+                                _tabs[activeIdx] = tab;
+                            }
+                            else
+                            {
+                                _tabs.Add(tab);
+                            }
+                        }
+                    }
+                    else
+                    {
+                        _tabs.Add(tab);
+                    }
+                }
+
                 _settings.AddRecentFile(fullPath);
                 if (saveSession)
                 {
@@ -279,6 +330,10 @@ namespace MDPlus
                 if (!string.IsNullOrEmpty(anchor))
                 {
                     MarkdownViewer.ScrollToAnchor(anchor);
+                    Dispatcher.BeginInvoke(new Action(() =>
+                    {
+                        MarkdownViewer.ScrollToAnchor(anchor);
+                    }), System.Windows.Threading.DispatcherPriority.Loaded);
                 }
             }
             catch (Exception ex)
@@ -341,7 +396,7 @@ Console.WriteLine($""Parsed {doc.Blocks.Count} blocks in 2ms!"");
 > [!TIP]
 > Press **Ctrl+2** to toggle Split View and inspect the raw markdown syntax side by side with the formatted document!
 
-### 🔬 Rendering Plugins (v1.06)
+### 🔬 Rendering Plugins (v1.07)
 
 - **Vector LaTeX Math:** $E = mc^2$ and $\int_{-\infty}^{\infty} e^{-x^2} dx = \sqrt{\pi}$
 - **Display Formulas:**
@@ -354,6 +409,12 @@ $$
 <summary>Click to expand plugin info</summary>
 Plugins can be enabled or disabled instantly via the Plugins menu without restarting!
 </details>
+
+---
+
+### 📚 Explore Sample Documentation
+- 📖 [GitHub Flavored Markdown Features Guide](gfm_features.md)
+- 💻 [Multi-Language Syntax-Highlighted Code Samples](code_samples.md)
 
 ---
 
@@ -379,7 +440,11 @@ Plugins can be enabled or disabled instantly via the Plugins menu without restar
         private void RenderDocumentTab(DocumentTabItem tab)
         {
             var converter = new MarkdownToWpfConverter(tab.DirectoryName, ThemeManager.Instance.CurrentPalette, _settings.EnableLatexRendering, _settings.EnableHtmlRendering);
-            converter.AnchorNavigationRequested += (s, anchor) => MarkdownViewer.ScrollToAnchor(anchor);
+            converter.AnchorNavigationRequested += (s, anchor) =>
+            {
+                MarkdownViewer.ScrollToAnchor(anchor);
+                Dispatcher.BeginInvoke(new Action(() => MarkdownViewer.ScrollToAnchor(anchor)), System.Windows.Threading.DispatcherPriority.Loaded);
+            };
             converter.FileNavigationRequested += (s, e) => OpenDocument(e.FilePath, e.Anchor);
             tab.FlowDocument = converter.Convert(tab.Document);
         }

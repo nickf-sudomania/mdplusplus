@@ -1,8 +1,10 @@
 using System;
 using System.Collections.Generic;
+using System.Text.RegularExpressions;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Documents;
+using System.Windows.Input;
 using System.Windows.Media;
 
 using MDPlus.Core;
@@ -15,6 +17,8 @@ namespace MDPlus.Controls
         private int _currentMatchIndex = -1;
         private string _lastSearchText = string.Empty;
         private bool _lastMatchCase = false;
+        private Point _mouseDownPos;
+        private bool _isMouseDownOnHyperlink;
 
         public static readonly DependencyProperty ZoomProperty =
             DependencyProperty.Register(nameof(Zoom), typeof(double), typeof(MarkdownScrollViewer),
@@ -91,27 +95,129 @@ namespace MDPlus.Controls
             return null;
         }
 
+        public Hyperlink? FindHyperlink(Point point, object? source = null)
+        {
+            if (source != null)
+            {
+                var fromSource = FindHyperlinkFromSource(source);
+                if (fromSource != null) return fromSource;
+            }
+            return FindHyperlinkAtPoint(point);
+        }
+
+        public Hyperlink? FindHyperlinkFromSource(object? source)
+        {
+            if (source is DependencyObject dobj)
+            {
+                DependencyObject? current = dobj;
+                while (current != null)
+                {
+                    if (current is Hyperlink hyperlink) return hyperlink;
+                    if (current is Visual visual) current = VisualTreeHelper.GetParent(visual);
+                    else if (current is TextElement te) current = te.Parent;
+                    else if (current is FrameworkContentElement fce) current = fce.Parent;
+                    else break;
+                }
+            }
+            return null;
+        }
+
+        public Hyperlink? FindHyperlinkAtPoint(Point point)
+        {
+            try
+            {
+                TextPointer? pointer = GetPositionFromPoint(point, snapToText: false);
+                if (pointer == null) return null;
+
+                DependencyObject? current = pointer.Parent;
+                while (current != null)
+                {
+                    if (current is Hyperlink hyperlink) return hyperlink;
+                    if (current is TextElement te) current = te.Parent;
+                    else if (current is FrameworkElement fe) current = fe.Parent;
+                    else break;
+                }
+            }
+            catch
+            {
+            }
+            return null;
+        }
+
+        protected override void OnQueryCursor(QueryCursorEventArgs e)
+        {
+            Point pos = Mouse.GetPosition(this);
+            if (FindHyperlink(pos) != null)
+            {
+                e.Cursor = Cursors.Hand;
+                e.Handled = true;
+                return;
+            }
+            base.OnQueryCursor(e);
+        }
+
+        protected override void OnPreviewMouseLeftButtonDown(MouseButtonEventArgs e)
+        {
+            base.OnPreviewMouseLeftButtonDown(e);
+            _mouseDownPos = e.GetPosition(this);
+            var link = FindHyperlink(_mouseDownPos, e.OriginalSource);
+            _isMouseDownOnHyperlink = (link != null);
+        }
+
+        protected override void OnPreviewMouseLeftButtonUp(MouseButtonEventArgs e)
+        {
+            base.OnPreviewMouseLeftButtonUp(e);
+            if (_isMouseDownOnHyperlink)
+            {
+                Point pos = e.GetPosition(this);
+                if (Math.Abs(pos.X - _mouseDownPos.X) < 6 && Math.Abs(pos.Y - _mouseDownPos.Y) < 6)
+                {
+                    var link = FindHyperlink(pos, e.OriginalSource);
+                    if (link != null)
+                    {
+                        link.DoClick();
+                        e.Handled = true;
+                    }
+                }
+                _isMouseDownOnHyperlink = false;
+            }
+        }
 
         public bool ScrollToAnchor(string anchor)
         {
             if (Document == null || string.IsNullOrEmpty(anchor)) return false;
 
-            return FindAndScrollToAnchor(Document.Blocks, anchor);
+            string cleanAnchor = anchor.TrimStart('#');
+            try
+            {
+                cleanAnchor = Uri.UnescapeDataString(cleanAnchor).Trim();
+            }
+            catch
+            {
+            }
+
+            return FindAndScrollToAnchor(Document.Blocks, cleanAnchor);
         }
 
         private bool FindAndScrollToAnchor(BlockCollection blocks, string anchor)
         {
+            string normalizedSearch = NormalizeAnchor(anchor);
+
             foreach (var block in blocks)
             {
                 if (block is Paragraph p)
                 {
                     string? tagStr = p.Tag as string;
                     if (p.Tag is HeadingTag ht) tagStr = ht.Anchor;
-                    if (!string.IsNullOrEmpty(tagStr) && tagStr.Equals(anchor, StringComparison.OrdinalIgnoreCase))
+                    if (!string.IsNullOrEmpty(tagStr))
                     {
-                        p.BringIntoView();
-                        CaretPosition = p.ContentStart;
-                        return true;
+                        if (tagStr.Equals(anchor, StringComparison.OrdinalIgnoreCase) ||
+                            (!string.IsNullOrEmpty(normalizedSearch) && NormalizeAnchor(tagStr).Equals(normalizedSearch, StringComparison.OrdinalIgnoreCase)))
+                        {
+                            p.BringIntoView();
+                            CaretPosition = p.ContentStart;
+                            return true;
+                        }
                     }
                 }
 
@@ -127,8 +233,29 @@ namespace MDPlus.Controls
                         if (FindAndScrollToAnchor(item.Blocks, anchor)) return true;
                     }
                 }
+
+                if (block is Table table)
+                {
+                    foreach (var group in table.RowGroups)
+                    {
+                        foreach (var row in group.Rows)
+                        {
+                            foreach (var cell in row.Cells)
+                            {
+                                if (FindAndScrollToAnchor(cell.Blocks, anchor)) return true;
+                            }
+                        }
+                    }
+                }
             }
             return false;
+        }
+
+        private static string NormalizeAnchor(string text)
+        {
+            if (string.IsNullOrEmpty(text)) return string.Empty;
+            string clean = Regex.Replace(text.ToLowerInvariant(), @"[^\w\s-]", "");
+            return Regex.Replace(clean, @"[\s_]+", "-").Trim('-');
         }
 
         public (int current, int total) SearchText(string searchText, bool matchCase, bool forward)

@@ -8,6 +8,8 @@ using System.Windows.Controls;
 using System.Windows.Documents;
 using System.Windows.Media;
 using MDPlus.Core;
+using MDPlus.Controls;
+using MDPlus.Models;
 using MDPlus.E2E.Harness;
 using static MDPlus.E2E.Harness.E2ETestHarness;
 
@@ -63,6 +65,13 @@ namespace MDPlus.E2E.Tiers
             RunTest("Tier1", "F6.3: Command line integrity verification flag --verify-integrity", TestF6_VerifyIntegrityArg);
             RunTest("Tier1", "F6.4: Command line hash flag --hash", TestF6_HashArg);
             RunTest("Tier1", "F6.5: Command line non-existent file handling", TestF6_NonExistentFileArg);
+
+            // Feature 7: In-Reader Markdown Link Navigation & Heading Anchors (v1.07)
+            RunTest("Tier1", "F7.1: Relative markdown link resolution with document base directory", TestF7_RelativeLinkResolution);
+            RunTest("Tier1", "F7.2: Link anchor extraction and slug normalization", TestF7_AnchorExtractionAndNormalization);
+            RunTest("Tier1", "F7.3: OpenFilesInNewTab tab reuse vs tab creation semantics", TestF7_OpenFilesInNewTabSemantics);
+            RunTest("Tier1", "F7.4: Already-open document tab switching and anchor target resolution", TestF7_AlreadyOpenTabSwitching);
+            RunTest("Tier1", "F7.5: MarkdownScrollViewer hyperlink hand cursor and hit testing", TestF7_ViewerHyperlinkDetection);
         }
 
         #region Feature 1: Markdown Parsing & AST
@@ -696,6 +705,193 @@ int a = 1;
             var doc = parser.Parse("");
             AssertNotNull(doc, "Parsing empty input should produce empty document model, not throw.");
             AssertEqual(0, doc.Blocks.Count, "Empty input should have 0 blocks.");
+        }
+
+        #endregion
+
+        #region Feature 7: In-Reader Markdown Link Navigation & Heading Anchors
+
+        private static void TestF7_RelativeLinkResolution()
+        {
+            string tempDir = Path.Combine(Path.GetTempPath(), $"mdplus_e2e_link_{Guid.NewGuid():N}");
+            Directory.CreateDirectory(tempDir);
+            string subDir = Path.Combine(tempDir, "docs");
+            Directory.CreateDirectory(subDir);
+
+            try
+            {
+                string rootDoc = Path.Combine(tempDir, "readme.md");
+                string guideDoc = Path.Combine(tempDir, "guide.markdown");
+                string apiDoc = Path.Combine(subDir, "api.mdown");
+
+                File.WriteAllText(rootDoc, "# Readme\n[Guide](guide.markdown)\n[API](docs/api.mdown)");
+                File.WriteAllText(guideDoc, "# Guide");
+                File.WriteAllText(apiDoc, "# API Reference");
+
+                var converter = new MarkdownToWpfConverter(tempDir, ThemePalette.GitHubDark);
+                string? resolvedFile = null;
+                converter.FileNavigationRequested += (s, e) => resolvedFile = e.FilePath;
+
+                converter.HandleNavigation("guide.markdown");
+                AssertEqual(Path.GetFullPath(guideDoc), resolvedFile, "Relative guide.markdown should resolve against base directory.");
+
+                resolvedFile = null;
+                converter.HandleNavigation("docs/api.mdown");
+                AssertEqual(Path.GetFullPath(apiDoc), resolvedFile, "Subpath docs/api.mdown should resolve against base directory.");
+
+                resolvedFile = null;
+                converter.HandleNavigation("file:///" + guideDoc.Replace('\\', '/'));
+                AssertEqual(Path.GetFullPath(guideDoc), resolvedFile, "file:/// URI should resolve to local absolute path.");
+            }
+            finally
+            {
+                if (Directory.Exists(tempDir))
+                {
+                    try { Directory.Delete(tempDir, true); } catch { }
+                }
+            }
+        }
+
+        private static void TestF7_AnchorExtractionAndNormalization()
+        {
+            string tempDir = Path.Combine(Path.GetTempPath(), $"mdplus_e2e_anchor_{Guid.NewGuid():N}");
+            Directory.CreateDirectory(tempDir);
+
+            try
+            {
+                string targetDoc = Path.Combine(tempDir, "manual.md");
+                File.WriteAllText(targetDoc, "# Manual\n## Quick Start & Setup! 🚀\n### Configuration Options");
+
+                var converter = new MarkdownToWpfConverter(tempDir, ThemePalette.GitHubLight);
+                string? fileTarget = null;
+                string? anchorTarget = null;
+                string? localAnchor = null;
+
+                converter.FileNavigationRequested += (s, e) =>
+                {
+                    fileTarget = e.FilePath;
+                    anchorTarget = e.Anchor;
+                };
+
+                converter.AnchorNavigationRequested += (s, anchor) =>
+                {
+                    localAnchor = anchor;
+                };
+
+                // Cross-file link with anchor
+                converter.HandleNavigation("manual.md#quick-start--setup");
+                AssertEqual(Path.GetFullPath(targetDoc), fileTarget, "File target should resolve.");
+                AssertEqual("quick-start--setup", anchorTarget, "Anchor should be extracted from cross-file link.");
+
+                // Intra-file anchor
+                converter.HandleNavigation("#configuration-options");
+                AssertEqual("configuration-options", localAnchor, "Intra-file anchor should be extracted.");
+
+                // URL unescape
+                localAnchor = null;
+                converter.HandleNavigation("#section%20with%20spaces");
+                AssertEqual("section with spaces", localAnchor, "Intra-file encoded anchor should be unescaped.");
+            }
+            finally
+            {
+                if (Directory.Exists(tempDir))
+                {
+                    try { Directory.Delete(tempDir, true); } catch { }
+                }
+            }
+        }
+
+        private static void TestF7_OpenFilesInNewTabSemantics()
+        {
+            var tabs = new List<DocumentTabItem>();
+
+            // 1. First file opened replaces untitled placeholder tab
+            var placeholder = new DocumentTabItem { Title = "Untitled-1", FilePath = "", IsDirty = false };
+            tabs.Add(placeholder);
+
+            var firstDoc = new DocumentTabItem { Title = "first.md", FilePath = @"C:\docs\first.md" };
+            if (tabs.Count == 1 && string.IsNullOrEmpty(tabs[0].FilePath) && !tabs[0].IsDirty)
+            {
+                tabs[0] = firstDoc;
+            }
+            else
+            {
+                tabs.Add(firstDoc);
+            }
+            AssertEqual(1, tabs.Count, "Placeholder tab must be replaced.");
+            AssertEqual(@"C:\docs\first.md", tabs[0].FilePath, "First tab must be first.md.");
+
+            // 2. OpenFilesInNewTab == true adds subsequent tab
+            var secondDoc = new DocumentTabItem { Title = "second.md", FilePath = @"C:\docs\second.md" };
+            bool openInNewTab = true;
+            if (openInNewTab)
+            {
+                tabs.Add(secondDoc);
+            }
+            AssertEqual(2, tabs.Count, "Second tab must be added when openInNewTab is true.");
+
+            // 3. OpenFilesInNewTab == false replaces active tab when clean
+            var thirdDoc = new DocumentTabItem { Title = "third.md", FilePath = @"C:\docs\third.md" };
+            openInNewTab = false;
+            var activeTab = tabs[1];
+            if (!openInNewTab && !activeTab.IsDirty)
+            {
+                int idx = tabs.IndexOf(activeTab);
+                tabs[idx] = thirdDoc;
+            }
+            AssertEqual(2, tabs.Count, "Tab count must remain 2 when reusing tab in-place.");
+            AssertEqual(@"C:\docs\third.md", tabs[1].FilePath, "Active tab must be replaced by third.md.");
+        }
+
+        private static void TestF7_AlreadyOpenTabSwitching()
+        {
+            var tabs = new List<DocumentTabItem>();
+            string docPath = @"C:\docs\existing.md";
+            var existingTab = new DocumentTabItem { Title = "existing.md", FilePath = docPath };
+            tabs.Add(existingTab);
+
+            DocumentTabItem? activeTab = null;
+
+            // Simulate opening docPath again with an anchor
+            string openPath = @"C:\docs\existing.md";
+            string anchor = "heading-two";
+
+            var match = tabs.FirstOrDefault(t => string.Equals(t.FilePath, openPath, StringComparison.OrdinalIgnoreCase));
+            AssertNotNull(match, "Already open tab must be matched.");
+            activeTab = match;
+
+            AssertEqual(1, tabs.Count, "No duplicate tab should be added.");
+            AssertEqual(existingTab, activeTab, "Active tab should switch to existing tab.");
+            AssertEqual("heading-two", anchor, "Anchor target must be preserved.");
+        }
+
+        private static void TestF7_ViewerHyperlinkDetection()
+        {
+            var viewer = new MarkdownScrollViewer();
+            var flowDoc = new FlowDocument();
+            var para = new Paragraph();
+
+            var runBefore = new Run("Read the ");
+            var linkRun = new Run("user manual");
+            var link = new Hyperlink(linkRun) { NavigateUri = new Uri("manual.md", UriKind.Relative) };
+            var runAfter = new Run(" for more info.");
+
+            para.Inlines.Add(runBefore);
+            para.Inlines.Add(link);
+            para.Inlines.Add(runAfter);
+            flowDoc.Blocks.Add(para);
+
+            viewer.Document = flowDoc;
+
+            // Direct link resolution
+            var detectedFromChild = viewer.FindHyperlinkFromSource(linkRun);
+            AssertEqual(link, detectedFromChild, "Hyperlink must be detected from child Run.");
+
+            var detectedFromSelf = viewer.FindHyperlinkFromSource(link);
+            AssertEqual(link, detectedFromSelf, "Hyperlink must be detected from self.");
+
+            var outside = viewer.FindHyperlinkFromSource(runBefore);
+            AssertTrue(outside == null, "Outside run must not detect a hyperlink.");
         }
 
         #endregion

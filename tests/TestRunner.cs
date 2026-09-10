@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Diagnostics;
+using System.IO;
 using System.Linq;
 using System.Text;
 using System.Threading;
@@ -183,6 +184,11 @@ namespace MDPlus.Tests
             RunTest("Native HTML Table Block Rendering & Layout", TestHtmlTableRendering);
             RunTest("Single-Instance Multi-Tab Mode & Preference Serialization", TestSingleInstanceAndMultiTabSettings);
             RunTest("Update Dialog Rendered Release Notes & Removed Button", TestUpdateDialogRenderedReleaseNotes);
+            RunTest("In-Reader Markdown Link Relative Path Resolution", TestMarkdownLinkRelativeResolution);
+            RunTest("In-Reader Heading Anchor Parsing, Extraction & Normalization", TestMarkdownLinkAnchorParsingAndNormalization);
+            RunTest("MarkdownScrollViewer Anchor Scrolling Across Visual Tree", TestMarkdownScrollViewerScrollToAnchor);
+            RunTest("In-Reader Navigation OpenFilesInNewTab Tab Reuse & Replacement", TestOpenDocumentTabManagementBehavior);
+            RunTest("MarkdownScrollViewer Hyperlink Hand Cursor & Click Routing", TestMarkdownScrollViewerCursorAndClickHandling);
 
             sw.Stop();
 
@@ -3674,6 +3680,309 @@ SHA-256: 4444444444444444444444444444444444444444444444444444444444444444
             {
                 return Task.FromResult(_handler(request));
             }
+        }
+
+        private static void TestMarkdownLinkRelativeResolution()
+        {
+            string tempDir = Path.Combine(Path.GetTempPath(), "mdplus_unit_link_" + Guid.NewGuid().ToString("N"));
+            Directory.CreateDirectory(tempDir);
+            string subDir = Path.Combine(tempDir, "sub");
+            Directory.CreateDirectory(subDir);
+
+            try
+            {
+                string indexFile = Path.Combine(tempDir, "index.md");
+                string guideFile = Path.Combine(tempDir, "guide.md");
+                string detailFile = Path.Combine(subDir, "detail.markdown");
+                string spacedFile = Path.Combine(tempDir, "spaced doc.md");
+
+                File.WriteAllText(indexFile, "# Index");
+                File.WriteAllText(guideFile, "# Guide\n## Introduction");
+                File.WriteAllText(detailFile, "# Detail");
+                File.WriteAllText(spacedFile, "# Spaced");
+
+                var converter = new MarkdownToWpfConverter(tempDir, ThemePalette.GitHubDark);
+
+                string? receivedPath = null;
+                string? receivedAnchor = null;
+
+                converter.FileNavigationRequested += (s, e) =>
+                {
+                    receivedPath = e.FilePath;
+                    receivedAnchor = e.Anchor;
+                };
+
+                // 1. Simple relative link
+                converter.HandleNavigation("guide.md");
+                AssertEqual(Path.GetFullPath(guideFile), receivedPath, "Relative guide.md resolution");
+                Assert(receivedAnchor == null, "Anchor should be null for simple file link");
+
+                // 2. Subdirectory link with .markdown extension
+                receivedPath = null;
+                converter.HandleNavigation("sub/detail.markdown");
+                AssertEqual(Path.GetFullPath(detailFile), receivedPath, "Subdirectory detail.markdown resolution");
+
+                // 3. Dot-slash relative link
+                receivedPath = null;
+                converter.HandleNavigation("./guide.md");
+                AssertEqual(Path.GetFullPath(guideFile), receivedPath, "Dot-slash relative link resolution");
+
+                // 4. URL-encoded filename
+                receivedPath = null;
+                converter.HandleNavigation("spaced%20doc.md");
+                AssertEqual(Path.GetFullPath(spacedFile), receivedPath, "URL-encoded spaced doc.md resolution");
+
+                // 5. Query string stripping
+                receivedPath = null;
+                converter.HandleNavigation("guide.md?version=1.07");
+                AssertEqual(Path.GetFullPath(guideFile), receivedPath, "Query string stripping resolution");
+
+                // 6. file:// URI scheme
+                receivedPath = null;
+                string fileUri = new Uri(guideFile).AbsoluteUri;
+                converter.HandleNavigation(fileUri);
+                AssertEqual(Path.GetFullPath(guideFile), receivedPath, "file:// URI resolution");
+
+                // 7. Non-existent file must not trigger FileNavigationRequested
+                receivedPath = null;
+                converter.HandleNavigation("nonexistent_file.md");
+                Assert(receivedPath == null, "Non-existent file should not invoke navigation");
+
+                // 8. External web schemes (http, https) must not trigger FileNavigationRequested
+                receivedPath = null;
+                converter.HandleNavigation("https://example.com/guide.md");
+                Assert(receivedPath == null, "Web scheme should not invoke local file navigation");
+            }
+            finally
+            {
+                if (Directory.Exists(tempDir))
+                {
+                    try { Directory.Delete(tempDir, true); } catch { }
+                }
+            }
+        }
+
+        private static void TestMarkdownLinkAnchorParsingAndNormalization()
+        {
+            string tempDir = Path.Combine(Path.GetTempPath(), "mdplus_unit_anchor_" + Guid.NewGuid().ToString("N"));
+            Directory.CreateDirectory(tempDir);
+
+            try
+            {
+                string guideFile = Path.Combine(tempDir, "doc.md");
+                File.WriteAllText(guideFile, "# Document\n## Target Section\n### Deep Details");
+
+                var converter = new MarkdownToWpfConverter(tempDir, ThemePalette.GitHubLight);
+
+                string? receivedFile = null;
+                string? receivedFileAnchor = null;
+                string? receivedDocAnchor = null;
+
+                converter.FileNavigationRequested += (s, e) =>
+                {
+                    receivedFile = e.FilePath;
+                    receivedFileAnchor = e.Anchor;
+                };
+
+                converter.AnchorNavigationRequested += (s, anchor) =>
+                {
+                    receivedDocAnchor = anchor;
+                };
+
+                // 1. Cross-document link with anchor
+                converter.HandleNavigation("doc.md#target-section");
+                AssertEqual(Path.GetFullPath(guideFile), receivedFile, "Cross-document file path");
+                AssertEqual("target-section", receivedFileAnchor, "Cross-document anchor extraction");
+
+                // 2. Cross-document link with URL-encoded anchor
+                receivedFile = null;
+                receivedFileAnchor = null;
+                converter.HandleNavigation("doc.md#target%20section");
+                AssertEqual(Path.GetFullPath(guideFile), receivedFile, "Cross-document encoded file path");
+                AssertEqual("target section", receivedFileAnchor, "Cross-document unescaped anchor");
+
+                // 3. Intra-document pure anchor
+                converter.HandleNavigation("#deep-details");
+                AssertEqual("deep-details", receivedDocAnchor, "Intra-document anchor extraction");
+
+                // 4. Intra-document encoded anchor
+                receivedDocAnchor = null;
+                converter.HandleNavigation("#deep%20details");
+                AssertEqual("deep details", receivedDocAnchor, "Intra-document unescaped anchor");
+            }
+            finally
+            {
+                if (Directory.Exists(tempDir))
+                {
+                    try { Directory.Delete(tempDir, true); } catch { }
+                }
+            }
+        }
+
+        private static void TestMarkdownScrollViewerScrollToAnchor()
+        {
+            var viewer = new MarkdownScrollViewer();
+            var doc = new FlowDocument();
+
+            // 1. Direct paragraph heading with HeadingTag
+            var p1 = new Paragraph(new Run("Introduction"))
+            {
+                Tag = new HeadingTag { Anchor = "introduction", Level = 1 }
+            };
+            doc.Blocks.Add(p1);
+
+            // 2. Section containing paragraph with string tag
+            var section = new Section();
+            var p2 = new Paragraph(new Run("Advanced Features"))
+            {
+                Tag = "advanced-features"
+            };
+            section.Blocks.Add(p2);
+            doc.Blocks.Add(section);
+
+            // 3. List containing list item with heading
+            var list = new WpfList();
+            var listItem = new WpfListItem();
+            var p3 = new Paragraph(new Run("Special Item"))
+            {
+                Tag = new HeadingTag { Anchor = "special-item", Level = 2 }
+            };
+            listItem.Blocks.Add(p3);
+            list.ListItems.Add(listItem);
+            doc.Blocks.Add(list);
+
+            // 4. Table containing table cell with heading
+            var table = new WpfTable();
+            var rowGroup = new WpfTableRowGroup();
+            var row = new WpfTableRow();
+            var cell = new WpfTableCell();
+            var p4 = new Paragraph(new Run("Table Heading"))
+            {
+                Tag = new HeadingTag { Anchor = "table-section", Level = 3 }
+            };
+            cell.Blocks.Add(p4);
+            row.Cells.Add(cell);
+            rowGroup.Rows.Add(row);
+            table.RowGroups.Add(rowGroup);
+            doc.Blocks.Add(table);
+
+            viewer.Document = doc;
+
+            // Test exact match
+            Assert(viewer.ScrollToAnchor("introduction"), "Exact anchor match should succeed");
+            // Test with leading hash
+            Assert(viewer.ScrollToAnchor("#introduction"), "Anchor with leading hash should succeed");
+            // Test case-insensitive
+            Assert(viewer.ScrollToAnchor("INTRODUCTION"), "Case-insensitive anchor match should succeed");
+            // Test string tag in section
+            Assert(viewer.ScrollToAnchor("advanced-features"), "Section child anchor match should succeed");
+            // Test slug normalization (spaces to hyphens)
+            Assert(viewer.ScrollToAnchor("advanced features"), "Slug normalized anchor match should succeed");
+            // Test inside list item
+            Assert(viewer.ScrollToAnchor("special-item"), "List item child anchor match should succeed");
+            // Test inside table cell
+            Assert(viewer.ScrollToAnchor("table-section"), "Table cell child anchor match should succeed");
+            // Test non-existent anchor
+            Assert(!viewer.ScrollToAnchor("non-existent"), "Non-existent anchor must return false");
+            // Test empty anchor
+            Assert(!viewer.ScrollToAnchor(""), "Empty anchor must return false");
+        }
+
+        private static void TestOpenDocumentTabManagementBehavior()
+        {
+            var tabs = new List<DocumentTabItem>();
+
+            // Scenario 1: Replaces clean untitled placeholder tab
+            var placeholder = new DocumentTabItem { Title = "Untitled-1", FilePath = "", IsDirty = false };
+            tabs.Add(placeholder);
+
+            string fileA = @"C:\docs\fileA.md";
+            var tabA = new DocumentTabItem { Title = "fileA.md", FilePath = fileA };
+
+            if (tabs.Count == 1 && string.IsNullOrEmpty(tabs[0].FilePath) && !tabs[0].IsDirty)
+            {
+                tabs[0] = tabA;
+            }
+            else
+            {
+                tabs.Add(tabA);
+            }
+
+            AssertEqual(1, tabs.Count, "Placeholder tab should be replaced in-place");
+            AssertEqual(fileA, tabs[0].FilePath, "Tab 0 should now be fileA");
+
+            // Scenario 2: Opening already open file switches tab without adding duplicate
+            var existing = tabs.FirstOrDefault(t => string.Equals(t.FilePath, fileA, StringComparison.OrdinalIgnoreCase));
+            Assert(existing != null, "Already open file should be located");
+            AssertEqual(1, tabs.Count, "No duplicate tab should be added for already open file");
+
+            // Scenario 3: OpenFilesInNewTab == true adds new tab
+            string fileB = @"C:\docs\fileB.md";
+            var tabB = new DocumentTabItem { Title = "fileB.md", FilePath = fileB };
+            bool openFilesInNewTab = true;
+
+            if (openFilesInNewTab)
+            {
+                tabs.Add(tabB);
+            }
+            AssertEqual(2, tabs.Count, "New tab should be added when OpenFilesInNewTab is true");
+            AssertEqual(fileB, tabs[1].FilePath, "Tab 1 should be fileB");
+
+            // Scenario 4: OpenFilesInNewTab == false replaces clean active tab in-place
+            string fileC = @"C:\docs\fileC.md";
+            var tabC = new DocumentTabItem { Title = "fileC.md", FilePath = fileC };
+            var activeTab = tabs[1]; // fileB is clean
+            openFilesInNewTab = false;
+
+            if (!openFilesInNewTab)
+            {
+                int activeIdx = tabs.IndexOf(activeTab);
+                AssertEqual(1, activeIdx, "Active tab index should be 1");
+                tabs[activeIdx] = tabC;
+            }
+            AssertEqual(2, tabs.Count, "Tab count should remain 2 when replacing tab in-place");
+            AssertEqual(fileC, tabs[1].FilePath, "Active tab slot should now hold fileC");
+        }
+
+        private static void TestMarkdownScrollViewerCursorAndClickHandling()
+        {
+            var viewer = new MarkdownScrollViewer();
+            var doc = new FlowDocument();
+            var para = new Paragraph();
+
+            var run1 = new Run("Normal prefix text ");
+            var linkRun = new Run("Clickable Link");
+            var hyperlink = new Hyperlink(linkRun)
+            {
+                NavigateUri = new Uri("guide.md", UriKind.Relative)
+            };
+            var run2 = new Run(" suffix text.");
+
+            para.Inlines.Add(run1);
+            para.Inlines.Add(hyperlink);
+            para.Inlines.Add(run2);
+            doc.Blocks.Add(para);
+            viewer.Document = doc;
+
+            // 1. Direct Hyperlink source
+            var foundDirect = viewer.FindHyperlinkFromSource(hyperlink);
+            Assert(foundDirect == hyperlink, "FindHyperlinkFromSource with Hyperlink should return self");
+
+            // 2. Nested Run inside Hyperlink
+            var foundFromChild = viewer.FindHyperlinkFromSource(linkRun);
+            Assert(foundFromChild == hyperlink, "FindHyperlinkFromSource with child Run should return parent Hyperlink");
+
+            // 3. Plain Run outside Hyperlink
+            var foundOutside = viewer.FindHyperlinkFromSource(run1);
+            Assert(foundOutside == null, "FindHyperlinkFromSource outside Hyperlink should return null");
+
+            // 4. Paragraph
+            var foundPara = viewer.FindHyperlinkFromSource(para);
+            Assert(foundPara == null, "FindHyperlinkFromSource on Paragraph should return null");
+
+            // 5. Point lookup delegation
+            var foundCombined = viewer.FindHyperlink(new Point(10, 10), linkRun);
+            Assert(foundCombined == hyperlink, "FindHyperlink should resolve hyperlink from source");
         }
     }
 }

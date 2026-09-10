@@ -1,6 +1,18 @@
 # MDPlus Release Notes
 
-## Version 1.06 (Latest)
+## Version 1.07 (Latest)
+
+See [docs/RELEASE_NOTES_v1.07.md](docs/RELEASE_NOTES_v1.07.md) for full details.
+
+### Highlights
+- **In-Reader Markdown Link Navigation:** Seamlessly jump to other local `.md`, `.markdown`, `.mdown`, and `.mkd` files directly within the reader. Relative paths resolve against the active document's directory, with fallback to working directory and sample docs.
+- **Heading Anchor Scrolling & Slug Normalization:** Automatic navigation and smooth scrolling to heading anchors (`#heading-anchor`), supporting robust slug normalization across spaces, punctuation, underscores, and emojis.
+- **Multi-Tab Awareness & Tab Reuse:** Jumping to an already open document switches directly to that tab and scrolls to the requested anchor.
+- **User Tab Preference Honored:** Fully respects the `OpenFilesInNewTab` setting—reusing the current tab in-place (with unsaved changes confirmation) when disabled, or opening in a new tab when enabled.
+- **Interactive Hand Cursor & Click Routing:** Dynamic `Cursors.Hand` feedback over reader links and preview click detection that preserves text selection with a 6px drag threshold.
+- **Secure Web Dispatch:** External URLs (`http:`, `https:`, `mailto:`, `ftp:`) are safely routed to the default web browser, while arbitrary executable files remain blocked.
+
+## Version 1.06
 
 See [docs/RELEASE_NOTES_v1.06.md](docs/RELEASE_NOTES_v1.06.md) for full details.
 

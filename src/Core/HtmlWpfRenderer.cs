@@ -253,6 +253,15 @@ namespace MDPlus.Core
                         e.Handled = true;
                     };
 
+                    hyperlink.RequestNavigate += (s, e) =>
+                    {
+                        if (!string.IsNullOrEmpty(href))
+                        {
+                            onNavigate?.Invoke(href);
+                        }
+                        e.Handled = true;
+                    };
+
                     PopulateChildren(hyperlink, html, convertChild, hyperlink.Foreground);
                     return hyperlink;
                 }

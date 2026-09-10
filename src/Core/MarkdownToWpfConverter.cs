@@ -34,6 +34,9 @@ namespace MDPlus.Core
         public event EventHandler<string>? AnchorNavigationRequested;
         public event EventHandler<FileNavigationEventArgs>? FileNavigationRequested;
 
+        private DateTime _lastNavigationTime = DateTime.MinValue;
+        private string _lastNavigationTarget = string.Empty;
+
         public MarkdownToWpfConverter(string baseDirectory, ThemePalette palette, bool enableLatex = true, bool enableHtml = true)
         {
             _baseDirectory = baseDirectory;
@@ -767,62 +770,6 @@ namespace MDPlus.Core
                         }
                     }
 
-                    void HandleNavigation(string? target)
-                    {
-                        if (string.IsNullOrWhiteSpace(target)) return;
-
-                        if (target.StartsWith("#"))
-                        {
-                            AnchorNavigationRequested?.Invoke(this, target.Substring(1));
-                            return;
-                        }
-
-                        // 1. Web schemes (http:, https:, mailto:) always open in browser
-                        if (Uri.TryCreate(target, UriKind.Absolute, out Uri? webUri) &&
-                            (webUri.Scheme == Uri.UriSchemeHttp ||
-                             webUri.Scheme == Uri.UriSchemeHttps ||
-                             webUri.Scheme == Uri.UriSchemeMailto))
-                        {
-                            try
-                            {
-                                Process.Start(new ProcessStartInfo(webUri.AbsoluteUri) { UseShellExecute = true });
-                            }
-                            catch
-                            {
-                                // Fail gracefully if browser launch fails
-                            }
-                            return;
-                        }
-
-                        // 2. Check for local Markdown file (with optional anchor e.g. doc.md#section)
-                        string pathWithoutAnchor = target;
-                        string? targetAnchor = null;
-                        int hashIdx = target.IndexOf('#');
-                        if (hashIdx >= 0)
-                        {
-                            pathWithoutAnchor = target.Substring(0, hashIdx);
-                            targetAnchor = target.Substring(hashIdx + 1);
-                        }
-
-                        if (pathWithoutAnchor.EndsWith(".md", StringComparison.OrdinalIgnoreCase) ||
-                            pathWithoutAnchor.EndsWith(".markdown", StringComparison.OrdinalIgnoreCase) ||
-                            pathWithoutAnchor.EndsWith(".mdown", StringComparison.OrdinalIgnoreCase) ||
-                            pathWithoutAnchor.EndsWith(".mkd", StringComparison.OrdinalIgnoreCase))
-                        {
-                            string fullTargetPath = pathWithoutAnchor;
-                            if (!System.IO.Path.IsPathRooted(fullTargetPath) && !string.IsNullOrEmpty(_baseDirectory))
-                            {
-                                fullTargetPath = System.IO.Path.Combine(_baseDirectory, pathWithoutAnchor);
-                            }
-
-                            if (File.Exists(fullTargetPath))
-                            {
-                                FileNavigationRequested?.Invoke(this, new FileNavigationEventArgs(fullTargetPath, targetAnchor));
-                            }
-                        }
-                        // Non-web schemes (e.g. file:, cmd:, powershell:, executables) are strictly blocked for security.
-                    }
-
                     hyperlink.RequestNavigate += (s, e) =>
                     {
                         HandleNavigation(e.Uri?.OriginalString ?? link.Url);
@@ -873,27 +820,7 @@ namespace MDPlus.Core
                         return HtmlWpfRenderer.RenderHtmlInline(
                             html,
                             _palette,
-                            onNavigate: (target) =>
-                            {
-                                if (!string.IsNullOrWhiteSpace(target))
-                                {
-                                    if (target.StartsWith("#"))
-                                    {
-                                        AnchorNavigationRequested?.Invoke(this, target.Substring(1));
-                                    }
-                                    else if (Uri.TryCreate(target, UriKind.Absolute, out Uri? webUri) &&
-                                             (webUri.Scheme == Uri.UriSchemeHttp || webUri.Scheme == Uri.UriSchemeHttps))
-                                    {
-                                        try
-                                        {
-                                            Process.Start(new ProcessStartInfo(webUri.AbsoluteUri) { UseShellExecute = true });
-                                        }
-                                        catch
-                                        {
-                                        }
-                                    }
-                                }
-                            },
+                            onNavigate: HandleNavigation,
                             convertChild: ConvertInline);
                     }
                     else
@@ -988,6 +915,140 @@ namespace MDPlus.Core
             };
             border.Child = placeholderText;
             return new InlineUIContainer(border) { BaselineAlignment = BaselineAlignment.Center };
+        }
+
+        public void HandleNavigation(string? target)
+        {
+            if (string.IsNullOrWhiteSpace(target)) return;
+
+            // Debounce rapid duplicate invocations (e.g. if both Click and RequestNavigate fire)
+            if (target == _lastNavigationTarget && (DateTime.UtcNow - _lastNavigationTime).TotalMilliseconds < 400)
+            {
+                return;
+            }
+            _lastNavigationTime = DateTime.UtcNow;
+            _lastNavigationTarget = target;
+
+            // 1. Pure anchor navigation (#heading-anchor)
+            if (target.StartsWith("#"))
+            {
+                string anchor = target.TrimStart('#');
+                try { anchor = Uri.UnescapeDataString(anchor); } catch { }
+                AnchorNavigationRequested?.Invoke(this, anchor);
+                return;
+            }
+
+            // 2. Web schemes (http:, https:, mailto:, ftp:) always open in default browser
+            if (Uri.TryCreate(target, UriKind.Absolute, out Uri? webUri) &&
+                (webUri.Scheme == Uri.UriSchemeHttp ||
+                 webUri.Scheme == Uri.UriSchemeHttps ||
+                 webUri.Scheme == Uri.UriSchemeMailto ||
+                 webUri.Scheme == Uri.UriSchemeFtp))
+            {
+                try
+                {
+                    Process.Start(new ProcessStartInfo(webUri.AbsoluteUri) { UseShellExecute = true });
+                }
+                catch
+                {
+                    // Fail gracefully if browser launch fails
+                }
+                return;
+            }
+
+            // 3. Check for local Markdown file (relative, absolute, or file://, with optional anchor)
+            string pathWithoutAnchor = target;
+            string? targetAnchor = null;
+            int hashIdx = target.IndexOf('#');
+            if (hashIdx >= 0)
+            {
+                pathWithoutAnchor = target.Substring(0, hashIdx);
+                targetAnchor = target.Substring(hashIdx + 1);
+            }
+
+            // Handle file:// URI scheme
+            if (Uri.TryCreate(pathWithoutAnchor, UriKind.Absolute, out Uri? fileUri) && fileUri.IsFile)
+            {
+                pathWithoutAnchor = fileUri.LocalPath;
+            }
+
+            try
+            {
+                pathWithoutAnchor = Uri.UnescapeDataString(pathWithoutAnchor);
+            }
+            catch
+            {
+            }
+
+            if (!string.IsNullOrEmpty(targetAnchor))
+            {
+                try
+                {
+                    targetAnchor = Uri.UnescapeDataString(targetAnchor);
+                }
+                catch
+                {
+                }
+            }
+
+            // Strip optional query string if present (e.g. "doc.md?version=1")
+            int queryIdx = pathWithoutAnchor.IndexOf('?');
+            if (queryIdx >= 0)
+            {
+                pathWithoutAnchor = pathWithoutAnchor.Substring(0, queryIdx);
+            }
+
+            if (pathWithoutAnchor.EndsWith(".md", StringComparison.OrdinalIgnoreCase) ||
+                pathWithoutAnchor.EndsWith(".markdown", StringComparison.OrdinalIgnoreCase) ||
+                pathWithoutAnchor.EndsWith(".mdown", StringComparison.OrdinalIgnoreCase) ||
+                pathWithoutAnchor.EndsWith(".mkd", StringComparison.OrdinalIgnoreCase))
+            {
+                string fullTargetPath = pathWithoutAnchor;
+                if (!Path.IsPathRooted(fullTargetPath))
+                {
+                    if (!string.IsNullOrEmpty(_baseDirectory))
+                    {
+                        fullTargetPath = Path.Combine(_baseDirectory, pathWithoutAnchor);
+                    }
+                    else
+                    {
+                        fullTargetPath = Path.Combine(Directory.GetCurrentDirectory(), pathWithoutAnchor);
+                    }
+                }
+
+                try
+                {
+                    fullTargetPath = Path.GetFullPath(fullTargetPath);
+                }
+                catch
+                {
+                }
+
+                if (!File.Exists(fullTargetPath))
+                {
+                    // Fallback: check relative to AppDomain base or sample_docs
+                    string appDomainPath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, pathWithoutAnchor);
+                    if (File.Exists(appDomainPath))
+                    {
+                        fullTargetPath = appDomainPath;
+                    }
+                    else
+                    {
+                        string samplePath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "sample_docs", Path.GetFileName(pathWithoutAnchor));
+                        if (File.Exists(samplePath))
+                        {
+                            fullTargetPath = samplePath;
+                        }
+                    }
+                }
+
+                if (File.Exists(fullTargetPath))
+                {
+                    FileNavigationRequested?.Invoke(this, new FileNavigationEventArgs(fullTargetPath, targetAnchor));
+                    return;
+                }
+            }
+            // Non-web schemes (e.g. cmd:, powershell:, executables) or missing files are blocked for security.
         }
     }
 
