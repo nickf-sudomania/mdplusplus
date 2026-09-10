@@ -113,10 +113,44 @@ namespace MDPlus.Controls
                 while (current != null)
                 {
                     if (current is Hyperlink hyperlink) return hyperlink;
-                    if (current is Visual visual) current = VisualTreeHelper.GetParent(visual);
-                    else if (current is TextElement te) current = te.Parent;
-                    else if (current is FrameworkContentElement fce) current = fce.Parent;
-                    else break;
+
+                    DependencyObject? parent = null;
+                    if (current is FrameworkElement fe && fe.Parent != null)
+                    {
+                        parent = fe.Parent;
+                    }
+                    else if (current is FrameworkContentElement fce && fce.Parent != null)
+                    {
+                        parent = fce.Parent;
+                    }
+                    else if (current is TextElement te && te.Parent != null)
+                    {
+                        parent = te.Parent;
+                    }
+
+                    if (parent == null)
+                    {
+                        try
+                        {
+                            parent = LogicalTreeHelper.GetParent(current);
+                        }
+                        catch
+                        {
+                        }
+                    }
+
+                    if (parent == null && current is Visual visual)
+                    {
+                        try
+                        {
+                            parent = VisualTreeHelper.GetParent(visual);
+                        }
+                        catch
+                        {
+                        }
+                    }
+
+                    current = parent;
                 }
             }
             return null;
@@ -147,7 +181,7 @@ namespace MDPlus.Controls
         protected override void OnQueryCursor(QueryCursorEventArgs e)
         {
             Point pos = Mouse.GetPosition(this);
-            if (FindHyperlink(pos) != null)
+            if (FindHyperlink(pos, e.OriginalSource) != null)
             {
                 e.Cursor = Cursors.Hand;
                 e.Handled = true;
@@ -196,7 +230,19 @@ namespace MDPlus.Controls
             {
             }
 
-            return FindAndScrollToAnchor(Document.Blocks, cleanAnchor);
+            if (FindAndScrollToAnchor(Document.Blocks, cleanAnchor))
+            {
+                return true;
+            }
+
+            if (string.IsNullOrEmpty(cleanAnchor) || cleanAnchor.Equals("top", StringComparison.OrdinalIgnoreCase))
+            {
+                ScrollToHome();
+                CaretPosition = Document.ContentStart;
+                return true;
+            }
+
+            return false;
         }
 
         private bool FindAndScrollToAnchor(BlockCollection blocks, string anchor)

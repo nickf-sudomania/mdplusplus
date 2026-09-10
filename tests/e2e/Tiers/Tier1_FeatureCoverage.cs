@@ -892,6 +892,16 @@ int a = 1;
 
             var outside = viewer.FindHyperlinkFromSource(runBefore);
             AssertTrue(outside == null, "Outside run must not detect a hyperlink.");
+
+            // Embedded control inside InlineUIContainer inside Hyperlink
+            var codeText = new TextBlock { Text = "get_info()" };
+            var codeBox = new Border { Child = codeText };
+            var container = new InlineUIContainer(codeBox);
+            var complexLink = new Hyperlink(container);
+            para.Inlines.Add(complexLink);
+
+            var detectedFromCode = viewer.FindHyperlinkFromSource(codeText);
+            AssertEqual(complexLink, detectedFromCode, "Hyperlink must be detected from TextBlock inside InlineUIContainer.");
         }
 
         #endregion

@@ -3809,6 +3809,11 @@ SHA-256: 4444444444444444444444444444444444444444444444444444444444444444
                 receivedDocAnchor = null;
                 converter.HandleNavigation("#deep%20details");
                 AssertEqual("deep details", receivedDocAnchor, "Intra-document unescaped anchor");
+
+                // 5. Intra-document anchor with whitespace
+                receivedDocAnchor = null;
+                converter.HandleNavigation("   #deep-details   ");
+                AssertEqual("deep-details", receivedDocAnchor, "Intra-document anchor with whitespace should be trimmed");
             }
             finally
             {
@@ -3882,10 +3887,11 @@ SHA-256: 4444444444444444444444444444444444444444444444444444444444444444
             Assert(viewer.ScrollToAnchor("special-item"), "List item child anchor match should succeed");
             // Test inside table cell
             Assert(viewer.ScrollToAnchor("table-section"), "Table cell child anchor match should succeed");
+            // Test #top fallback (scrolls to top when no explicit heading named 'top' exists)
+            Assert(viewer.ScrollToAnchor("#top"), "Top anchor fallback should succeed");
+            Assert(viewer.ScrollToAnchor("#"), "Empty hash anchor fallback should succeed");
             // Test non-existent anchor
             Assert(!viewer.ScrollToAnchor("non-existent"), "Non-existent anchor must return false");
-            // Test empty anchor
-            Assert(!viewer.ScrollToAnchor(""), "Empty anchor must return false");
         }
 
         private static void TestOpenDocumentTabManagementBehavior()
@@ -3983,6 +3989,22 @@ SHA-256: 4444444444444444444444444444444444444444444444444444444444444444
             // 5. Point lookup delegation
             var foundCombined = viewer.FindHyperlink(new Point(10, 10), linkRun);
             Assert(foundCombined == hyperlink, "FindHyperlink should resolve hyperlink from source");
+
+            // 6. FrameworkElement inside InlineUIContainer inside Hyperlink (e.g. inline code span in link)
+            var codeTextBlock = new TextBlock { Text = "code_func()" };
+            var codeBorder = new Border { Child = codeTextBlock };
+            var container = new InlineUIContainer(codeBorder);
+            var codeHyperlink = new Hyperlink(container)
+            {
+                NavigateUri = new Uri("api.md", UriKind.Relative)
+            };
+            para.Inlines.Add(codeHyperlink);
+
+            var foundFromCodeText = viewer.FindHyperlinkFromSource(codeTextBlock);
+            AssertEqual(codeHyperlink, foundFromCodeText, "FindHyperlinkFromSource on TextBlock inside InlineUIContainer must resolve parent Hyperlink");
+
+            var foundFromCodeBorder = viewer.FindHyperlinkFromSource(codeBorder);
+            AssertEqual(codeHyperlink, foundFromCodeBorder, "FindHyperlinkFromSource on Border inside InlineUIContainer must resolve parent Hyperlink");
         }
     }
 }

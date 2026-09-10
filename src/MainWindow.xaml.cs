@@ -226,14 +226,18 @@ namespace MDPlus
                 if (activate)
                 {
                     SetActiveTab(existing);
-                }
-                if (!string.IsNullOrEmpty(anchor))
-                {
-                    MarkdownViewer.ScrollToAnchor(anchor);
-                    Dispatcher.BeginInvoke(new Action(() =>
+                    if (!string.IsNullOrEmpty(anchor))
                     {
                         MarkdownViewer.ScrollToAnchor(anchor);
-                    }), System.Windows.Threading.DispatcherPriority.Loaded);
+                        Dispatcher.BeginInvoke(new Action(() =>
+                        {
+                            MarkdownViewer.ScrollToAnchor(anchor);
+                        }), System.Windows.Threading.DispatcherPriority.Loaded);
+                    }
+                    else if (existing == _activeTab)
+                    {
+                        MarkdownViewer.ScrollToHome();
+                    }
                 }
                 return;
             }
@@ -327,7 +331,7 @@ namespace MDPlus
                     SaveSessionState();
                 }
 
-                if (!string.IsNullOrEmpty(anchor))
+                if (activate && !string.IsNullOrEmpty(anchor))
                 {
                     MarkdownViewer.ScrollToAnchor(anchor);
                     Dispatcher.BeginInvoke(new Action(() =>
@@ -445,7 +449,11 @@ Plugins can be enabled or disabled instantly via the Plugins menu without restar
                 MarkdownViewer.ScrollToAnchor(anchor);
                 Dispatcher.BeginInvoke(new Action(() => MarkdownViewer.ScrollToAnchor(anchor)), System.Windows.Threading.DispatcherPriority.Loaded);
             };
-            converter.FileNavigationRequested += (s, e) => OpenDocument(e.FilePath, e.Anchor);
+            converter.FileNavigationRequested += (s, e) =>
+            {
+                bool? forceNewTab = Keyboard.Modifiers.HasFlag(ModifierKeys.Control) ? true : null;
+                OpenDocument(e.FilePath, e.Anchor, openInNewTab: forceNewTab);
+            };
             tab.FlowDocument = converter.Convert(tab.Document);
         }
 

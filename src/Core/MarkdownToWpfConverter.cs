@@ -920,6 +920,7 @@ namespace MDPlus.Core
         public void HandleNavigation(string? target)
         {
             if (string.IsNullOrWhiteSpace(target)) return;
+            target = target.Trim();
 
             // Debounce rapid duplicate invocations (e.g. if both Click and RequestNavigate fire)
             if (target == _lastNavigationTarget && (DateTime.UtcNow - _lastNavigationTime).TotalMilliseconds < 400)
