@@ -163,15 +163,24 @@ namespace MDPlus.Controls
 
                     await Task.Delay(300);
 
-                    if (Owner == null)
+                    VerifiedInstallerPath = result.InstallerPath;
+
+                    if (Owner is MainWindow mainWindow && mainWindow.IsLoaded)
                     {
-                        UpdateService.LaunchInstallerAndExit(result.InstallerPath);
+                        try
+                        {
+                            DialogResult = true;
+                        }
+                        catch (InvalidOperationException)
+                        {
+                            Close();
+                            UpdateService.LaunchInstallerAndExit(result.InstallerPath);
+                        }
                     }
                     else
                     {
-                        VerifiedInstallerPath = result.InstallerPath;
-                        DialogResult = true;
                         Close();
+                        UpdateService.LaunchInstallerAndExit(result.InstallerPath);
                     }
                 }
                 else

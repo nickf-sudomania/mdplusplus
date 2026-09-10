@@ -191,12 +191,7 @@ namespace MDPlus
                                         var dlg = new UpdateDialog(updateResult, _updateService) { Owner = this };
                                         if (dlg.ShowDialog() == true && !string.IsNullOrEmpty(dlg.VerifiedInstallerPath))
                                         {
-                                            string installerPath = dlg.VerifiedInstallerPath;
-                                            Close();
-                                            if (!IsLoaded)
-                                            {
-                                                UpdateService.LaunchInstallerAndExit(installerPath);
-                                            }
+                                            CloseAndLaunchInstaller(dlg.VerifiedInstallerPath);
                                         }
                                     }
                                     catch
@@ -1742,6 +1737,28 @@ Console.WriteLine($""Parsed {doc.Blocks.Count} blocks in 2ms!"");
             dlg.ShowDialog();
         }
 
+        private void CloseAndLaunchInstaller(string installerPath)
+        {
+            if (string.IsNullOrEmpty(installerPath)) return;
+
+            bool isClosed = false;
+            EventHandler closedHandler = (s, e) => isClosed = true;
+            Closed += closedHandler;
+            try
+            {
+                Close();
+            }
+            finally
+            {
+                Closed -= closedHandler;
+            }
+
+            if (isClosed)
+            {
+                UpdateService.LaunchInstallerAndExit(installerPath);
+            }
+        }
+
         private async void CheckForUpdates_Click(object sender, RoutedEventArgs e)
         {
             string originalStatus = StatusFileText.Text;
@@ -1773,12 +1790,7 @@ Console.WriteLine($""Parsed {doc.Blocks.Count} blocks in 2ms!"");
                     var dlg = new UpdateDialog(result, _updateService) { Owner = this };
                     if (dlg.ShowDialog() == true && !string.IsNullOrEmpty(dlg.VerifiedInstallerPath))
                     {
-                        string installerPath = dlg.VerifiedInstallerPath;
-                        Close();
-                        if (!IsLoaded)
-                        {
-                            UpdateService.LaunchInstallerAndExit(installerPath);
-                        }
+                        CloseAndLaunchInstaller(dlg.VerifiedInstallerPath);
                     }
                 }
                 else

@@ -170,6 +170,7 @@ namespace MDPlus.Tests
             RunTest("DWM Window Reset & Update Dialog Keyboard Accessibility", TestDwmHelperResetWindowAndFullscreenLifecycle);
             RunTest("Update Service 404 Not Found Graceful Up-To-Date Handling", TestUpdateServiceNotFoundGracefulHandling);
             RunTest("Update Service Live GitHub Release v1.02 Detection", TestUpdateServiceLiveGitHubReleaseV102Detection);
+            RunTest("Update Service Dialog Result & UAC Process Start Flow", TestUpdateServiceDialogResultAndUacElevationFlow);
 
             sw.Stop();
 
@@ -2714,6 +2715,10 @@ SHA-256: 8888888888888888888888888888888888888888888888888888888888888888
                 var psi = UpdateService.CreateInstallerProcessStartInfo(tempInstaller);
                 AssertEqual(tempInstaller, psi.FileName, "ProcessStartInfo.FileName matches installer path");
                 Assert(psi.UseShellExecute, "ProcessStartInfo.UseShellExecute is true");
+                if (Environment.OSVersion.Platform == PlatformID.Win32NT)
+                {
+                    AssertEqual("runas", psi.Verb, "ProcessStartInfo.Verb is 'runas' on Windows NT for UAC elevation");
+                }
 
                 // 3. LaunchInstallerAndExit with test hooks executes delegates safely
                 bool launched = false;
@@ -2721,11 +2726,20 @@ SHA-256: 8888888888888888888888888888888888888888888888888888888888888888
 
                 UpdateService.LaunchInstallerAndExit(
                     tempInstaller,
-                    startProcess: p => { launched = (p.FileName == tempInstaller); },
+                    startProcess: p => { launched = (p.FileName == tempInstaller && (Environment.OSVersion.Platform != PlatformID.Win32NT || p.Verb == "runas")); },
                     exitApp: () => { exited = true; });
 
-                Assert(launched, "startProcess delegate was executed with correct ProcessStartInfo");
+                Assert(launched, "startProcess delegate was executed with correct ProcessStartInfo and elevation verb");
                 Assert(exited, "exitApp delegate was executed");
+
+                // 4. Test UAC prompt cancellation handling (Win32Exception NativeErrorCode == 1223)
+                bool exitedOnCancel = false;
+                UpdateService.LaunchInstallerAndExit(
+                    tempInstaller,
+                    startProcess: p => throw new System.ComponentModel.Win32Exception(1223, "The operation was canceled by the user"),
+                    exitApp: () => { exitedOnCancel = true; });
+
+                Assert(!exitedOnCancel, "LaunchInstallerAndExit must NOT exit the application if UAC prompt was canceled by the user");
             }
             finally
             {
@@ -2997,6 +3011,75 @@ SHA-256: 4444444444444444444444444444444444444444444444444444444444444444
             if (result102.IsSuccess)
             {
                 Assert(!result102.IsUpdateAvailable, "v1.02 running should be recognized as up-to-date against v1.02");
+            }
+        }
+
+        private static void TestUpdateServiceDialogResultAndUacElevationFlow()
+        {
+            // 1. Verify ProcessStartInfo specifies Verb = "runas" on Windows NT
+            string dummyExe = System.IO.Path.GetTempFileName();
+            try
+            {
+                var psi = UpdateService.CreateInstallerProcessStartInfo(dummyExe);
+                AssertEqual(dummyExe, psi.FileName, "Installer path matches");
+                Assert(psi.UseShellExecute, "UseShellExecute must be true");
+                if (Environment.OSVersion.Platform == PlatformID.Win32NT)
+                {
+                    AssertEqual("runas", psi.Verb, "UAC elevation verb 'runas' is configured on Windows NT");
+                }
+
+                // 2. Verify LaunchInstallerAndExit catches UAC cancellation (code 1223) without calling exitApp
+                bool exitCalled = false;
+                UpdateService.LaunchInstallerAndExit(
+                    dummyExe,
+                    startProcess: p => throw new System.ComponentModel.Win32Exception(1223, "The operation was canceled by the user"),
+                    exitApp: () => { exitCalled = true; });
+
+                Assert(!exitCalled, "Application must NOT exit when UAC prompt is canceled by user (1223)");
+
+                // 3. Verify LaunchInstallerAndExit executes exitApp on successful process launch
+                bool launched = false;
+                bool exitSuccess = false;
+                UpdateService.LaunchInstallerAndExit(
+                    dummyExe,
+                    startProcess: p => { launched = true; },
+                    exitApp: () => { exitSuccess = true; });
+
+                Assert(launched, "Installer process start hook was invoked");
+                Assert(exitSuccess, "exitApp hook was invoked after installer launch");
+
+                // 4. Verify UpdateDialog.xaml.cs contains VerifiedInstallerPath and DialogResult flow
+                string[] updateDialogPaths = new[]
+                {
+                    System.IO.Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "..", "..", "..", "..", "src", "Controls", "UpdateDialog.xaml.cs"),
+                    System.IO.Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "..", "..", "..", "src", "Controls", "UpdateDialog.xaml.cs"),
+                    System.IO.Path.Combine(Environment.CurrentDirectory, "src", "Controls", "UpdateDialog.xaml.cs")
+                };
+                string updateDialogCsPath = updateDialogPaths.FirstOrDefault(p => System.IO.File.Exists(p)) ?? string.Empty;
+                Assert(!string.IsNullOrEmpty(updateDialogCsPath), "UpdateDialog.xaml.cs must exist");
+                string updateCs = System.IO.File.ReadAllText(updateDialogCsPath);
+                Assert(updateCs.Contains("VerifiedInstallerPath = result.InstallerPath;"), "UpdateDialog sets VerifiedInstallerPath");
+                Assert(updateCs.Contains("DialogResult = true;"), "UpdateDialog sets DialogResult for owner window");
+
+                // 5. Verify MainWindow.xaml.cs contains CloseAndLaunchInstaller and avoids broken if (!IsLoaded)
+                string[] mainPaths = new[]
+                {
+                    System.IO.Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "..", "..", "..", "..", "src", "MainWindow.xaml.cs"),
+                    System.IO.Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "..", "..", "..", "src", "MainWindow.xaml.cs"),
+                    System.IO.Path.Combine(Environment.CurrentDirectory, "src", "MainWindow.xaml.cs")
+                };
+                string mainCsPath = mainPaths.FirstOrDefault(p => System.IO.File.Exists(p)) ?? string.Empty;
+                Assert(!string.IsNullOrEmpty(mainCsPath), "MainWindow.xaml.cs must exist");
+                string mainCs = System.IO.File.ReadAllText(mainCsPath);
+                Assert(mainCs.Contains("CloseAndLaunchInstaller"), "MainWindow contains CloseAndLaunchInstaller");
+                Assert(mainCs.Contains("Closed += closedHandler;"), "CloseAndLaunchInstaller attaches Closed handler");
+                Assert(!mainCs.Contains("if (!IsLoaded)\r\n                                                UpdateService.LaunchInstallerAndExit") &&
+                       !mainCs.Contains("if (!IsLoaded)\n                                                UpdateService.LaunchInstallerAndExit"),
+                       "MainWindow does not contain broken if (!IsLoaded) launch check");
+            }
+            finally
+            {
+                try { System.IO.File.Delete(dummyExe); } catch { }
             }
         }
 

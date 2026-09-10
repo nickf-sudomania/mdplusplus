@@ -705,6 +705,8 @@ namespace MDPlus.Core
 
         /// <summary>
         /// Validates installer existence and creates a configured ProcessStartInfo instance.
+        /// Configures process elevation via the "runas" verb on Windows NT so that updates to
+        /// Program Files and system file associations have necessary administrative permissions.
         /// </summary>
         public static ProcessStartInfo CreateInstallerProcessStartInfo(string installerPath)
         {
@@ -713,15 +715,23 @@ namespace MDPlus.Core
                 throw new FileNotFoundException("Installer not found: " + installerPath);
             }
 
-            return new ProcessStartInfo
+            var startInfo = new ProcessStartInfo
             {
                 FileName = installerPath,
                 UseShellExecute = true
             };
+
+            if (Environment.OSVersion.Platform == PlatformID.Win32NT)
+            {
+                startInfo.Verb = "runas";
+            }
+
+            return startInfo;
         }
 
         /// <summary>
         /// Safely launches the verified installer and cleanly closes MDPlus.
+        /// Handles UAC cancellation (error 1223) safely without terminating the application.
         /// Optional delegates allow unit tests to verify process start and exit behaviors.
         /// </summary>
         public static void LaunchInstallerAndExit(
@@ -731,14 +741,58 @@ namespace MDPlus.Core
         {
             var startInfo = CreateInstallerProcessStartInfo(installerPath);
 
-            if (startProcess != null)
+            bool launched = false;
+            try
             {
-                startProcess(startInfo);
+                if (startProcess != null)
+                {
+                    startProcess(startInfo);
+                    launched = true;
+                }
+                else
+                {
+                    try
+                    {
+                        Process.Start(startInfo);
+                        launched = true;
+                    }
+                    catch (System.ComponentModel.Win32Exception ex) when (ex.NativeErrorCode == 1223)
+                    {
+                        // User cancelled the UAC elevation prompt (ERROR_CANCELLED = 1223).
+                        // Do not terminate or exit the application.
+                        return;
+                    }
+                    catch (System.ComponentModel.Win32Exception)
+                    {
+                        // If execution failed due to elevation policy, fallback to standard execution without runas
+                        try
+                        {
+                            var fallbackInfo = new ProcessStartInfo
+                            {
+                                FileName = installerPath,
+                                UseShellExecute = true
+                            };
+                            Process.Start(fallbackInfo);
+                            launched = true;
+                        }
+                        catch (System.ComponentModel.Win32Exception ex) when (ex.NativeErrorCode == 1223)
+                        {
+                            return;
+                        }
+                        catch
+                        {
+                            throw;
+                        }
+                    }
+                }
             }
-            else
+            catch (System.ComponentModel.Win32Exception ex) when (ex.NativeErrorCode == 1223)
             {
-                Process.Start(startInfo);
+                // User cancelled UAC prompt
+                return;
             }
+
+            if (!launched) return;
 
             if (exitApp != null)
             {
