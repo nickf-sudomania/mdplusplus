@@ -1,6 +1,18 @@
 # MDPlus Release Notes
 
-## Version 1.03 (Latest)
+## Version 1.06 (Latest)
+
+See [docs/RELEASE_NOTES_v1.06.md](docs/RELEASE_NOTES_v1.06.md) for full details.
+
+### Highlights
+- **Typographic Baseline Alignment:** Mathematical formulas ($A = k \times B$, $W^2 = W^1 + d$), inline code spans (`[BaseDomainGenerator]`), and keycaps (<kbd>Ctrl</kbd>) now align on the font baseline with surrounding plain text and parentheses.
+- **Vector LaTeX Math Plugin:** Crisp native inline (`$...$`) and display (`$$...$$`) LaTeX math formulas rendered with pure WPF vector primitives (fractions, radicals, Greek letters, integrals, matrices). Zero Chromium or MathJax dependencies.
+- **Native HTML Rendering Plugin:** Raw HTML tags (`<kbd>`, `<sub>`, `<sup>`, `<u>`, `<mark>`, `<span>` with CSS style parsing) and interactive collapsible `<details>` disclosure widgets rendered without WebBrowser or WebView2.
+- **Modular Plugins Menu:** Easily toggle LaTeX Math Rendering and HTML Rendering on/off from the Main Menu or Hamburger Menu with instant document re-rendering.
+- **Sub-Millisecond Zero-Overhead Performance:** Empirically verified negligible performance impact (< 3 ms cold startup difference, sub-millisecond document parsing, 0 allocations on plain markdown).
+- **Two-Way FlowDocument Round-Trip:** Extended `MarkdownSerializer` with full fidelity support for LaTeX formulas and raw HTML markup tags.
+
+## Version 1.03
 
 See [docs/RELEASE_NOTES_v1.03.md](docs/RELEASE_NOTES_v1.03.md) for full details.
 

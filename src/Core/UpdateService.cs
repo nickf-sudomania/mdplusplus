@@ -65,7 +65,7 @@ namespace MDPlus.Core
         }
 
         /// <summary>
-        /// Gets the currently executing application version as a clean semantic version string (e.g. "1.03").
+        /// Gets the currently executing application version as a clean semantic version string (e.g. "1.06").
         /// </summary>
         public static string GetCurrentVersion()
         {
@@ -79,7 +79,7 @@ namespace MDPlus.Core
                 return infoVer;
             }
             var ver = assembly.GetName().Version;
-            if (ver == null) return "1.03";
+            if (ver == null) return "1.06";
             return $"{ver.Major}.{ver.Minor}.{Math.Max(0, ver.Build)}";
         }
 

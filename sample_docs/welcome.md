@@ -2,7 +2,7 @@
 title: "Welcome to MDPlus"
 author: "Nick"
 date: "2026-09-09"
-version: "1.03"
+version: "1.06"
 category: "Documentation"
 ---
 
@@ -84,9 +84,9 @@ FlowDocument flowDoc = converter.Convert(document);
 
 ---
 
-## 🔬 Plugins: Vector LaTeX Math & Native HTML (v1.03)
+## 🔬 Plugins: Vector LaTeX Math & Native HTML (v1.06)
 
-MDPlus v1.03 introduces modular rendering plugins with **zero browser baggage** and sub-millisecond overhead:
+MDPlus v1.06 introduces modular rendering plugins with **zero browser baggage** and sub-millisecond overhead:
 
 ### Inline & Display LaTeX Math Rendering
 - Einstein mass-energy equivalence: $E = mc^2$
