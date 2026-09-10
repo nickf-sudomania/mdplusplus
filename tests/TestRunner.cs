@@ -171,6 +171,11 @@ namespace MDPlus.Tests
             RunTest("Update Service 404 Not Found Graceful Up-To-Date Handling", TestUpdateServiceNotFoundGracefulHandling);
             RunTest("Update Service Live GitHub Release v1.02 Detection", TestUpdateServiceLiveGitHubReleaseV102Detection);
             RunTest("Update Service Dialog Result & UAC Process Start Flow", TestUpdateServiceDialogResultAndUacElevationFlow);
+            RunTest("LaTeX Math Inline and Display Parsing & Currency Protection", TestLatexMathInlineAndDisplayParsing);
+            RunTest("Native HTML Inline Tags and Block Disclosures Parsing", TestHtmlInlineAndBlockParsing);
+            RunTest("LaTeX and HTML FlowDocument Serialization Round-Trip", TestLatexAndHtmlFlowDocumentSerializationRoundTrip);
+            RunTest("Plugin Runtime Toggle Behavior and Raw Fallback", TestPluginRuntimeToggleBehavior);
+            RunTest("Empirical Performance Benchmark: LaTeX & HTML Zero-Overhead", TestEmpiricalPerformanceBenchmarkWithLatexAndHtmlPlugins);
 
             sw.Stop();
 
@@ -3094,6 +3099,219 @@ SHA-256: 4444444444444444444444444444444444444444444444444444444444444444
             {
                 try { System.IO.File.Delete(dummyExe); } catch { }
             }
+        }
+
+        private static void TestLatexMathInlineAndDisplayParsing()
+        {
+            var parser = new MarkdownParser();
+
+            // 1. Inline math
+            string md1 = "Energy is $E = mc^2$ in physics.";
+            var doc1 = parser.Parse(md1);
+            var p1 = doc1.Blocks[0] as ParagraphBlock;
+            Assert(p1 != null, "Paragraph expected");
+            AssertEqual(3, p1!.Inlines.Count, "Inlines count");
+            Assert(p1.Inlines[1] is MathInline, "Inline 1 must be MathInline");
+            var mi1 = (MathInline)p1.Inlines[1];
+            AssertEqual("E = mc^2", mi1.Expression, "Expression");
+            Assert(!mi1.IsDisplay, "Inline math IsDisplay is false");
+
+            // 2. Display block math ($$...$$)
+            string md2 = "$$\n\\int_{0}^{\\infty} e^{-x^2} dx = \\frac{\\sqrt{\\pi}}{2}\n$$";
+            var doc2 = parser.Parse(md2);
+            AssertEqual(1, doc2.Blocks.Count, "Blocks count");
+            Assert(doc2.Blocks[0] is MathBlock, "Block must be MathBlock");
+            var mb2 = (MathBlock)doc2.Blocks[0];
+            Assert(mb2.Expression.Contains("\\int_{0}^{\\infty}"), "Expression must contain integral");
+
+            // 3. Single-line display math ($$...$$)
+            string md3 = "$$a^2 + b^2 = c^2$$";
+            var doc3 = parser.Parse(md3);
+            AssertEqual(1, doc3.Blocks.Count, "Blocks count");
+            Assert(doc3.Blocks[0] is MathBlock, "Single-line display math must be MathBlock");
+            var mb3 = (MathBlock)doc3.Blocks[0];
+            AssertEqual("a^2 + b^2 = c^2", mb3.Expression, "Expression matches");
+
+            // 4. Currency protection ($100 and $200)
+            string md4 = "The price is $100 and $200 for both.";
+            var doc4 = parser.Parse(md4);
+            var p4 = doc4.Blocks[0] as ParagraphBlock;
+            Assert(p4 != null, "Paragraph expected");
+            bool hasMath = p4!.Inlines.Any(i => i is MathInline);
+            Assert(!hasMath, "Currency amounts like $100 and $200 must NOT be parsed as math");
+
+            // 5. Delimiter whitespace rule ($ math $)
+            string md5 = "This $ is not math $ here.";
+            var doc5 = parser.Parse(md5);
+            var p5 = doc5.Blocks[0] as ParagraphBlock;
+            Assert(p5 != null, "Paragraph expected");
+            Assert(!p5!.Inlines.Any(i => i is MathInline), "$ with leading/trailing spaces must NOT parse as math");
+
+            // 6. Escaped dollar (\$50)
+            string md6 = "Cost: \\$50 each.";
+            var doc6 = parser.Parse(md6);
+            var p6 = doc6.Blocks[0] as ParagraphBlock;
+            Assert(p6 != null, "Paragraph expected");
+            Assert(!p6!.Inlines.Any(i => i is MathInline), "Escaped dollar must NOT parse as math");
+
+            // 7. Vector WPF rendering test
+            var element = LatexMathRenderer.RenderMath("\\frac{a}{b} + \\sqrt{c} = \\alpha", ThemePalette.GitHubDark, 14, false);
+            Assert(element != null, "LatexMathRenderer must return non-null UIElement");
+            var displayElement = LatexMathRenderer.RenderMath("\\sum_{i=1}^n i = \\frac{n(n+1)}{2}", ThemePalette.GitHubLight, 16, true);
+            Assert(displayElement != null, "LatexMathRenderer must render display formulas");
+        }
+
+        private static void TestHtmlInlineAndBlockParsing()
+        {
+            var parser = new MarkdownParser();
+
+            // 1. Inline HTML tags: <kbd>, <sub>, <sup>, <u>, <mark>
+            string md1 = "Press <kbd>Ctrl</kbd> + <kbd>C</kbd> to copy H<sub>2</sub>O and x<sup>2</sup>.";
+            var doc1 = parser.Parse(md1);
+            var p1 = doc1.Blocks[0] as ParagraphBlock;
+            Assert(p1 != null, "Paragraph expected");
+            var htmlInlines = p1!.Inlines.OfType<HtmlInline>().ToList();
+            Assert(htmlInlines.Count >= 4, "Must detect <kbd>, <kbd>, <sub>, <sup>");
+            AssertEqual("kbd", htmlInlines[0].Tag, "Tag 0 is kbd");
+            AssertEqual("Ctrl", htmlInlines[0].Content, "Content 0 is Ctrl");
+            AssertEqual("sub", htmlInlines[2].Tag, "Tag 2 is sub");
+            AssertEqual("2", htmlInlines[2].Content, "Content 2 is 2");
+
+            // 2. Styled span: <span style="color:#ff0000;font-weight:bold">Red text</span>
+            string md2 = "Warning: <span style=\"color:#ff0000;font-weight:bold\">Danger</span> ahead.";
+            var doc2 = parser.Parse(md2);
+            var p2 = doc2.Blocks[0] as ParagraphBlock;
+            var spanHtml = p2!.Inlines.OfType<HtmlInline>().FirstOrDefault(h => h.Tag == "span");
+            Assert(spanHtml != null, "Span HtmlInline must be found");
+            AssertEqual("Danger", spanHtml!.Content, "Content matches");
+            Assert(spanHtml.Attributes.ContainsKey("style"), "Attributes contain style");
+
+            // 3. Block HTML: <details><summary>Details</summary>Body</details>
+            string md3 = "<details>\n<summary>More Info</summary>\nHere is the hidden content.\n</details>";
+            var doc3 = parser.Parse(md3);
+            AssertEqual(1, doc3.Blocks.Count, "Blocks count");
+            Assert(doc3.Blocks[0] is HtmlBlock, "Block must be HtmlBlock");
+            var hb3 = (HtmlBlock)doc3.Blocks[0];
+            AssertEqual("details", hb3.Tag, "Tag is details");
+            AssertEqual("More Info", hb3.Attributes["summary"], "Summary attribute matches");
+
+            // 4. Centered paragraph block <p align="center">
+            string md4 = "<p align=\"center\">Centered paragraph text</p>";
+            var doc4 = parser.Parse(md4);
+            Assert(doc4.Blocks[0] is HtmlBlock, "Block must be HtmlBlock");
+            var hb4 = (HtmlBlock)doc4.Blocks[0];
+            AssertEqual("p", hb4.Tag, "Tag is p");
+            AssertEqual("center", hb4.Attributes["align"], "Align attribute matches");
+
+            // 5. Native WPF HTML rendering test
+            var kbdWpf = HtmlWpfRenderer.RenderHtmlInline(htmlInlines[0], ThemePalette.GitHubDark);
+            Assert(kbdWpf != null, "HtmlWpfRenderer must render <kbd> as Inline");
+            var blockWpf = HtmlWpfRenderer.RenderHtmlBlock(hb3, ThemePalette.GitHubDark, b => null);
+            Assert(blockWpf != null, "HtmlWpfRenderer must render <details> as Block");
+        }
+
+        private static void TestLatexAndHtmlFlowDocumentSerializationRoundTrip()
+        {
+            var parser = new MarkdownParser();
+            string original = "Formula: $E = mc^2$ and key: <kbd>Ctrl+S</kbd>.\n\n$$\n\\frac{a}{b} = c\n$$\n\n<details>\n<summary>Secret</summary>\nInside info\n</details>";
+
+            var doc = parser.Parse(original);
+            var converter = new MarkdownToWpfConverter(AppDomain.CurrentDomain.BaseDirectory, ThemePalette.GitHubDark, enableLatex: true, enableHtml: true);
+            var flowDoc = converter.Convert(doc);
+            Assert(flowDoc != null, "FlowDocument must not be null");
+
+            string serialized = MarkdownSerializer.Serialize(flowDoc!);
+            Assert(serialized.Contains("$E = mc^2$"), "Serialized text must preserve $E = mc^2$");
+            Assert(serialized.Contains("<kbd>Ctrl+S</kbd>"), "Serialized text must preserve <kbd>Ctrl+S</kbd>");
+            Assert(serialized.Contains("\\frac{a}{b} = c"), "Serialized text must preserve display formula");
+            Assert(serialized.Contains("<details"), "Serialized text must preserve <details>");
+        }
+
+        private static void TestPluginRuntimeToggleBehavior()
+        {
+            var parser = new MarkdownParser();
+            string input = "Math: $x + y = z$.\n\nKey: <kbd>Enter</kbd>.\n\n$$\na = b\n$$";
+            var doc = parser.Parse(input);
+
+            // 1. With plugins enabled:
+            var converterEnabled = new MarkdownToWpfConverter(AppDomain.CurrentDomain.BaseDirectory, ThemePalette.GitHubDark, enableLatex: true, enableHtml: true);
+            var flowEnabled = converterEnabled.Convert(doc);
+            var p0 = flowEnabled.Blocks.FirstBlock as Paragraph;
+            Assert(p0 != null, "Paragraph 0");
+            bool hasInlineUI = p0!.Inlines.Any(i => i is InlineUIContainer);
+            Assert(hasInlineUI, "With LaTeX enabled, inline math is rendered as InlineUIContainer vector element");
+
+            // 2. With plugins disabled:
+            var converterDisabled = new MarkdownToWpfConverter(AppDomain.CurrentDomain.BaseDirectory, ThemePalette.GitHubDark, enableLatex: false, enableHtml: false);
+            var flowDisabled = converterDisabled.Convert(doc);
+            var pDisabled = flowDisabled.Blocks.FirstBlock as Paragraph;
+            Assert(pDisabled != null, "Paragraph 0 disabled");
+            bool hasNoInlineUI = !pDisabled!.Inlines.Any(i => i is InlineUIContainer);
+            Assert(hasNoInlineUI, "With LaTeX disabled, inline math falls back to plain text Run");
+            string textContent = string.Join("", pDisabled.Inlines.OfType<Run>().Select(r => r.Text));
+            Assert(textContent.Contains("$x + y = z$"), "Raw math syntax is preserved as text when plugin disabled");
+        }
+
+        private static void TestEmpiricalPerformanceBenchmarkWithLatexAndHtmlPlugins()
+        {
+            var parser = new MarkdownParser();
+
+            // 1. Build a heavy mathematical document with 200 formulas and 150 HTML tags
+            var sb = new StringBuilder();
+            sb.AppendLine("# Heavy Scientific Paper with Plugins");
+            sb.AppendLine();
+            for (int i = 0; i < 200; i++)
+            {
+                sb.AppendLine($"Section {i}: The energy is $E_{i} = m_{i} c^2$ and momentum is $p_{i} = \\hbar k_{i}$.");
+                if (i % 10 == 0)
+                {
+                    sb.AppendLine("$$\n\\int_{0}^{\\infty} x^" + i + " e^{-x} dx = " + i + "!\n$$");
+                    sb.AppendLine("<details>\n<summary>Proof " + i + "</summary>\nTrivial by induction.\n</details>");
+                }
+                if (i % 5 == 0)
+                {
+                    sb.AppendLine("Shortcut: <kbd>Ctrl</kbd>+<kbd>" + (char)('A' + (i % 26)) + "</kbd>, formula: H<sub>2</sub>O and x<sup>2</sup>.");
+                }
+                sb.AppendLine();
+            }
+
+            string heavyMarkdown = sb.ToString();
+
+            // Measure Parsing Time
+            var sw = System.Diagnostics.Stopwatch.StartNew();
+            var doc = parser.Parse(heavyMarkdown);
+            sw.Stop();
+            long parseTimeMs = sw.ElapsedMilliseconds;
+
+            // Measure FlowDocument Rendering Time with Plugins Enabled
+            var converter = new MarkdownToWpfConverter(AppDomain.CurrentDomain.BaseDirectory, ThemePalette.GitHubDark, enableLatex: true, enableHtml: true);
+            sw.Restart();
+            var flowDoc = converter.Convert(doc);
+            sw.Stop();
+            long renderTimeMs = sw.ElapsedMilliseconds;
+
+            Console.Write($" [200 Math + 150 HTML parsed in {parseTimeMs}ms, rendered in {renderTimeMs}ms] ");
+
+            Assert(doc.Blocks.Count > 200, "Must parse all sections");
+            Assert(flowDoc.Blocks.Count > 200, "Must convert all sections");
+            // Parsing 200 math + 150 HTML elements should take < 100 ms (typical is 3-10 ms)
+            Assert(parseTimeMs < 150, $"Parsing time must be fast (<150ms), actual: {parseTimeMs}ms");
+
+            // 2. Measure plain document parsing to verify zero overhead when no math/HTML present
+            var plainSb = new StringBuilder();
+            for (int i = 0; i < 2000; i++)
+            {
+                plainSb.AppendLine($"Regular line {i} with **bold** and *italic* and `code` formatting.");
+            }
+            string plainMarkdown = plainSb.ToString();
+
+            sw.Restart();
+            var plainDoc = parser.Parse(plainMarkdown);
+            sw.Stop();
+            long plainParseTimeMs = sw.ElapsedMilliseconds;
+
+            Console.Write($" [2,000 plain lines parsed in {plainParseTimeMs}ms] ");
+            Assert(plainParseTimeMs < 100, $"Plain document parsing must be under 100ms, actual: {plainParseTimeMs}ms");
         }
 
         private class MockHttpMessageHandler : System.Net.Http.HttpMessageHandler

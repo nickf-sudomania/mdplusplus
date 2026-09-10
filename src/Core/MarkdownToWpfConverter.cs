@@ -28,14 +28,19 @@ namespace MDPlus.Core
         private readonly SolidColorBrush _accentBrush;
         private readonly SolidColorBrush _linkBrush;
 
+        private readonly bool _enableLatex;
+        private readonly bool _enableHtml;
+
         public event EventHandler<string>? AnchorNavigationRequested;
         public event EventHandler<FileNavigationEventArgs>? FileNavigationRequested;
 
-        public MarkdownToWpfConverter(string baseDirectory, ThemePalette palette)
+        public MarkdownToWpfConverter(string baseDirectory, ThemePalette palette, bool enableLatex = true, bool enableHtml = true)
         {
             _baseDirectory = baseDirectory;
             _palette = palette ?? ThemePalette.GitHubDark;
             _isDark = _palette.IsDark;
+            _enableLatex = enableLatex;
+            _enableHtml = enableHtml;
 
             _textBrush = _palette.EditorFg;
             _headingBrush = _palette.HeadingFg;
@@ -48,8 +53,8 @@ namespace MDPlus.Core
             _linkBrush = _palette.Accent;
         }
 
-        public MarkdownToWpfConverter(string baseDirectory, bool isDark)
-            : this(baseDirectory, isDark ? ThemePalette.GitHubDark : ThemePalette.GitHubLight)
+        public MarkdownToWpfConverter(string baseDirectory, bool isDark, bool enableLatex = true, bool enableHtml = true)
+            : this(baseDirectory, isDark ? ThemePalette.GitHubDark : ThemePalette.GitHubLight, enableLatex, enableHtml)
         {
         }
 
@@ -107,8 +112,50 @@ namespace MDPlus.Core
                 case ThematicBreakBlock _:
                     return ConvertThematicBreak();
 
+                case MathBlock math:
+                    return ConvertMathBlock(math);
+
+                case HtmlBlock html:
+                    return ConvertHtmlBlock(html);
+
                 default:
                     return null;
+            }
+        }
+
+        private Block ConvertMathBlock(MathBlock math)
+        {
+            if (_enableLatex)
+            {
+                var mathElement = LatexMathRenderer.RenderMath(math.Expression, _palette, 16, isDisplay: true);
+                return new BlockUIContainer(mathElement)
+                {
+                    Tag = new MathTag { Expression = math.Expression, IsDisplay = true }
+                };
+            }
+            else
+            {
+                return new Paragraph(new Run($"$$\n{math.Expression}\n$$") { Foreground = _mutedBrush })
+                {
+                    Margin = new Thickness(0, 8, 0, 12),
+                    Tag = new MathTag { Expression = math.Expression, IsDisplay = true }
+                };
+            }
+        }
+
+        private Block ConvertHtmlBlock(HtmlBlock html)
+        {
+            if (_enableHtml)
+            {
+                return HtmlWpfRenderer.RenderHtmlBlock(html, _palette, ConvertBlock);
+            }
+            else
+            {
+                return new Paragraph(new Run(html.RawHtml) { Foreground = _mutedBrush })
+                {
+                    Margin = new Thickness(0, 4, 0, 8),
+                    Tag = new HtmlBlockTag { RawHtml = html.RawHtml, Tag = html.Tag }
+                };
             }
         }
 
@@ -800,6 +847,63 @@ namespace MDPlus.Core
 
                 case LineBreakInline br:
                     return br.IsHard ? (Inline)new LineBreak() : new Run(" ");
+
+                case MathInline math:
+                    if (_enableLatex)
+                    {
+                        var mathElement = LatexMathRenderer.RenderMath(math.Expression, _palette, 14.5, math.IsDisplay);
+                        return new InlineUIContainer(mathElement)
+                        {
+                            BaselineAlignment = BaselineAlignment.Center,
+                            Tag = new MathTag { Expression = math.Expression, IsDisplay = math.IsDisplay }
+                        };
+                    }
+                    else
+                    {
+                        return new Run(math.IsDisplay ? $"$${math.Expression}$$" : $"${math.Expression}$")
+                        {
+                            Foreground = _textBrush,
+                            Tag = new MathTag { Expression = math.Expression, IsDisplay = math.IsDisplay }
+                        };
+                    }
+
+                case HtmlInline html:
+                    if (_enableHtml)
+                    {
+                        return HtmlWpfRenderer.RenderHtmlInline(
+                            html,
+                            _palette,
+                            onNavigate: (target) =>
+                            {
+                                if (!string.IsNullOrWhiteSpace(target))
+                                {
+                                    if (target.StartsWith("#"))
+                                    {
+                                        AnchorNavigationRequested?.Invoke(this, target.Substring(1));
+                                    }
+                                    else if (Uri.TryCreate(target, UriKind.Absolute, out Uri? webUri) &&
+                                             (webUri.Scheme == Uri.UriSchemeHttp || webUri.Scheme == Uri.UriSchemeHttps))
+                                    {
+                                        try
+                                        {
+                                            Process.Start(new ProcessStartInfo(webUri.AbsoluteUri) { UseShellExecute = true });
+                                        }
+                                        catch
+                                        {
+                                        }
+                                    }
+                                }
+                            },
+                            convertChild: ConvertInline);
+                    }
+                    else
+                    {
+                        return new Run(html.RawHtml)
+                        {
+                            Foreground = _textBrush,
+                            Tag = new HtmlInlineTag { RawHtml = html.RawHtml, Tag = html.Tag }
+                        };
+                    }
 
                 default:
                     return null;

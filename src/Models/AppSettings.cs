@@ -28,6 +28,8 @@ namespace MDPlus.Models
         public double WindowHeight { get; set; } = 750;
         public bool WindowMaximized { get; set; } = false;
         public List<string> RecentFiles { get; set; } = new List<string>();
+        public bool EnableLatexRendering { get; set; } = true;
+        public bool EnableHtmlRendering { get; set; } = true;
 
         /// <summary>
         /// Whether to automatically check for updates on startup (at most once every 24 hours).

@@ -78,6 +78,8 @@ namespace MDPlus
             if (HamburgerWordWrapMenuItem != null) HamburgerWordWrapMenuItem.IsChecked = _settings.WordWrap;
             RawMarkdownTextBox.TextWrapping = _settings.WordWrap ? TextWrapping.Wrap : TextWrapping.NoWrap;
 
+            UpdatePluginMenuChecks();
+
             Width = _settings.WindowWidth;
             Height = _settings.WindowHeight;
             if (_settings.WindowMaximized)
@@ -338,6 +340,20 @@ Console.WriteLine($""Parsed {doc.Blocks.Count} blocks in 2ms!"");
 > [!TIP]
 > Press **Ctrl+2** to toggle Split View and inspect the raw markdown syntax side by side with the formatted document!
 
+### 🔬 Rendering Plugins (v1.03)
+
+- **Vector LaTeX Math:** $E = mc^2$ and $\int_{-\infty}^{\infty} e^{-x^2} dx = \sqrt{\pi}$
+- **Display Formulas:**
+$$
+f(x) = \frac{1}{\sigma \sqrt{2\pi}} e^{-\frac{1}{2}\left(\frac{x - \mu}{\sigma}\right)^2}
+$$
+- **Native HTML Elements:** <kbd>Ctrl</kbd> + <kbd>P</kbd>, <u>Underlined</u>, <mark>Highlight</mark>, and H<sub>2</sub>O.
+- **Interactive Disclosure Widget:**
+<details>
+<summary>Click to expand plugin info</summary>
+Plugins can be enabled or disabled instantly via the Plugins menu without restarting!
+</details>
+
 ---
 
 *Enjoy distraction-free, lightning-fast Markdown viewing with MDPlus!*
@@ -361,7 +377,7 @@ Console.WriteLine($""Parsed {doc.Blocks.Count} blocks in 2ms!"");
 
         private void RenderDocumentTab(DocumentTabItem tab)
         {
-            var converter = new MarkdownToWpfConverter(tab.DirectoryName, ThemeManager.Instance.CurrentPalette);
+            var converter = new MarkdownToWpfConverter(tab.DirectoryName, ThemeManager.Instance.CurrentPalette, _settings.EnableLatexRendering, _settings.EnableHtmlRendering);
             converter.AnchorNavigationRequested += (s, anchor) => MarkdownViewer.ScrollToAnchor(anchor);
             converter.FileNavigationRequested += (s, e) => OpenDocument(e.FilePath, e.Anchor);
             tab.FlowDocument = converter.Convert(tab.Document);
@@ -976,7 +992,14 @@ Console.WriteLine($""Parsed {doc.Blocks.Count} blocks in 2ms!"");
             DocumentFindBar.ApplyTheme(isDark);
             UpdateThemeMenuChecks();
 
-            // Re-render all loaded tabs to match new theme
+            ReRenderAllTabs();
+
+            RebuildTabStrip();
+            DwmHelper.ApplyTitleBarTheme(this, palette);
+        }
+
+        private void ReRenderAllTabs()
+        {
             foreach (var tab in _tabs)
             {
                 RenderDocumentTab(tab);
@@ -986,9 +1009,6 @@ Console.WriteLine($""Parsed {doc.Blocks.Count} blocks in 2ms!"");
             {
                 MarkdownViewer.Document = _activeTab.FlowDocument;
             }
-
-            RebuildTabStrip();
-            DwmHelper.ApplyTitleBarTheme(this, palette);
         }
 
         private void OnThemeChanged(object? sender, EventArgs e)
@@ -1524,6 +1544,30 @@ Console.WriteLine($""Parsed {doc.Blocks.Count} blocks in 2ms!"");
             if (HamburgerThemeOneLightItem != null) HamburgerThemeOneLightItem.IsChecked = preset == ThemePreset.OneLight;
             if (HamburgerThemeSolarizedLightItem != null) HamburgerThemeSolarizedLightItem.IsChecked = preset == ThemePreset.SolarizedLight;
             if (HamburgerThemeQuietLightItem != null) HamburgerThemeQuietLightItem.IsChecked = preset == ThemePreset.QuietLight;
+        }
+
+        private void UpdatePluginMenuChecks()
+        {
+            if (PluginLatexMenuItem != null) PluginLatexMenuItem.IsChecked = _settings.EnableLatexRendering;
+            if (HamburgerPluginLatexMenuItem != null) HamburgerPluginLatexMenuItem.IsChecked = _settings.EnableLatexRendering;
+            if (PluginHtmlMenuItem != null) PluginHtmlMenuItem.IsChecked = _settings.EnableHtmlRendering;
+            if (HamburgerPluginHtmlMenuItem != null) HamburgerPluginHtmlMenuItem.IsChecked = _settings.EnableHtmlRendering;
+        }
+
+        private void PluginLatex_Click(object sender, RoutedEventArgs e)
+        {
+            _settings.EnableLatexRendering = !_settings.EnableLatexRendering;
+            UpdatePluginMenuChecks();
+            _settings.Save();
+            ReRenderAllTabs();
+        }
+
+        private void PluginHtml_Click(object sender, RoutedEventArgs e)
+        {
+            _settings.EnableHtmlRendering = !_settings.EnableHtmlRendering;
+            UpdatePluginMenuChecks();
+            _settings.Save();
+            ReRenderAllTabs();
         }
 
         private void ToggleMenuBar_Click(object sender, RoutedEventArgs e)

@@ -429,6 +429,18 @@ namespace MDPlus.Core
                 return;
             }
 
+            // 2.1 Check if tagged as Math block or HTML block
+            if (p.Tag is MathTag mt)
+            {
+                sb.Append("$$\n").Append(mt.Expression).Append("\n$$");
+                return;
+            }
+            if (p.Tag is HtmlBlockTag hbt)
+            {
+                sb.Append(hbt.RawHtml);
+                return;
+            }
+
             // 3. Normal paragraph
             int pStart = sb.Length;
             SerializeInlines(p.Inlines, sb, default);
@@ -514,6 +526,13 @@ namespace MDPlus.Core
         private static void SerializeSection(Section s, StringBuilder sb)
         {
             if (s == null || s.Blocks.Count == 0) return;
+
+            // 0. Check if HTML block
+            if (s.Tag is HtmlBlockTag hbt)
+            {
+                sb.Append(hbt.RawHtml);
+                return;
+            }
 
             // 1. Callout alert detection
             if (TryGetCallout(s, out CalloutType calloutType, out string calloutTitle, out bool skipHeaderPara))
@@ -1087,6 +1106,18 @@ namespace MDPlus.Core
         {
             if (buic == null || buic.Child == null) return;
 
+            if (buic.Tag is MathTag mt)
+            {
+                sb.Append("$$\n").Append(mt.Expression).Append("\n$$");
+                return;
+            }
+
+            if (buic.Tag is HtmlBlockTag hbt)
+            {
+                sb.Append(hbt.RawHtml);
+                return;
+            }
+
             // 1. Thematic Break (horizontal rule)
             if (buic.Tag as string == "hr" ||
                 (buic.Child is Border lineBorder && (lineBorder.Height <= 2 || lineBorder.Tag as string == "hr")))
@@ -1255,6 +1286,12 @@ namespace MDPlus.Core
         {
             if (span == null) return;
 
+            if (span.Tag is HtmlInlineTag hit)
+            {
+                sb.Append(hit.RawHtml);
+                return;
+            }
+
             // 1. Inline Code
             bool isCode = (span.Tag as string == "code") ||
                           (span.FontFamily != null && span.FontFamily.Source.IndexOf("Cascadia Code", StringComparison.OrdinalIgnoreCase) >= 0);
@@ -1336,6 +1373,24 @@ namespace MDPlus.Core
         {
             if (run == null || string.IsNullOrEmpty(run.Text))
                 return;
+
+            if (run.Tag is MathTag mt)
+            {
+                sb.Append(mt.IsDisplay ? $"$${mt.Expression}$$" : $"${mt.Expression}$");
+                return;
+            }
+
+            if (run.Tag is HtmlInlineTag hit)
+            {
+                sb.Append(hit.RawHtml);
+                return;
+            }
+
+            if (run.Tag is HtmlBlockTag hbt)
+            {
+                sb.Append(hbt.RawHtml);
+                return;
+            }
 
             string text = run.Text;
 
@@ -1472,6 +1527,12 @@ namespace MDPlus.Core
         {
             if (hyperlink == null) return;
 
+            if (hyperlink.Tag is HtmlInlineTag hit)
+            {
+                sb.Append(hit.RawHtml);
+                return;
+            }
+
             string url = hyperlink.NavigateUri?.OriginalString ?? hyperlink.ToolTip?.ToString() ?? (hyperlink.Tag as string) ?? "";
             string? tip = hyperlink.ToolTip?.ToString();
 
@@ -1488,6 +1549,18 @@ namespace MDPlus.Core
         private static void SerializeInlineUIContainer(InlineUIContainer uic, StringBuilder sb, InlineContext ctx)
         {
             if (uic == null || uic.Child == null) return;
+
+            if (uic.Tag is MathTag mt)
+            {
+                sb.Append(mt.IsDisplay ? $"$${mt.Expression}$$" : $"${mt.Expression}$");
+                return;
+            }
+
+            if (uic.Tag is HtmlInlineTag hit)
+            {
+                sb.Append(hit.RawHtml);
+                return;
+            }
 
             if (uic.Child is CheckBox cb)
             {

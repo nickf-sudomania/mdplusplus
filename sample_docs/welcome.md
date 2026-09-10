@@ -2,7 +2,7 @@
 title: "Welcome to MDPlus"
 author: "Nick"
 date: "2026-09-09"
-version: "1.02"
+version: "1.03"
 category: "Documentation"
 ---
 
@@ -81,6 +81,33 @@ var document = parser.Parse(fileContent);
 var converter = new MarkdownToWpfConverter(directory, isDarkTheme);
 FlowDocument flowDoc = converter.Convert(document);
 ```
+
+---
+
+## 🔬 Plugins: Vector LaTeX Math & Native HTML (v1.03)
+
+MDPlus v1.03 introduces modular rendering plugins with **zero browser baggage** and sub-millisecond overhead:
+
+### Inline & Display LaTeX Math Rendering
+- Einstein mass-energy equivalence: $E = mc^2$
+- Euler's identity: $e^{i\pi} + 1 = 0$
+- Gaussian integral: $\int_{-\infty}^{\infty} e^{-x^2} dx = \sqrt{\pi}$
+- Display formula:
+$$
+f(x) = \frac{1}{\sigma \sqrt{2\pi}} e^{-\frac{1}{2}\left(\frac{x - \mu}{\sigma}\right)^2}
+$$
+
+### Native HTML Tags & Disclosure Widgets
+- Keyboard shortcuts: <kbd>Ctrl</kbd> + <kbd>Shift</kbd> + <kbd>P</kbd>
+- Subscript and superscript: H<sub>2</sub>O and x<sup>2</sup> + y<sup>2</sup> = z<sup>2</sup>
+- Text styling: <u>Underlined</u>, <mark>highlighted text</mark>, and <span style="color:#22c55e;font-weight:bold">colored span</span>.
+- Collapsible interactive details:
+<details>
+<summary>Click to reveal secret notes</summary>
+MDPlus parses raw HTML blocks and inlines into pure WPF FlowDocument elements without any Chromium or WebView2 runtime overhead!
+</details>
+
+*Note: You can toggle LaTeX or HTML rendering plugins on/off at any time under the **Plugins** menu!*
 
 ---
 

@@ -104,6 +104,29 @@ namespace MDPlus.Core
     {
     }
 
+    public class MathBlock : MarkdownBlock
+    {
+        public string Expression { get; set; } = string.Empty;
+        public MathBlock() { }
+        public MathBlock(string expression) { Expression = expression; }
+    }
+
+    public class HtmlBlock : MarkdownBlock
+    {
+        public string Tag { get; set; } = string.Empty;
+        public string RawHtml { get; set; } = string.Empty;
+        public string Content { get; set; } = string.Empty;
+        public Dictionary<string, string> Attributes { get; set; } = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+        public List<MarkdownBlock> Blocks { get; set; } = new List<MarkdownBlock>();
+
+        public HtmlBlock() { }
+        public HtmlBlock(string rawHtml, string tag = "")
+        {
+            RawHtml = rawHtml;
+            Tag = tag;
+        }
+    }
+
     // --- Inline Elements ---
 
     public abstract class MarkdownInline
@@ -177,5 +200,35 @@ namespace MDPlus.Core
     {
         public bool IsHard { get; set; }
         public LineBreakInline(bool isHard = false) { IsHard = isHard; }
+    }
+
+    public class MathInline : MarkdownInline
+    {
+        public string Expression { get; set; } = string.Empty;
+        public bool IsDisplay { get; set; } = false;
+
+        public MathInline() { }
+        public MathInline(string expression, bool isDisplay = false)
+        {
+            Expression = expression;
+            IsDisplay = isDisplay;
+        }
+    }
+
+    public class HtmlInline : MarkdownInline
+    {
+        public string Tag { get; set; } = string.Empty;
+        public string RawHtml { get; set; } = string.Empty;
+        public string Content { get; set; } = string.Empty;
+        public Dictionary<string, string> Attributes { get; set; } = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+        public List<MarkdownInline> Children { get; set; } = new List<MarkdownInline>();
+        public bool IsSelfClosing { get; set; } = false;
+
+        public HtmlInline() { }
+        public HtmlInline(string rawHtml, string tag = "")
+        {
+            RawHtml = rawHtml;
+            Tag = tag;
+        }
     }
 }

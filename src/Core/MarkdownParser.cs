@@ -61,6 +61,48 @@ namespace MDPlus.Core
                     continue;
                 }
 
+                // A0. Math Display Block ($$...$$)
+                string trimmedLine = line.Trim();
+                if (trimmedLine.StartsWith("$$"))
+                {
+                    if (trimmedLine.Length > 2 && trimmedLine.EndsWith("$$"))
+                    {
+                        string expr = trimmedLine.Substring(2, trimmedLine.Length - 4).Trim();
+                        doc.Blocks.Add(new MathBlock(expr));
+                        currentLine++;
+                        continue;
+                    }
+                    else
+                    {
+                        currentLine++;
+                        var mathSb = new StringBuilder();
+                        while (currentLine < lines.Length)
+                        {
+                            string mLine = lines[currentLine];
+                            if (mLine.Trim().StartsWith("$$"))
+                            {
+                                currentLine++;
+                                break;
+                            }
+                            mathSb.AppendLine(mLine);
+                            currentLine++;
+                        }
+                        doc.Blocks.Add(new MathBlock(mathSb.ToString().TrimEnd('\r', '\n')));
+                        continue;
+                    }
+                }
+
+                // A0.1 HTML Block (<details>, <div>, <p>, <hr>, etc.)
+                if (IsHtmlBlockStarter(line))
+                {
+                    var htmlBlock = ParseHtmlBlock(lines, ref currentLine);
+                    if (htmlBlock != null)
+                    {
+                        doc.Blocks.Add(htmlBlock);
+                        continue;
+                    }
+                }
+
                 // A. Fenced Code Block
                 var codeMatch = CodeFenceRegex.Match(line.TrimStart());
                 if (codeMatch.Success)
@@ -121,6 +163,8 @@ namespace MDPlus.Core
                 bool isNonParagraphLine = UnorderedListRegex.IsMatch(line) ||
                                           OrderedListRegex.IsMatch(line) ||
                                           line.TrimStart().StartsWith(">") ||
+                                          line.TrimStart().StartsWith("$$") ||
+                                          IsHtmlBlockStarter(line) ||
                                           CodeFenceRegex.IsMatch(line.TrimStart()) ||
                                           ThematicBreakRegex.IsMatch(line.Trim());
 
@@ -513,6 +557,8 @@ namespace MDPlus.Core
                     ThematicBreakRegex.IsMatch(line.Trim()) ||
                     CodeFenceRegex.IsMatch(line.TrimStart()) ||
                     line.TrimStart().StartsWith(">") ||
+                    line.TrimStart().StartsWith("$$") ||
+                    IsHtmlBlockStarter(line) ||
                     UnorderedListRegex.IsMatch(line) ||
                     OrderedListRegex.IsMatch(line) ||
                     (line.Contains("|") && currentLine + 1 < lines.Length && TableSeparatorRegex.IsMatch(lines[currentLine + 1])))
@@ -577,7 +623,7 @@ namespace MDPlus.Core
                         i += 2;
                         continue;
                     }
-                    else if ("`*_{}[]()#+-.!|~=".IndexOf(next) >= 0)
+                    else if ("`*_{}[]()#+-.!|~=$".IndexOf(next) >= 0)
                     {
                         sb.Append(next);
                         lastCharWasEscapedBackslash = false;
@@ -611,6 +657,58 @@ namespace MDPlus.Core
                 }
 
                 lastCharWasEscapedBackslash = false;
+
+                // 2.1 Math: $$display math$$ or $inline math$
+                if (c == '$')
+                {
+                    if (i + 1 < length && text[i + 1] == '$')
+                    {
+                        int end = text.IndexOf("$$", i + 2, StringComparison.Ordinal);
+                        if (end > i + 1)
+                        {
+                            FlushText();
+                            string expr = text.Substring(i + 2, end - (i + 2));
+                            inlines.Add(new MathInline(expr, isDisplay: true));
+                            i = end + 2;
+                            continue;
+                        }
+                    }
+                    else if (i + 1 < length && !char.IsWhiteSpace(text[i + 1]) && text[i + 1] != '$')
+                    {
+                        int end = -1;
+                        for (int k = i + 1; k < length; k++)
+                        {
+                            if (text[k] == '\\') { k++; continue; }
+                            if (text[k] == '$')
+                            {
+                                if (!char.IsWhiteSpace(text[k - 1]))
+                                {
+                                    if (k + 1 >= length || !char.IsDigit(text[k + 1]))
+                                    {
+                                        if (k + 1 >= length || text[k + 1] != '$')
+                                        {
+                                            end = k;
+                                            break;
+                                        }
+                                    }
+                                }
+                            }
+                            if (text[k] == '\n' && k + 1 < length && text[k + 1] == '\n')
+                            {
+                                break;
+                            }
+                        }
+
+                        if (end > i)
+                        {
+                            FlushText();
+                            string expr = text.Substring(i + 1, end - (i + 1));
+                            inlines.Add(new MathInline(expr, isDisplay: false));
+                            i = end + 1;
+                            continue;
+                        }
+                    }
+                }
 
                 // 3. Inline Code: `code` or ``code``
                 if (c == '`')
@@ -798,6 +896,17 @@ namespace MDPlus.Core
                             inlines.Add(link);
                             i = closeTag + 1;
                             continue;
+                        }
+                        else
+                        {
+                            var htmlInline = TryParseHtmlInline(text, i, closeTag, out int nextIdx);
+                            if (htmlInline != null)
+                            {
+                                FlushText();
+                                inlines.Add(htmlInline);
+                                i = nextIdx;
+                                continue;
+                            }
                         }
                     }
                 }
@@ -1009,6 +1118,194 @@ namespace MDPlus.Core
 
             doc.CharacterCount = totalChars;
             doc.WordCount = totalWords;
+        }
+
+        private static readonly HashSet<string> KnownInlineHtmlTags = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
+        {
+            "kbd", "sub", "sup", "b", "strong", "i", "em", "u", "mark", "del", "s", "strike",
+            "code", "span", "font", "br", "hr", "a", "img", "abbr", "cite", "small", "var", "samp"
+        };
+
+        private static readonly HashSet<string> KnownBlockHtmlTags = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
+        {
+            "details", "div", "section", "article", "header", "footer", "figure", "figcaption", "p", "table", "style", "hr"
+        };
+
+        private static readonly Regex HtmlAttrRegex = new Regex(
+            @"([a-zA-Z0-9_-]+)\s*=\s*(?:""([^""]*)""|'([^']*)'|([^\s>]+))",
+            RegexOptions.Compiled);
+
+        public static Dictionary<string, string> ParseHtmlAttributes(string tagContent)
+        {
+            var dict = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+            if (string.IsNullOrWhiteSpace(tagContent)) return dict;
+
+            var matches = HtmlAttrRegex.Matches(tagContent);
+            foreach (Match m in matches)
+            {
+                string key = m.Groups[1].Value;
+                string val = m.Groups[2].Success ? m.Groups[2].Value :
+                             m.Groups[3].Success ? m.Groups[3].Value :
+                             m.Groups[4].Value;
+                dict[key] = val;
+            }
+            return dict;
+        }
+
+        private HtmlInline? TryParseHtmlInline(string text, int startIndex, int openCloseTag, out int nextIndex)
+        {
+            nextIndex = startIndex;
+            string tagHeader = text.Substring(startIndex + 1, openCloseTag - (startIndex + 1)).Trim();
+            if (string.IsNullOrEmpty(tagHeader) || tagHeader.StartsWith("/"))
+                return null;
+
+            int sp = tagHeader.IndexOfAny(new[] { ' ', '\t', '/' });
+            string tagName = (sp > 0 ? tagHeader.Substring(0, sp) : tagHeader).ToLowerInvariant();
+
+            if (!KnownInlineHtmlTags.Contains(tagName))
+                return null;
+
+            var attrs = ParseHtmlAttributes(tagHeader);
+
+            // Self-closing: <br/>, <hr/>, <img .../>, or void tags <br>, <hr>
+            bool isSelfClosing = tagHeader.EndsWith("/") || tagName == "br" || tagName == "hr" || tagName == "img";
+            if (isSelfClosing)
+            {
+                nextIndex = openCloseTag + 1;
+                return new HtmlInline(text.Substring(startIndex, openCloseTag - startIndex + 1), tagName)
+                {
+                    IsSelfClosing = true,
+                    Attributes = attrs
+                };
+            }
+
+            // Paired tag: find </tagName>
+            string closeTarget = "</" + tagName + ">";
+            int closeIdx = text.IndexOf(closeTarget, openCloseTag + 1, StringComparison.OrdinalIgnoreCase);
+            if (closeIdx > openCloseTag)
+            {
+                string inner = text.Substring(openCloseTag + 1, closeIdx - (openCloseTag + 1));
+                nextIndex = closeIdx + closeTarget.Length;
+                string fullRaw = text.Substring(startIndex, nextIndex - startIndex);
+                return new HtmlInline(fullRaw, tagName)
+                {
+                    Content = inner,
+                    Attributes = attrs,
+                    Children = ParseInlines(inner)
+                };
+            }
+
+            return null;
+        }
+
+        private static bool IsHtmlBlockStarter(string line)
+        {
+            if (string.IsNullOrWhiteSpace(line)) return false;
+            string trimmed = line.TrimStart();
+            if (!trimmed.StartsWith("<")) return false;
+            if (trimmed.StartsWith("<!--") || trimmed.StartsWith("<?") || trimmed.StartsWith("<!")) return false;
+
+            int endTag = trimmed.IndexOfAny(new[] { ' ', '>', '\t', '/' }, 1);
+            if (endTag <= 1) return false;
+            string tag = trimmed.Substring(1, endTag - 1);
+            return KnownBlockHtmlTags.Contains(tag);
+        }
+
+        private HtmlBlock? ParseHtmlBlock(string[] lines, ref int currentLine)
+        {
+            string firstLine = lines[currentLine];
+            string trimmed = firstLine.TrimStart();
+            int endTag = trimmed.IndexOfAny(new[] { ' ', '>', '\t', '/' }, 1);
+            if (endTag <= 1) return null;
+            string tag = trimmed.Substring(1, endTag - 1).ToLowerInvariant();
+
+            int closeBracket = trimmed.IndexOf('>');
+            string header = closeBracket > 0 ? trimmed.Substring(1, closeBracket - 1) : tag;
+            var attrs = ParseHtmlAttributes(header);
+
+            if (tag == "hr")
+            {
+                currentLine++;
+                return new HtmlBlock(firstLine.Trim(), "hr") { Attributes = attrs };
+            }
+
+            var sb = new StringBuilder();
+            sb.AppendLine(firstLine);
+            currentLine++;
+
+            string closeTarget = "</" + tag + ">";
+
+            // If the first line already contains the closing tag
+            if (firstLine.IndexOf(closeTarget, StringComparison.OrdinalIgnoreCase) > 0)
+            {
+                string full = sb.ToString().TrimEnd('\r', '\n');
+                return CreateHtmlBlockObject(tag, full, attrs);
+            }
+
+            while (currentLine < lines.Length)
+            {
+                string line = lines[currentLine];
+                sb.AppendLine(line);
+                currentLine++;
+
+                if (line.IndexOf(closeTarget, StringComparison.OrdinalIgnoreCase) >= 0)
+                {
+                    break;
+                }
+            }
+
+            string fullHtml = sb.ToString().TrimEnd('\r', '\n');
+            return CreateHtmlBlockObject(tag, fullHtml, attrs);
+        }
+
+        private HtmlBlock CreateHtmlBlockObject(string tag, string fullHtml, Dictionary<string, string> attrs)
+        {
+            var block = new HtmlBlock(fullHtml, tag) { Attributes = attrs };
+
+            if (tag == "details")
+            {
+                // Extract <summary> if present
+                var summaryMatch = Regex.Match(fullHtml, @"<summary>(.*?)</summary>", RegexOptions.IgnoreCase | RegexOptions.Singleline);
+                if (summaryMatch.Success)
+                {
+                    block.Attributes["summary"] = summaryMatch.Groups[1].Value.Trim();
+                }
+
+                // Inner content without <details> and </details> and <summary>
+                string inner = fullHtml;
+                int startTagEnd = inner.IndexOf('>');
+                if (startTagEnd >= 0) inner = inner.Substring(startTagEnd + 1);
+                int endTagStart = inner.LastIndexOf("</details>", StringComparison.OrdinalIgnoreCase);
+                if (endTagStart >= 0) inner = inner.Substring(0, endTagStart);
+
+                if (summaryMatch.Success)
+                {
+                    inner = inner.Replace(summaryMatch.Value, "");
+                }
+
+                block.Content = inner.Trim();
+                if (!string.IsNullOrWhiteSpace(block.Content))
+                {
+                    var innerDoc = Parse(block.Content);
+                    block.Blocks = innerDoc.Blocks;
+                }
+            }
+            else
+            {
+                // Extract inner content
+                int startTagEnd = fullHtml.IndexOf('>');
+                int endTagStart = fullHtml.LastIndexOf("</" + tag + ">", StringComparison.OrdinalIgnoreCase);
+                if (startTagEnd >= 0 && endTagStart > startTagEnd)
+                {
+                    block.Content = fullHtml.Substring(startTagEnd + 1, endTagStart - (startTagEnd + 1)).Trim();
+                }
+                else
+                {
+                    block.Content = fullHtml;
+                }
+            }
+
+            return block;
         }
     }
 }

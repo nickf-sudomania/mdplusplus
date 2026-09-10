@@ -187,6 +187,14 @@ namespace MDPlus.Core
                 case ThematicBreakBlock _:
                     sb.AppendLine("<hr>");
                     break;
+
+                case MathBlock math:
+                    sb.AppendLine($"<div class=\"math-display\">\\[{WebUtility.HtmlEncode(math.Expression)}\\]</div>");
+                    break;
+
+                case HtmlBlock html:
+                    sb.AppendLine(html.RawHtml);
+                    break;
             }
         }
 
@@ -261,6 +269,21 @@ namespace MDPlus.Core
 
                 case LineBreakInline br:
                     sb.Append(br.IsHard ? "<br>\n" : " ");
+                    break;
+
+                case MathInline math:
+                    if (math.IsDisplay)
+                    {
+                        sb.Append($"<span class=\"math-display\">\\[{WebUtility.HtmlEncode(math.Expression)}\\]</span>");
+                    }
+                    else
+                    {
+                        sb.Append($"<span class=\"math-inline\">\\({WebUtility.HtmlEncode(math.Expression)}\\)</span>");
+                    }
+                    break;
+
+                case HtmlInline html:
+                    sb.Append(html.RawHtml);
                     break;
             }
         }
@@ -370,6 +393,12 @@ hr {
     font-size: 13px;
 }
 .meta-key { color: #58a6ff; font-weight: 600; }
+.math-display { text-align: center; margin: 16px 0; overflow-x: auto; font-family: 'Cambria Math', 'Times New Roman', serif; }
+.math-inline { font-family: 'Cambria Math', 'Times New Roman', serif; }
+kbd { background-color: #21262d; border: 1px solid #444c56; border-bottom-width: 2px; border-radius: 4px; padding: 2px 6px; font-family: 'Cascadia Code', Consolas, monospace; font-size: 85%; }
+mark { background-color: rgba(255, 230, 0, 0.3); color: #f0f6fc; padding: 1px 4px; border-radius: 2px; }
+details { border: 1px solid #30363d; border-radius: 6px; padding: 12px; margin: 16px 0; background-color: rgba(255, 255, 255, 0.04); }
+details summary { font-weight: 600; cursor: pointer; }
 ";
             }
             else
@@ -466,6 +495,12 @@ hr {
     font-size: 13px;
 }
 .meta-key { color: #0969da; font-weight: 600; }
+.math-display { text-align: center; margin: 16px 0; overflow-x: auto; font-family: 'Cambria Math', 'Times New Roman', serif; }
+.math-inline { font-family: 'Cambria Math', 'Times New Roman', serif; }
+kbd { background-color: #f3f4f6; border: 1px solid #d1d5db; border-bottom-width: 2px; border-radius: 4px; padding: 2px 6px; font-family: 'Cascadia Code', Consolas, monospace; font-size: 85%; }
+mark { background-color: #fff8c5; color: #24292f; padding: 1px 4px; border-radius: 2px; }
+details { border: 1px solid #d0d7de; border-radius: 6px; padding: 12px; margin: 16px 0; background-color: rgba(0, 0, 0, 0.02); }
+details summary { font-weight: 600; cursor: pointer; }
 ";
             }
         }
