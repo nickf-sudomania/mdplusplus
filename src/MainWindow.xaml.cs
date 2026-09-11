@@ -35,6 +35,15 @@ namespace MDPlus
         private DateTime _lastHamburgerClosedTime = DateTime.MinValue;
         private readonly UpdateService _updateService = new UpdateService();
 
+        private enum EditSource
+        {
+            None,
+            RenderedViewer,
+            RawTextBox
+        }
+
+        private EditSource _lastEditSource = EditSource.None;
+
         public MainWindow()
         {
             InitializeComponent();
@@ -529,7 +538,13 @@ Plugins can be enabled or disabled instantly via the Plugins menu without restar
 
         private void SetActiveTab(DocumentTabItem? tab)
         {
+            if (_activeTab != null && _activeTab != tab)
+            {
+                SyncTabFromControls(_activeTab);
+            }
+
             _activeTab = tab;
+            _lastEditSource = EditSource.None;
 
             if (tab == null)
             {
@@ -960,24 +975,15 @@ Plugins can be enabled or disabled instantly via the Plugins menu without restar
         {
             if (_activeTab == null) return;
             var oldMode = _activeTab.ViewMode;
-            _activeTab.ViewMode = mode;
+            if (oldMode != mode)
+            {
+                // Sync current active view edits before changing mode
+                SyncTabFromControls(_activeTab);
+                _activeTab.ViewMode = mode;
+                _lastEditSource = EditSource.None;
 
-            // View Synchronization
-            if (mode == ViewDisplayMode.Raw)
-            {
-                if (oldMode != ViewDisplayMode.Raw && _activeTab.FlowDocument != null)
+                if (mode == ViewDisplayMode.Raw)
                 {
-                    if (_activeTab.Format == DocumentFormat.Markdown)
-                    {
-                        string serialized = MarkdownSerializer.Serialize(_activeTab.FlowDocument);
-                        _activeTab.RawMarkdown = serialized;
-                    }
-                    else if (_activeTab.Format is DocumentFormat.Csv or DocumentFormat.Tsv)
-                    {
-                        char delimiter = _activeTab.Format == DocumentFormat.Tsv ? '\t' : ',';
-                        string serialized = CsvSerializer.Serialize(_activeTab.FlowDocument, delimiter);
-                        _activeTab.RawMarkdown = serialized;
-                    }
                     _suppressDirtyTracking = true;
                     try
                     {
@@ -988,18 +994,8 @@ Plugins can be enabled or disabled instantly via the Plugins menu without restar
                         _suppressDirtyTracking = false;
                     }
                 }
-            }
-            else if (mode == ViewDisplayMode.Rendered)
-            {
-                if (oldMode == ViewDisplayMode.Raw)
+                else if (mode == ViewDisplayMode.Rendered)
                 {
-                    string raw = RawMarkdownTextBox.Text;
-                    _activeTab.RawMarkdown = raw;
-                    if (_activeTab.Format == DocumentFormat.Markdown)
-                    {
-                        _activeTab.Document = _parser.Parse(raw);
-                        _activeTab.Headings = ExtractHeadings(_activeTab.Document);
-                    }
                     RenderDocumentTab(_activeTab);
                     _suppressDirtyTracking = true;
                     try
@@ -1013,23 +1009,14 @@ Plugins can be enabled or disabled instantly via the Plugins menu without restar
                     TocListBox.ItemsSource = _activeTab.Headings;
                     UpdateStatusBar();
                 }
-            }
-            else if (mode == ViewDisplayMode.Split)
-            {
-                if (oldMode == ViewDisplayMode.Raw)
+                else if (mode == ViewDisplayMode.Split)
                 {
-                    string raw = RawMarkdownTextBox.Text;
-                    _activeTab.RawMarkdown = raw;
-                    if (_activeTab.Format == DocumentFormat.Markdown)
-                    {
-                        _activeTab.Document = _parser.Parse(raw);
-                        _activeTab.Headings = ExtractHeadings(_activeTab.Document);
-                    }
                     RenderDocumentTab(_activeTab);
                     _suppressDirtyTracking = true;
                     try
                     {
                         MarkdownViewer.Document = _activeTab.FlowDocument;
+                        RawMarkdownTextBox.Text = _activeTab.RawMarkdown;
                     }
                     finally
                     {
@@ -1037,29 +1024,6 @@ Plugins can be enabled or disabled instantly via the Plugins menu without restar
                     }
                     TocListBox.ItemsSource = _activeTab.Headings;
                     UpdateStatusBar();
-                }
-                else if (oldMode == ViewDisplayMode.Rendered && _activeTab.FlowDocument != null)
-                {
-                    if (_activeTab.Format == DocumentFormat.Markdown)
-                    {
-                        string serialized = MarkdownSerializer.Serialize(_activeTab.FlowDocument);
-                        _activeTab.RawMarkdown = serialized;
-                    }
-                    else if (_activeTab.Format is DocumentFormat.Csv or DocumentFormat.Tsv)
-                    {
-                        char delimiter = _activeTab.Format == DocumentFormat.Tsv ? '\t' : ',';
-                        string serialized = CsvSerializer.Serialize(_activeTab.FlowDocument, delimiter);
-                        _activeTab.RawMarkdown = serialized;
-                    }
-                    _suppressDirtyTracking = true;
-                    try
-                    {
-                        RawMarkdownTextBox.Text = _activeTab.RawMarkdown;
-                    }
-                    finally
-                    {
-                        _suppressDirtyTracking = false;
-                    }
                 }
             }
 
@@ -1358,66 +1322,28 @@ Plugins can be enabled or disabled instantly via the Plugins menu without restar
             }
         }
 
+        public bool SaveDocument(DocumentTabItem? tab = null, bool forceSaveAs = false)
+        {
+            return SaveTab(tab ?? _activeTab, forceSaveAs);
+        }
+
+        public bool SaveDocumentAs(DocumentTabItem? tab = null)
+        {
+            return SaveTab(tab ?? _activeTab, forceSaveAs: true);
+        }
+
         public bool SaveActiveTab()
         {
             if (_activeTab == null) return false;
             return SaveTab(_activeTab, forceSaveAs: false);
         }
 
-        public bool SaveTab(DocumentTabItem tab, bool forceSaveAs = false)
+        public bool SaveTab(DocumentTabItem? tab, bool forceSaveAs = false)
         {
             if (tab == null) return false;
 
-            // 1. Sync latest content into tab.RawMarkdown
-            if (tab == _activeTab)
-            {
-                if (tab.ViewMode == ViewDisplayMode.Raw)
-                {
-                    tab.RawMarkdown = RawMarkdownTextBox.Text;
-                }
-                else
-                {
-                    if (tab.FlowDocument != null)
-                    {
-                        if (tab.Format == DocumentFormat.Markdown)
-                        {
-                            tab.RawMarkdown = MarkdownSerializer.Serialize(tab.FlowDocument);
-                        }
-                        else if (tab.Format is DocumentFormat.Csv or DocumentFormat.Tsv)
-                        {
-                            char delimiter = tab.Format == DocumentFormat.Tsv ? '\t' : ',';
-                            tab.RawMarkdown = CsvSerializer.Serialize(tab.FlowDocument, delimiter);
-                        }
-                        if (tab.ViewMode == ViewDisplayMode.Split)
-                        {
-                            _suppressDirtyTracking = true;
-                            try
-                            {
-                                RawMarkdownTextBox.Text = tab.RawMarkdown;
-                            }
-                            finally
-                            {
-                                _suppressDirtyTracking = false;
-                            }
-                        }
-                    }
-                }
-            }
-            else
-            {
-                if (tab.FlowDocument != null)
-                {
-                    if (tab.Format == DocumentFormat.Markdown)
-                    {
-                        tab.RawMarkdown = MarkdownSerializer.Serialize(tab.FlowDocument);
-                    }
-                    else if (tab.Format is DocumentFormat.Csv or DocumentFormat.Tsv)
-                    {
-                        char delimiter = tab.Format == DocumentFormat.Tsv ? '\t' : ',';
-                        tab.RawMarkdown = CsvSerializer.Serialize(tab.FlowDocument, delimiter);
-                    }
-                }
-            }
+            // 1. Sync latest content into tab.RawMarkdown across all formats and view modes
+            SyncTabFromControls(tab);
 
             // 2. Handle Untitled or Save As
             if (string.IsNullOrEmpty(tab.FilePath) || forceSaveAs)
@@ -1471,6 +1397,10 @@ Plugins can be enabled or disabled instantly via the Plugins menu without restar
                 }
 
                 tab.MarkClean();
+                if (_activeTab == tab)
+                {
+                    _lastEditSource = EditSource.None;
+                }
                 RebuildTabStrip();
                 UpdateStatusBar();
                 if (_activeTab == tab)
@@ -1493,9 +1423,92 @@ Plugins can be enabled or disabled instantly via the Plugins menu without restar
             }
         }
 
+        private void SyncTabFromControls(DocumentTabItem tab)
+        {
+            if (tab == null) return;
+
+            if (tab == _activeTab)
+            {
+                bool fromRaw;
+                if (tab.ViewMode == ViewDisplayMode.Raw)
+                {
+                    fromRaw = true;
+                }
+                else if (tab.ViewMode == ViewDisplayMode.Rendered)
+                {
+                    fromRaw = false;
+                }
+                else // ViewDisplayMode.Split
+                {
+                    if (_lastEditSource == EditSource.RawTextBox ||
+                        (RawMarkdownTextBox.IsKeyboardFocusWithin && _lastEditSource != EditSource.RenderedViewer))
+                    {
+                        fromRaw = true;
+                    }
+                    else
+                    {
+                        fromRaw = false;
+                    }
+                }
+
+                if (fromRaw)
+                {
+                    tab.RawMarkdown = RawMarkdownTextBox.Text;
+
+                    if (tab.Format == DocumentFormat.Markdown)
+                    {
+                        tab.Document = _parser.Parse(tab.RawMarkdown);
+                        tab.Headings = ExtractHeadings(tab.Document);
+                    }
+                    RenderDocumentTab(tab);
+                    if (tab.ViewMode == ViewDisplayMode.Split && tab.FlowDocument != null)
+                    {
+                        _suppressDirtyTracking = true;
+                        try
+                        {
+                            MarkdownViewer.Document = tab.FlowDocument;
+                        }
+                        finally
+                        {
+                            _suppressDirtyTracking = false;
+                        }
+                    }
+                }
+                else
+                {
+                    if (tab.FlowDocument != null && (tab.IsDirty || _lastEditSource == EditSource.RenderedViewer))
+                    {
+                        string serialized = DocumentFormatHelper.SerializeFlowDocument(tab.FlowDocument, tab.Format, tab.LineEndingName);
+                        tab.RawMarkdown = serialized;
+
+                        if (tab.ViewMode == ViewDisplayMode.Split)
+                        {
+                            _suppressDirtyTracking = true;
+                            try
+                            {
+                                RawMarkdownTextBox.Text = tab.RawMarkdown;
+                            }
+                            finally
+                            {
+                                _suppressDirtyTracking = false;
+                            }
+                        }
+                    }
+                }
+            }
+            else
+            {
+                if (tab.FlowDocument != null && tab.ViewMode != ViewDisplayMode.Raw && tab.IsDirty)
+                {
+                    tab.RawMarkdown = DocumentFormatHelper.SerializeFlowDocument(tab.FlowDocument, tab.Format, tab.LineEndingName);
+                }
+            }
+        }
+
         private void MarkdownViewer_TextChanged(object sender, TextChangedEventArgs e)
         {
             if (_suppressDirtyTracking || _activeTab == null) return;
+            _lastEditSource = EditSource.RenderedViewer;
             if (!_activeTab.IsDirty)
             {
                 _activeTab.MarkDirty();
@@ -1507,6 +1520,7 @@ Plugins can be enabled or disabled instantly via the Plugins menu without restar
         private void RawMarkdownTextBox_TextChanged(object sender, TextChangedEventArgs e)
         {
             if (_suppressDirtyTracking || _activeTab == null) return;
+            _lastEditSource = EditSource.RawTextBox;
             if (!_activeTab.IsDirty)
             {
                 _activeTab.MarkDirty();
@@ -1520,6 +1534,7 @@ Plugins can be enabled or disabled instantly via the Plugins menu without restar
             if (_suppressDirtyTracking || _activeTab == null) return;
             if (e.OriginalSource is CheckBox)
             {
+                _lastEditSource = EditSource.RenderedViewer;
                 if (!_activeTab.IsDirty)
                 {
                     _activeTab.MarkDirty();

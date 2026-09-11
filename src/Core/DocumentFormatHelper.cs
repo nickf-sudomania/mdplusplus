@@ -123,5 +123,23 @@ namespace MDPlus.Core
 
         public static bool IsConfig(DocumentFormat format) =>
             format is DocumentFormat.Ini or DocumentFormat.Cfg or DocumentFormat.Yaml or DocumentFormat.Xml;
+
+        /// <summary>
+        /// Serializes a FlowDocument back into raw text based on the specified DocumentFormat.
+        /// Dispatches to MarkdownSerializer, CsvSerializer, JsonToFlowDocumentConverter, or PlainTextToFlowDocumentConverter.
+        /// </summary>
+        public static string SerializeFlowDocument(System.Windows.Documents.FlowDocument? doc, DocumentFormat format, string? lineEnding = null)
+        {
+            if (doc == null) return string.Empty;
+
+            return format switch
+            {
+                DocumentFormat.Markdown => MarkdownSerializer.Serialize(doc),
+                DocumentFormat.Csv => CsvSerializer.Serialize(doc, ','),
+                DocumentFormat.Tsv => CsvSerializer.Serialize(doc, '\t'),
+                DocumentFormat.Json => JsonToFlowDocumentConverter.Serialize(doc, lineEnding),
+                _ => PlainTextToFlowDocumentConverter.Serialize(doc, format, lineEnding)
+            };
+        }
     }
 }

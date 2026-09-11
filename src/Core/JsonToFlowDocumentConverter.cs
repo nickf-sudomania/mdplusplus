@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.IO;
 using System.Text;
 using System.Text.Json;
@@ -13,6 +14,7 @@ namespace MDPlus.Core
     /// Pretty-prints with 2-space indentation via System.Text.Json, applies token
     /// highlighting matching ThemePalette across all 8 presets, and provides resilient
     /// fallback for malformed JSON without throwing unhandled exceptions.
+    /// Also serializes edited FlowDocuments back into lossless JSON text.
     /// </summary>
     public static class JsonToFlowDocumentConverter
     {
@@ -34,7 +36,8 @@ namespace MDPlus.Core
                 {
                     FontStyle = FontStyles.Italic,
                     Foreground = palette.MutedFg,
-                    Margin = new Thickness(0)
+                    Margin = new Thickness(0),
+                    Tag = "EmptyPlaceholder"
                 };
                 doc.Blocks.Add(emptyPara);
                 return doc;
@@ -78,7 +81,8 @@ namespace MDPlus.Core
                     BorderBrush = palette.Accent,
                     BorderThickness = new Thickness(1),
                     Padding = new Thickness(12, 8, 12, 8),
-                    Margin = new Thickness(0, 0, 0, 16)
+                    Margin = new Thickness(0, 0, 0, 16),
+                    Tag = "MalformedJsonBanner"
                 };
 
                 errorPara.Inlines.Add(new Run("⚠️ Malformed JSON Syntax: ")
@@ -134,7 +138,8 @@ namespace MDPlus.Core
                 {
                     FontStyle = FontStyles.Italic,
                     Foreground = palette.MutedFg,
-                    Margin = new Thickness(0, 8, 0, 0)
+                    Margin = new Thickness(0, 8, 0, 0),
+                    Tag = "VisualCapNotice"
                 };
                 doc.Blocks.Add(noticePara);
             }
@@ -229,6 +234,68 @@ namespace MDPlus.Core
                 // 5. Punctuation / structural symbols ({ } [ ] : ,)
                 p.Inlines.Add(new Run(c.ToString()) { Foreground = palette.EditorFg });
                 pos++;
+            }
+        }
+
+        /// <summary>
+        /// Serializes a JSON FlowDocument back into clean, verbatim JSON text.
+        /// Ignores syntax error banners, visual truncation notices, and empty document placeholders.
+        /// Preserves edited content with complete round-trip fidelity across views.
+        /// </summary>
+        public static string Serialize(FlowDocument? doc, string? lineEnding = null)
+        {
+            if (doc == null || doc.Blocks == null || doc.Blocks.Count == 0)
+                return string.Empty;
+
+            string eol = lineEnding == "LF" ? "\n" : (lineEnding == "CRLF" ? "\r\n" : Environment.NewLine);
+
+            var paragraphs = new List<string>();
+            foreach (var block in doc.Blocks)
+            {
+                if (block is Paragraph p)
+                {
+                    // Skip placeholders and banners
+                    if (p.Tag is string tag && (tag == "EmptyPlaceholder" || tag == "MalformedJsonBanner" || tag == "VisualCapNotice"))
+                        continue;
+
+                    // Fallback banner detection in case Tag was lost or modified
+                    if (p.FontStyle == FontStyles.Italic && p.Inlines.FirstInline is Run firstRun)
+                    {
+                        if (firstRun.Text.StartsWith("Empty JSON", StringComparison.OrdinalIgnoreCase) ||
+                            firstRun.Text.StartsWith("Showing first ", StringComparison.OrdinalIgnoreCase))
+                            continue;
+                    }
+                    if (p.Inlines.FirstInline is Run r && r.Text.StartsWith("⚠️ Malformed JSON Syntax", StringComparison.OrdinalIgnoreCase))
+                        continue;
+
+                    var sb = new StringBuilder();
+                    ExtractInlinesText(p.Inlines, sb);
+                    paragraphs.Add(sb.ToString());
+                }
+            }
+
+            if (paragraphs.Count == 0)
+                return string.Empty;
+
+            return string.Join(eol, paragraphs);
+        }
+
+        private static void ExtractInlinesText(InlineCollection inlines, StringBuilder sb)
+        {
+            for (Inline? cur = inlines.FirstInline; cur != null; cur = cur.NextInline)
+            {
+                switch (cur)
+                {
+                    case Run r:
+                        sb.Append(r.Text);
+                        break;
+                    case LineBreak:
+                        sb.Append('\n');
+                        break;
+                    case Span s:
+                        ExtractInlinesText(s.Inlines, sb);
+                        break;
+                }
             }
         }
     }

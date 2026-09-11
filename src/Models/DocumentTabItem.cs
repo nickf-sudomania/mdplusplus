@@ -61,6 +61,30 @@ namespace MDPlus.Models
             IsDirty = true;
         }
 
+        /// <summary>
+        /// Saves the document to disk at FilePath or an explicitly specified target path.
+        /// Synchronizes modified FlowDocument content for non-raw view modes before saving.
+        /// </summary>
+        public bool Save(string? targetPath = null)
+        {
+            string path = targetPath ?? FilePath;
+            if (string.IsNullOrEmpty(path))
+            {
+                return false;
+            }
+
+            if (FlowDocument != null && ViewMode != ViewDisplayMode.Raw && IsDirty)
+            {
+                RawMarkdown = DocumentFormatHelper.SerializeFlowDocument(FlowDocument, Format, LineEndingName);
+            }
+
+            File.WriteAllText(path, RawMarkdown, new System.Text.UTF8Encoding(false));
+            FilePath = path;
+            Format = DocumentFormatHelper.DetectFromPath(path);
+            MarkClean();
+            return true;
+        }
+
         public string FilePath
         {
             get => _filePath;

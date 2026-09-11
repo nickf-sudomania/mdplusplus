@@ -210,6 +210,12 @@ namespace MDPlus.Tests
             RunTest("Plain Text & Log Typography Layout", TestPlainTextAndLogTypography);
             RunTest("Performance Benchmark: 5,000-Line CSV and JSON < 50ms", TestPerformanceBenchmark5000RowsCsvAndJson);
 
+            // 24. Multi-Format FlowDocument Serialization & Disk Save Pipeline (v1.1)
+            RunTest("JSON FlowDocument Lossless Serialization & Banner Exclusion", TestJsonFlowDocumentSerialization);
+            RunTest("Plain Text, Log & Config FlowDocument Serialization", TestPlainTextAndConfigFlowDocumentSerialization);
+            RunTest("Unified DocumentFormatHelper Serialization Across All 10 Formats", TestUnifiedDocumentFormatHelperSerialization);
+            RunTest("DocumentTabItem.Save Disk Persistence Across All 10 Formats", TestDocumentTabItemSaveDiskPersistence);
+
             sw.Stop();
 
             Console.WriteLine("\n==================================================");
@@ -4678,6 +4684,7 @@ MDPlus v1.09 expands the hyper-fast native Windows reader with universal text su
 
             // JIT warmup
             CsvParser.Parse("Id,Name,Role\n1,\"Test\",\"Dev\"");
+            CsvParser.Parse(csvData.Substring(0, Math.Min(csvData.Length, 5000)));
 
             // Benchmark CSV Parsing
             var swCsv = Stopwatch.StartNew();
@@ -4711,6 +4718,277 @@ MDPlus v1.09 expands the hyper-fast native Windows reader with universal text su
 
             Console.Write($" [{jsonLineCount:N0} JSON lines parsed in {swJson.ElapsedMilliseconds}ms] ");
             Assert(swJson.ElapsedMilliseconds < 50, $"5,000-line JSON parse must complete in < 50ms (took {swJson.ElapsedMilliseconds}ms)");
+        }
+
+        private static void TestJsonFlowDocumentSerialization()
+        {
+            var palette = ThemePalette.GetPalette(ThemePreset.GitHubDark);
+
+            // 1. Normal JSON serialization
+            string sampleJson = "{\n  \"name\": \"MDPlus\",\n  \"version\": 1.1,\n  \"active\": true\n}";
+            var doc = JsonToFlowDocumentConverter.Convert(sampleJson, palette);
+            Assert(doc != null, "FlowDocument generated for JSON");
+            string serialized = JsonToFlowDocumentConverter.Serialize(doc);
+            AssertEqual(sampleJson.Replace("\r\n", "\n").Trim(), serialized.Replace("\r\n", "\n").Trim(), "JSON serialization must preserve formatted JSON");
+
+            // 2. Modifying FlowDocument run text
+            Run? targetRun = null;
+            for (Block? b = doc!.Blocks.FirstBlock; b != null; b = b.NextBlock)
+            {
+                if (b is Paragraph p)
+                {
+                    for (Inline? inln = p.Inlines.FirstInline; inln != null; inln = inln.NextInline)
+                    {
+                        if (inln is Run r && r.Text == "\"MDPlus\"")
+                        {
+                            targetRun = r;
+                            break;
+                        }
+                    }
+                    if (targetRun != null) break;
+                }
+            }
+            Assert(targetRun != null, "Target run 'MDPlus' found");
+            targetRun!.Text = "\"MDPlus Edited\"";
+            string editedSerialized = JsonToFlowDocumentConverter.Serialize(doc);
+            Assert(editedSerialized.Contains("\"MDPlus Edited\""), "Serialized JSON must reflect in-place FlowDocument edits");
+
+            // 3. Malformed JSON with error banner exclusion
+            string malformed = "{\n  \"key\": \"value\",\n  bad line\n}";
+            var malformedDoc = JsonToFlowDocumentConverter.Convert(malformed, palette);
+            Assert(malformedDoc != null, "Malformed doc generated");
+            string serializedMalformed = JsonToFlowDocumentConverter.Serialize(malformedDoc);
+            Assert(!serializedMalformed.Contains("Malformed JSON") && !serializedMalformed.Contains("Invalid JSON"), "Serialized malformed JSON must exclude error banner");
+            Assert(serializedMalformed.Contains("bad line"), "Serialized malformed JSON must preserve actual text");
+
+            // 4. Empty document
+            var emptyDoc = JsonToFlowDocumentConverter.Convert("", palette);
+            string emptySerialized = JsonToFlowDocumentConverter.Serialize(emptyDoc);
+            AssertEqual("", emptySerialized.Trim(), "Empty JSON document serialization must be empty string without placeholder text");
+        }
+
+        private static void TestPlainTextAndConfigFlowDocumentSerialization()
+        {
+            var palette = ThemePalette.GetPalette(ThemePreset.GitHubDark);
+
+            // 1. Plain text round-trip
+            string sampleText = "Line 1\nLine 2 with special characters: #$%^&*\nLine 3";
+            var textDoc = PlainTextToFlowDocumentConverter.Convert(sampleText, DocumentFormat.PlainText, palette);
+            string serializedText = PlainTextToFlowDocumentConverter.Serialize(textDoc, DocumentFormat.PlainText);
+            AssertEqual(sampleText.Replace("\r\n", "\n"), serializedText.Replace("\r\n", "\n"), "Plain text FlowDocument serialization must match verbatim");
+
+            // 2. Log text round-trip
+            string sampleLog = "2026-09-11 10:00:00 [INFO] Started\n2026-09-11 10:00:05 [WARN] Memory high";
+            var logDoc = PlainTextToFlowDocumentConverter.Convert(sampleLog, DocumentFormat.Log, palette);
+            string serializedLog = PlainTextToFlowDocumentConverter.Serialize(logDoc, DocumentFormat.Log);
+            AssertEqual(sampleLog.Replace("\r\n", "\n"), serializedLog.Replace("\r\n", "\n"), "Log FlowDocument serialization must match verbatim");
+
+            // 3. Config format (INI / YAML / XML)
+            string sampleYaml = "app:\n  name: MDPlus\n  version: 1.1\n  formats:\n    - json\n    - csv";
+            var yamlDoc = PlainTextToFlowDocumentConverter.Convert(sampleYaml, DocumentFormat.Yaml, palette);
+            string serializedYaml = PlainTextToFlowDocumentConverter.Serialize(yamlDoc, DocumentFormat.Yaml);
+            AssertEqual(sampleYaml.Replace("\r\n", "\n"), serializedYaml.Replace("\r\n", "\n"), "YAML FlowDocument serialization must match verbatim");
+
+            // 4. Empty text document
+            var emptyTextDoc = PlainTextToFlowDocumentConverter.Convert("", DocumentFormat.PlainText, palette);
+            string serializedEmpty = PlainTextToFlowDocumentConverter.Serialize(emptyTextDoc, DocumentFormat.PlainText);
+            AssertEqual("", serializedEmpty.Trim(), "Empty text FlowDocument serialization must be empty string without placeholder");
+        }
+
+        private static void TestUnifiedDocumentFormatHelperSerialization()
+        {
+            var palette = ThemePalette.GetPalette(ThemePreset.GitHubDark);
+
+            foreach (var fmt in (DocumentFormat[])Enum.GetValues(typeof(DocumentFormat)))
+            {
+                string original;
+                FlowDocument doc;
+
+                if (fmt == DocumentFormat.Markdown)
+                {
+                    original = "# Heading\n\nSome **bold** paragraph.";
+                    var parser = new MarkdownParser();
+                    var mdDoc = parser.Parse(original);
+                    var converter = new MarkdownToWpfConverter("", palette);
+                    doc = converter.Convert(mdDoc);
+                }
+                else if (fmt == DocumentFormat.Csv)
+                {
+                    original = "A,B,C\r\n1,2,3\r\n";
+                    doc = CsvToFlowDocumentConverter.Convert(original, palette, isTsv: false);
+                }
+                else if (fmt == DocumentFormat.Tsv)
+                {
+                    original = "A\tB\tC\r\n1\t2\t3\r\n";
+                    doc = CsvToFlowDocumentConverter.Convert(original, palette, isTsv: true);
+                }
+                else if (fmt == DocumentFormat.Json)
+                {
+                    original = "{\n  \"app\": \"MDPlus\"\n}";
+                    doc = JsonToFlowDocumentConverter.Convert(original, palette);
+                }
+                else
+                {
+                    original = $"sample content for format {fmt}\nline 2";
+                    doc = PlainTextToFlowDocumentConverter.Convert(original, fmt, palette);
+                }
+
+                string serialized = DocumentFormatHelper.SerializeFlowDocument(doc, fmt);
+                Assert(!string.IsNullOrWhiteSpace(serialized), $"Serialization for {fmt} must not be empty");
+            }
+        }
+
+        private static void TestDocumentTabItemSaveDiskPersistence()
+        {
+            var palette = ThemePalette.GetPalette(ThemePreset.GitHubDark);
+            string tempDir = Path.Combine(Path.GetTempPath(), "MDPlus_SaveTest_" + Guid.NewGuid().ToString("N"));
+            Directory.CreateDirectory(tempDir);
+
+            try
+            {
+                foreach (var fmt in (DocumentFormat[])Enum.GetValues(typeof(DocumentFormat)))
+                {
+                    string ext = fmt switch
+                    {
+                        DocumentFormat.Markdown => ".md",
+                        DocumentFormat.PlainText => ".txt",
+                        DocumentFormat.Log => ".log",
+                        DocumentFormat.Csv => ".csv",
+                        DocumentFormat.Tsv => ".tsv",
+                        DocumentFormat.Json => ".json",
+                        DocumentFormat.Ini => ".ini",
+                        DocumentFormat.Cfg => ".cfg",
+                        DocumentFormat.Yaml => ".yaml",
+                        DocumentFormat.Xml => ".xml",
+                        _ => ".txt"
+                    };
+
+                    string initialContent = fmt switch
+                    {
+                        DocumentFormat.Markdown => "# Initial Header\n\nInitial body text.",
+                        DocumentFormat.Csv => "Col1,Col2\r\nVal1,Val2\r\n",
+                        DocumentFormat.Tsv => "Col1\tCol2\r\nVal1\tVal2\r\n",
+                        DocumentFormat.Json => "{\n  \"status\": \"initial\"\n}",
+                        _ => $"[section]\nkey = initial_value_{fmt}"
+                    };
+
+                    string filePath = Path.Combine(tempDir, $"test_{fmt}{ext}");
+                    File.WriteAllText(filePath, initialContent);
+
+                    // Create DocumentTabItem
+                    var tab = new DocumentTabItem
+                    {
+                        FilePath = filePath,
+                        Format = fmt,
+                        RawMarkdown = initialContent,
+                        ViewMode = ViewDisplayMode.Rendered,
+                        IsDirty = false
+                    };
+
+                    // Populate FlowDocument
+                    FlowDocument doc;
+                    if (fmt == DocumentFormat.Markdown)
+                    {
+                        var parser = new MarkdownParser();
+                        var mdDoc = parser.Parse(initialContent);
+                        var converter = new MarkdownToWpfConverter(tempDir, palette);
+                        doc = converter.Convert(mdDoc);
+                    }
+                    else if (fmt == DocumentFormat.Csv)
+                    {
+                        doc = CsvToFlowDocumentConverter.Convert(initialContent, palette, isTsv: false);
+                    }
+                    else if (fmt == DocumentFormat.Tsv)
+                    {
+                        doc = CsvToFlowDocumentConverter.Convert(initialContent, palette, isTsv: true);
+                    }
+                    else if (fmt == DocumentFormat.Json)
+                    {
+                        doc = JsonToFlowDocumentConverter.Convert(initialContent, palette);
+                    }
+                    else
+                    {
+                        doc = PlainTextToFlowDocumentConverter.Convert(initialContent, fmt, palette);
+                    }
+                    tab.FlowDocument = doc;
+
+                    // Simulate edit in FlowDocument
+                    string editedToken = $"EDITED_{fmt.ToString().ToUpperInvariant()}_98765";
+                    bool editMade = false;
+
+                    if (fmt == DocumentFormat.Csv || fmt == DocumentFormat.Tsv)
+                    {
+                        Run? cellRun = null;
+                        for (Block? b = doc.Blocks.FirstBlock; b != null && cellRun == null; b = b.NextBlock)
+                        {
+                            if (b is WpfTable table)
+                            {
+                                foreach (var rg in table.RowGroups)
+                                {
+                                    foreach (var row in rg.Rows)
+                                    {
+                                        foreach (var cell in row.Cells)
+                                        {
+                                            for (Block? cb = cell.Blocks.FirstBlock; cb != null; cb = cb.NextBlock)
+                                            {
+                                                if (cb is Paragraph p && p.Inlines.FirstInline is Run r)
+                                                {
+                                                    cellRun = r;
+                                                    break;
+                                                }
+                                            }
+                                            if (cellRun != null) break;
+                                        }
+                                        if (cellRun != null) break;
+                                    }
+                                    if (cellRun != null) break;
+                                }
+                            }
+                        }
+                        Assert(cellRun != null, $"Found cell run for {fmt}");
+                        cellRun!.Text = editedToken;
+                        editMade = true;
+                    }
+                    else
+                    {
+                        Paragraph? targetP = null;
+                        for (Block? b = doc.Blocks.FirstBlock; b != null; b = b.NextBlock)
+                        {
+                            if (b is Paragraph p)
+                            {
+                                targetP = p;
+                                break;
+                            }
+                        }
+                        Assert(targetP != null, $"Found paragraph for {fmt}");
+                        targetP!.Inlines.Add(new Run($"\n{editedToken}"));
+                        editMade = true;
+                    }
+
+                    Assert(editMade, $"Successfully injected edit into FlowDocument for {fmt}");
+                    tab.IsDirty = true;
+
+                    // Save the tab
+                    bool saveSuccess = tab.Save();
+                    Assert(saveSuccess, $"tab.Save() succeeded for {fmt}");
+                    Assert(!tab.IsDirty, $"tab.IsDirty is false after save for {fmt}");
+
+                    // Check file on disk!
+                    string savedContent = File.ReadAllText(filePath);
+                    Assert(savedContent.Contains(editedToken), $"File on disk must contain edited content for {fmt}. Read: {savedContent}");
+                }
+            }
+            finally
+            {
+                try
+                {
+                    if (Directory.Exists(tempDir))
+                    {
+                        Directory.Delete(tempDir, recursive: true);
+                    }
+                }
+                catch { }
+            }
         }
     }
 }
