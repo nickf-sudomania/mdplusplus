@@ -172,6 +172,8 @@ switch ($Action) {
             Set-Content -Path $sumsFile -Value $newContent
             $nppChecksum = Join-Path $distPath "MDPlus.1.1.checksums.sha256"
             Set-Content -Path $nppChecksum -Value $newContent
+            $nppChecksum110 = Join-Path $distPath "MDPlus.1.10.checksums.sha256"
+            Set-Content -Path $nppChecksum110 -Value $newContent
             $nppChecksum109 = Join-Path $distPath "MDPlus.1.09.checksums.sha256"
             Set-Content -Path $nppChecksum109 -Value $newContent
             $nppChecksum108 = Join-Path $distPath "MDPlus.1.08.checksums.sha256"
@@ -314,6 +316,7 @@ $setupHash  MDPlus-Setup.exe
 "@
         Set-Content -Path (Join-Path $distPath "SHA256SUMS.txt") -Value $checksumContent
         Set-Content -Path (Join-Path $distPath "MDPlus.$appVersion.checksums.sha256") -Value $checksumContent
+        Set-Content -Path (Join-Path $distPath "MDPlus.1.10.checksums.sha256") -Value $checksumContent
 
         $checksumContent109 = @"
 $exeHash  MDPlus.exe

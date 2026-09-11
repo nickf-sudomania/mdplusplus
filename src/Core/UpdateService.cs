@@ -169,6 +169,24 @@ namespace MDPlus.Core
             if (a == null) return -1;
             if (b == null) return 1;
 
+            // Normalize decimal versioning when one version uses 2-digit minor with leading zero (e.g. 1.09, 1.01)
+            // and another uses 1-digit minor (e.g. 1.1). In MDPlus history (v1.01..v1.09), 1.1 corresponds to 1.10.
+            if (a.Length >= 2 && b.Length >= 2 && a[0] == b[0])
+            {
+                bool aIsSingleDigitMinor = IsSingleDigitMinor(versionA);
+                bool bHasLeadingZeroMinor = HasLeadingZeroMinor(versionB);
+                if (aIsSingleDigitMinor && bHasLeadingZeroMinor && a[1] == 1)
+                {
+                    a = (int[])a.Clone();
+                    a[1] = 10;
+                }
+                else if (HasLeadingZeroMinor(versionA) && IsSingleDigitMinor(versionB) && b[1] == 1)
+                {
+                    b = (int[])b.Clone();
+                    b[1] = 10;
+                }
+            }
+
             int maxLen = Math.Max(a.Length, b.Length);
             for (int i = 0; i < maxLen; i++)
             {
@@ -182,6 +200,30 @@ namespace MDPlus.Core
             }
 
             return 0;
+        }
+
+        private static bool IsSingleDigitMinor(string? v)
+        {
+            if (string.IsNullOrWhiteSpace(v)) return false;
+            string clean = v.Trim().TrimStart('v', 'V');
+            int dotIdx = clean.IndexOf('.');
+            if (dotIdx < 0) return false;
+            string afterDot = clean.Substring(dotIdx + 1);
+            int nextDot = afterDot.IndexOfAny(new[] { '.', '-', '+' });
+            string minorStr = nextDot >= 0 ? afterDot.Substring(0, nextDot) : afterDot;
+            return minorStr.Length == 1 && char.IsDigit(minorStr[0]);
+        }
+
+        private static bool HasLeadingZeroMinor(string? v)
+        {
+            if (string.IsNullOrWhiteSpace(v)) return false;
+            string clean = v.Trim().TrimStart('v', 'V');
+            int dotIdx = clean.IndexOf('.');
+            if (dotIdx < 0) return false;
+            string afterDot = clean.Substring(dotIdx + 1);
+            int nextDot = afterDot.IndexOfAny(new[] { '.', '-', '+' });
+            string minorStr = nextDot >= 0 ? afterDot.Substring(0, nextDot) : afterDot;
+            return minorStr.Length >= 2 && minorStr.StartsWith("0");
         }
 
         /// <summary>
