@@ -92,16 +92,8 @@ jobs:
             $checksums = Get-Content "dist\SHA256SUMS.txt" -Raw
           }
 
-          $fullBody = @"
-$notesContent
-
----
-
-### 🛡️ Cryptographic SHA-256 Verification Hashes
-```
-$checksums
-```
-"@
+          $hashesSection = "`n`n---`n`n### 🛡️ Cryptographic SHA-256 Verification Hashes`n``````n" + $checksums + "`n``````n"
+          $fullBody = $notesContent + $hashesSection
           [System.IO.File]::WriteAllText("$PWD\release_body.md", $fullBody, [System.Text.Encoding]::UTF8)
 
       - name: Upload Release Assets to GitHub Release
