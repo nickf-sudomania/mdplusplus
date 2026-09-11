@@ -2206,6 +2206,16 @@ d9f764a730236c5a79103fe8ffb4c730649dcfc2cac93fcce59f5bbe12a183b5  MDPlus-1.0.0-s
             Assert(UpdateService.IsNewerVersion("1.09", "1.1"), "1.1 is newer than 1.09");
             Assert(!UpdateService.IsNewerVersion("1.10", "1.09"), "1.09 is not newer than 1.10");
             Assert(!UpdateService.IsNewerVersion("1.1", "1.09"), "1.09 is not newer than 1.1");
+            AssertEqual(0, UpdateService.CompareVersions("1.10rc1", "1.1"), "1.10rc1 == 1.1");
+            AssertEqual(0, UpdateService.CompareVersions("1.1rc1", "1.10"), "1.1rc1 == 1.10");
+            AssertEqual(0, UpdateService.CompareVersions("v1.10rc1", "v1.1"), "v1.10rc1 == v1.1");
+            AssertEqual(0, UpdateService.CompareVersions("1.10", "1.1-preview"), "1.10 == 1.1-preview");
+            AssertEqual(0, UpdateService.CompareVersions("1.1", "1.10-preview"), "1.1 == 1.10-preview");
+            Assert(UpdateService.CompareVersions("1.1", "1.10.1") < 0, "1.1 < 1.10.1");
+            Assert(UpdateService.CompareVersions("1.10.1", "1.1") > 0, "1.10.1 > 1.1");
+            Assert(UpdateService.IsNewerVersion("1.1", "1.10.1"), "1.10.1 is newer than 1.1");
+            Assert(!UpdateService.IsNewerVersion("1.10.1", "1.1"), "1.1 is not newer than 1.10.1");
+            Assert(UpdateService.IsNewerVersion("1.10", "1.10.1"), "1.10.1 is newer than 1.10");
 
             // Newer versions
             Assert(UpdateService.IsNewerVersion("1.0.0", "1.0.1"), "1.0.1 is newer than 1.0.0");

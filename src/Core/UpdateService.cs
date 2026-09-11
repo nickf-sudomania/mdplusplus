@@ -235,7 +235,9 @@ namespace MDPlus.Core
 
             string afterDot = versionPart.Substring(dotIdx + 1);
             int nextDot = afterDot.IndexOf('.');
-            return nextDot >= 0 ? afterDot.Substring(0, nextDot) : afterDot;
+            string minorCandidate = nextDot >= 0 ? afterDot.Substring(0, nextDot) : afterDot;
+            var match = Regex.Match(minorCandidate, @"^\d+");
+            return match.Success ? match.Value : minorCandidate;
         }
 
         private static bool IsSingleDigitMinorOne(string? v)

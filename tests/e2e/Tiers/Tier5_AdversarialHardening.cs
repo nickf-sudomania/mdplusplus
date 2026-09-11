@@ -456,7 +456,7 @@ public static void Main() => Console.WriteLine(""Stress"");
             AssertTrue(swLayout.ElapsedMilliseconds < 500, $"Layout conversion took {swLayout.ElapsedMilliseconds}ms, must not freeze UI thread.");
             var banner = docLarge.Blocks.LastBlock as Paragraph;
             AssertNotNull(banner);
-            var bannerText = string.Concat(banner.Inlines.OfType<Run>().Select(r => r.Text));
+            var bannerText = string.Concat(banner!.Inlines.OfType<Run>().Select(r => r.Text));
             AssertTrue(bannerText.Contains("Showing first 2,500 of 5,001 lines") && bannerText.Contains("Ctrl+3"), "Banner indicates cap and directs to Raw view Ctrl+3.");
         }
 
