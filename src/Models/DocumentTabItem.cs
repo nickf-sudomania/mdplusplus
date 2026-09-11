@@ -73,16 +73,30 @@ namespace MDPlus.Models
                 return false;
             }
 
+            Format = DocumentFormatHelper.DetectFromPath(path);
+
             if (FlowDocument != null && ViewMode != ViewDisplayMode.Raw && IsDirty)
             {
                 RawMarkdown = DocumentFormatHelper.SerializeFlowDocument(FlowDocument, Format, LineEndingName);
             }
 
-            File.WriteAllText(path, RawMarkdown, new System.Text.UTF8Encoding(false));
-            FilePath = path;
-            Format = DocumentFormatHelper.DetectFromPath(path);
-            MarkClean();
-            return true;
+            try
+            {
+                string? dir = Path.GetDirectoryName(path);
+                if (!string.IsNullOrEmpty(dir) && !Directory.Exists(dir))
+                {
+                    Directory.CreateDirectory(dir);
+                }
+
+                File.WriteAllText(path, RawMarkdown, new System.Text.UTF8Encoding(false));
+                FilePath = path;
+                MarkClean();
+                return true;
+            }
+            catch
+            {
+                return false;
+            }
         }
 
         public string FilePath

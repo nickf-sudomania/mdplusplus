@@ -75,22 +75,7 @@ namespace MDPlus.Core
             string eol = lineEnding == "LF" ? "\n" : (lineEnding == "CRLF" ? "\r\n" : Environment.NewLine);
 
             var paragraphs = new List<string>();
-            foreach (var block in doc.Blocks)
-            {
-                if (block is Paragraph p)
-                {
-                    if (p.Tag is string tag && tag == "EmptyPlaceholder")
-                        continue;
-
-                    if (p.FontStyle == FontStyles.Italic && p.Inlines.FirstInline is Run firstRun &&
-                        firstRun.Text.StartsWith("Empty ", StringComparison.OrdinalIgnoreCase))
-                        continue;
-
-                    var sb = new StringBuilder();
-                    ExtractInlinesText(p.Inlines, sb);
-                    paragraphs.Add(sb.ToString());
-                }
-            }
+            ExtractParagraphsFromBlocks(doc.Blocks, paragraphs);
 
             if (paragraphs.Count == 0)
                 return string.Empty;
@@ -113,6 +98,30 @@ namespace MDPlus.Core
             }
 
             return result.ToString();
+        }
+
+        private static void ExtractParagraphsFromBlocks(IEnumerable<Block> blocks, List<string> paragraphs)
+        {
+            foreach (var block in blocks)
+            {
+                if (block is Paragraph p)
+                {
+                    if (p.Tag is string tag && tag == "EmptyPlaceholder")
+                        continue;
+
+                    if (p.FontStyle == FontStyles.Italic && p.Inlines.FirstInline is Run firstRun &&
+                        firstRun.Text.StartsWith("Empty ", StringComparison.OrdinalIgnoreCase))
+                        continue;
+
+                    var sb = new StringBuilder();
+                    ExtractInlinesText(p.Inlines, sb);
+                    paragraphs.Add(sb.ToString());
+                }
+                else if (block is Section s)
+                {
+                    ExtractParagraphsFromBlocks(s.Blocks, paragraphs);
+                }
+            }
         }
 
         private static void ExtractInlinesText(InlineCollection inlines, StringBuilder sb)

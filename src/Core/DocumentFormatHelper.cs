@@ -135,8 +135,8 @@ namespace MDPlus.Core
             return format switch
             {
                 DocumentFormat.Markdown => MarkdownSerializer.Serialize(doc),
-                DocumentFormat.Csv => CsvSerializer.Serialize(doc, ','),
-                DocumentFormat.Tsv => CsvSerializer.Serialize(doc, '\t'),
+                DocumentFormat.Csv => CsvSerializer.Serialize(doc, ',', lineEnding),
+                DocumentFormat.Tsv => CsvSerializer.Serialize(doc, '\t', lineEnding),
                 DocumentFormat.Json => JsonToFlowDocumentConverter.Serialize(doc, lineEnding),
                 _ => PlainTextToFlowDocumentConverter.Serialize(doc, format, lineEnding)
             };

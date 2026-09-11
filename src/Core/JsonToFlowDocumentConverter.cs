@@ -250,7 +250,17 @@ namespace MDPlus.Core
             string eol = lineEnding == "LF" ? "\n" : (lineEnding == "CRLF" ? "\r\n" : Environment.NewLine);
 
             var paragraphs = new List<string>();
-            foreach (var block in doc.Blocks)
+            ExtractParagraphsFromBlocks(doc.Blocks, paragraphs);
+
+            if (paragraphs.Count == 0)
+                return string.Empty;
+
+            return string.Join(eol, paragraphs);
+        }
+
+        private static void ExtractParagraphsFromBlocks(IEnumerable<Block> blocks, List<string> paragraphs)
+        {
+            foreach (var block in blocks)
             {
                 if (block is Paragraph p)
                 {
@@ -272,12 +282,11 @@ namespace MDPlus.Core
                     ExtractInlinesText(p.Inlines, sb);
                     paragraphs.Add(sb.ToString());
                 }
+                else if (block is Section s)
+                {
+                    ExtractParagraphsFromBlocks(s.Blocks, paragraphs);
+                }
             }
-
-            if (paragraphs.Count == 0)
-                return string.Empty;
-
-            return string.Join(eol, paragraphs);
         }
 
         private static void ExtractInlinesText(InlineCollection inlines, StringBuilder sb)

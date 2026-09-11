@@ -169,6 +169,7 @@ switch ($Action) {
             }
             if (-not $found) { $newLines += "$setupHash  MDPlus-Setup.exe" }
             $newContent = ($newLines -join "`n") + "`n"
+            Set-Content -Path $sumsFile -Value $newContent
             $nppChecksum = Join-Path $distPath "MDPlus.1.1.checksums.sha256"
             Set-Content -Path $nppChecksum -Value $newContent
             $nppChecksum109 = Join-Path $distPath "MDPlus.1.09.checksums.sha256"

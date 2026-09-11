@@ -45,7 +45,8 @@ namespace MDPlus.Core
                 {
                     FontStyle = FontStyles.Italic,
                     Foreground = palette.MutedFg,
-                    Margin = new Thickness(0)
+                    Margin = new Thickness(0),
+                    Tag = "EmptyPlaceholder"
                 };
                 doc.Blocks.Add(emptyParagraph);
                 return doc;

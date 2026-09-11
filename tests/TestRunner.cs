@@ -215,6 +215,10 @@ namespace MDPlus.Tests
             RunTest("Plain Text, Log & Config FlowDocument Serialization", TestPlainTextAndConfigFlowDocumentSerialization);
             RunTest("Unified DocumentFormatHelper Serialization Across All 10 Formats", TestUnifiedDocumentFormatHelperSerialization);
             RunTest("DocumentTabItem.Save Disk Persistence Across All 10 Formats", TestDocumentTabItemSaveDiskPersistence);
+            RunTest("Empty CSV/TSV FlowDocument Serialization Parity", TestEmptyCsvAndTsvSerialization);
+            RunTest("DocumentTabItem.Save Format Switching and Directory Creation", TestDocumentTabItemSaveAsFormatSwitching);
+            RunTest("Section Block Container Recursive Serialization", TestSectionBlockContainerRecursiveSerialization);
+            RunTest("CSV & TSV Line Ending Preservation (LF and CRLF)", TestCsvAndTsvLineEndingPreservation);
 
             sw.Stop();
 
@@ -4989,6 +4993,115 @@ MDPlus v1.09 expands the hyper-fast native Windows reader with universal text su
                 }
                 catch { }
             }
+        }
+
+        private static void TestEmptyCsvAndTsvSerialization()
+        {
+            var palette = ThemeManager.Instance.CurrentPalette;
+
+            // Null and empty FlowDocument
+            AssertEqual(string.Empty, CsvSerializer.Serialize(null), "Null FlowDocument produces empty string.");
+            AssertEqual(string.Empty, CsvSerializer.Serialize(new FlowDocument()), "New empty FlowDocument produces empty string.");
+
+            // CSV placeholder test
+            var emptyCsvDoc = CsvToFlowDocumentConverter.Convert(string.Empty, palette, isTsv: false);
+            string serializedCsv = CsvSerializer.Serialize(emptyCsvDoc, ',');
+            Assert(serializedCsv.Contains("Empty CSV document"), "CsvSerializer fallback extracts document notice.");
+
+            // TSV placeholder test
+            var emptyTsvDoc = CsvToFlowDocumentConverter.Convert(string.Empty, palette, isTsv: true);
+            string serializedTsv = CsvSerializer.Serialize(emptyTsvDoc, '\t');
+            Assert(serializedTsv.Contains("Empty TSV document"), "TsvSerializer fallback extracts document notice.");
+        }
+
+        private static void TestDocumentTabItemSaveAsFormatSwitching()
+        {
+            var palette = ThemeManager.Instance.CurrentPalette;
+            string tempDir = Path.Combine(Path.GetTempPath(), "MDPlus_SaveAs_Test_" + Guid.NewGuid().ToString("N"));
+
+            try
+            {
+                // Create an Untitled tab initialized as Markdown
+                var tab = new DocumentTabItem
+                {
+                    Title = "Untitled",
+                    FilePath = string.Empty,
+                    Format = DocumentFormat.Markdown,
+                    ViewMode = ViewDisplayMode.Rendered
+                };
+
+                // User enters JSON content and renders FlowDocument
+                string rawJson = "{\n  \"user_name\": \"alice\",\n  \"score\": 100\n}";
+                tab.FlowDocument = JsonToFlowDocumentConverter.Convert(rawJson, palette);
+                tab.IsDirty = true;
+
+                // Save As to a subfolder with .json extension (tests folder creation + format switching)
+                string targetPath = Path.Combine(tempDir, "subfolder", "data.json");
+                bool saved = tab.Save(targetPath);
+
+                Assert(saved, "tab.Save(targetPath) must succeed.");
+                Assert(File.Exists(targetPath), "Target JSON file must exist on disk in subfolder.");
+                Assert(tab.Format == DocumentFormat.Json, "Tab format must be updated to Json.");
+                Assert(!tab.IsDirty, "Tab must be clean after saving.");
+
+                string diskContent = File.ReadAllText(targetPath);
+                Assert(diskContent.Contains("\"user_name\""), "Disk content must contain unescaped \"user_name\".");
+                Assert(!diskContent.Contains("user\\_name"), "Disk content must not contain Markdown-escaped underscores.");
+            }
+            finally
+            {
+                try
+                {
+                    if (Directory.Exists(tempDir))
+                    {
+                        Directory.Delete(tempDir, recursive: true);
+                    }
+                }
+                catch { }
+            }
+        }
+
+        private static void TestSectionBlockContainerRecursiveSerialization()
+        {
+            var palette = ThemeManager.Instance.CurrentPalette;
+
+            // Build FlowDocument with a Section container containing Paragraphs
+            var doc = new FlowDocument();
+            var section = new Section();
+            section.Blocks.Add(new Paragraph(new Run("{\n  \"section_key\": \"section_value\"\n}")));
+            doc.Blocks.Add(section);
+
+            // Test JSON serialization extracts through Section
+            string jsonOut = JsonToFlowDocumentConverter.Serialize(doc);
+            Assert(jsonOut.Contains("section_key"), "JsonToFlowDocumentConverter.Serialize must extract paragraphs inside Section blocks.");
+            Assert(jsonOut.Contains("section_value"), "JsonToFlowDocumentConverter.Serialize must extract text inside Section blocks.");
+
+            // Test PlainText serialization extracts through Section
+            var plainDoc = new FlowDocument();
+            var plainSection = new Section();
+            plainSection.Blocks.Add(new Paragraph(new Run("Line 1 from section")));
+            plainSection.Blocks.Add(new Paragraph(new Run("Line 2 from section")));
+            plainDoc.Blocks.Add(plainSection);
+
+            string plainOut = PlainTextToFlowDocumentConverter.Serialize(plainDoc);
+            Assert(plainOut.Contains("Line 1 from section"), "PlainText serializer must extract Line 1 inside Section.");
+            Assert(plainOut.Contains("Line 2 from section"), "PlainText serializer must extract Line 2 inside Section.");
+        }
+
+        private static void TestCsvAndTsvLineEndingPreservation()
+        {
+            var palette = ThemeManager.Instance.CurrentPalette;
+            string csvContent = "col1,col2\nval1,val2";
+            var doc = CsvToFlowDocumentConverter.Convert(csvContent, palette, isTsv: false);
+
+            // Test LF line ending preservation
+            string lfResult = CsvSerializer.Serialize(doc, ',', lineEnding: "LF");
+            Assert(!lfResult.Contains("\r\n"), "CSV serialized with LF must not contain CRLF.");
+            Assert(lfResult.Contains("\n"), "CSV serialized with LF must contain LF.");
+
+            // Test CRLF line ending preservation
+            string crlfResult = CsvSerializer.Serialize(doc, ',', lineEnding: "CRLF");
+            Assert(crlfResult.Contains("\r\n"), "CSV serialized with CRLF must contain CRLF.");
         }
     }
 }

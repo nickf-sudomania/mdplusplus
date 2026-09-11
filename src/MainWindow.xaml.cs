@@ -69,6 +69,12 @@ namespace MDPlus
             RawMarkdownTextBox.TextChanged += RawMarkdownTextBox_TextChanged;
             MarkdownViewer.AddHandler(System.Windows.Controls.Primitives.ButtonBase.ClickEvent, new RoutedEventHandler(MarkdownViewer_ButtonClick));
 
+            CommandBindings.Add(new CommandBinding(ApplicationCommands.Save, (s, e) => SaveActiveTab()));
+            CommandBindings.Add(new CommandBinding(ApplicationCommands.SaveAs, (s, e) => SaveDocumentAs(_activeTab)));
+            CommandBindings.Add(new CommandBinding(ApplicationCommands.New, (s, e) => NewTab_Click(this, new RoutedEventArgs())));
+            CommandBindings.Add(new CommandBinding(ApplicationCommands.Open, (s, e) => OpenFile_Click(this, new RoutedEventArgs())));
+            CommandBindings.Add(new CommandBinding(ApplicationCommands.Close, (s, e) => CloseTab_Click(this, new RoutedEventArgs())));
+
             ApplyTheme();
             BuildRecentFilesMenu();
             UpdateStartupModeMenu();
@@ -1348,6 +1354,7 @@ Plugins can be enabled or disabled instantly via the Plugins menu without restar
             // 2. Handle Untitled or Save As
             if (string.IsNullOrEmpty(tab.FilePath) || forceSaveAs)
             {
+                var oldFormat = tab.Format;
                 string defaultExt = DocumentFormatHelper.GetDefaultExtension(tab.Format);
                 string initialFileName;
                 if (!string.IsNullOrEmpty(tab.FilePath))
@@ -1380,8 +1387,36 @@ Plugins can be enabled or disabled instantly via the Plugins menu without restar
                 }
 
                 tab.FilePath = dlg.FileName;
-                tab.Format = DocumentFormatHelper.DetectFromPath(tab.FilePath);
+                var newFormat = DocumentFormatHelper.DetectFromPath(tab.FilePath);
+                tab.Format = newFormat;
                 tab.Title = Path.GetFileName(tab.FilePath);
+
+                if (newFormat != oldFormat)
+                {
+                    // Re-render and re-sync tab controls to reflect the new format
+                    if (tab.Format == DocumentFormat.Markdown)
+                    {
+                        tab.Document = _parser.Parse(tab.RawMarkdown);
+                        tab.Headings = ExtractHeadings(tab.Document);
+                    }
+                    RenderDocumentTab(tab);
+                    if (_activeTab == tab)
+                    {
+                        _suppressDirtyTracking = true;
+                        try
+                        {
+                            if (tab.FlowDocument != null)
+                            {
+                                MarkdownViewer.Document = tab.FlowDocument;
+                            }
+                            RawMarkdownTextBox.Text = tab.RawMarkdown;
+                        }
+                        finally
+                        {
+                            _suppressDirtyTracking = false;
+                        }
+                    }
+                }
             }
 
             // 3. Suppress FileWatcher before writing
@@ -1389,14 +1424,16 @@ Plugins can be enabled or disabled instantly via the Plugins menu without restar
 
             try
             {
-                File.WriteAllText(tab.FilePath, tab.RawMarkdown, new UTF8Encoding(false));
+                if (!tab.Save(tab.FilePath))
+                {
+                    throw new IOException($"Failed to write document content to '{tab.FilePath}'.");
+                }
 
                 if (_settings.AutoReload)
                 {
                     _fileWatcher.WatchFile(tab.FilePath);
                 }
 
-                tab.MarkClean();
                 if (_activeTab == tab)
                 {
                     _lastEditSource = EditSource.None;

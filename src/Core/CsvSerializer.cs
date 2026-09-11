@@ -17,16 +17,18 @@ namespace MDPlus.Core
     /// </summary>
     public static class CsvSerializer
     {
-        public static string Serialize(FlowDocument? document, char delimiter = ',')
+        public static string Serialize(FlowDocument? document, char delimiter = ',', string? lineEnding = null)
         {
             if (document == null || document.Blocks == null || document.Blocks.Count == 0)
                 return string.Empty;
+
+            string eol = lineEnding == "LF" ? "\n" : "\r\n";
 
             WpfTable? table = FindTable(document);
             if (table == null)
             {
                 // Fallback: extract plain text from all paragraphs
-                return ExtractPlainText(document);
+                return ExtractPlainText(document, eol);
             }
 
             var sb = new StringBuilder();
@@ -38,7 +40,7 @@ namespace MDPlus.Core
                 {
                     if (!firstRow)
                     {
-                        sb.Append("\r\n");
+                        sb.Append(eol);
                     }
                     firstRow = false;
 
@@ -57,7 +59,7 @@ namespace MDPlus.Core
 
             if (sb.Length > 0)
             {
-                sb.Append("\r\n");
+                sb.Append(eol);
             }
 
             return sb.ToString();
@@ -145,18 +147,27 @@ namespace MDPlus.Core
             }
         }
 
-        private static string ExtractPlainText(FlowDocument document)
+        private static string ExtractPlainText(FlowDocument document, string eol = "\r\n")
         {
             var sb = new StringBuilder();
-            foreach (var block in document.Blocks)
+            ExtractPlainTextFromBlocks(document.Blocks, sb, eol);
+            return sb.ToString();
+        }
+
+        private static void ExtractPlainTextFromBlocks(IEnumerable<Block> blocks, StringBuilder sb, string eol)
+        {
+            foreach (var block in blocks)
             {
                 if (block is Paragraph p)
                 {
                     ExtractInlinesText(p.Inlines, sb);
-                    sb.Append("\r\n");
+                    sb.Append(eol);
+                }
+                else if (block is Section s)
+                {
+                    ExtractPlainTextFromBlocks(s.Blocks, sb, eol);
                 }
             }
-            return sb.ToString();
         }
     }
 }
