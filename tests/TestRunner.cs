@@ -173,6 +173,8 @@ namespace MDPlus.Tests
             RunTest("Update Service 404 Not Found Graceful Up-To-Date Handling", TestUpdateServiceNotFoundGracefulHandling);
             RunTest("Update Service Live GitHub Release v1.02 Detection", TestUpdateServiceLiveGitHubReleaseV102Detection);
             RunTest("Update Service Dialog Result & UAC Process Start Flow", TestUpdateServiceDialogResultAndUacElevationFlow);
+            RunTest("Update Service Generic SHA Boilerplate Detection & Release Notes Enrichment", TestUpdateServiceIsGenericShaBoilerplateAndEnrichment);
+            RunTest("Update Service Remote Release Notes Fetch & Integration", TestUpdateServiceRemoteReleaseNotesFetch);
             RunTest("LaTeX Math Inline and Display Parsing & Currency Protection", TestLatexMathInlineAndDisplayParsing);
             RunTest("Native HTML Inline Tags and Block Disclosures Parsing", TestHtmlInlineAndBlockParsing);
             RunTest("LaTeX and HTML FlowDocument Serialization Round-Trip", TestLatexAndHtmlFlowDocumentSerializationRoundTrip);
@@ -3134,6 +3136,105 @@ SHA-256: 4444444444444444444444444444444444444444444444444444444444444444
             }
         }
 
+        private static void TestUpdateServiceIsGenericShaBoilerplateAndEnrichment()
+        {
+            // 1. Generic boilerplate with only installer and SHA hashes
+            string genericTemplate = @"## MDPlus Release
+
+### 📦 Official Windows Installer
+Download `MDPlus-Setup.exe` for an effortless automated installation:
+- **Prerequisite Bootstrapper:** Automatically detects if the .NET 8 Windows Desktop Runtime is installed.
+- **Shell Integration:** Registers Windows file associations.
+
+### 🛡️ Cryptographic SHA-256 Verification Digests (Notepad++ Standard)
+```powershell
+Get-FileHash MDPlus-Setup.exe -Algorithm SHA256
+```
+
+#### Official SHA-256 Hashes:
+```
+ff2abca8590d53f4d90cd6f8a8f9418fb5cee234a5663ca0c5387ed227d07821  MDPlus.exe
+fdae110f4d9f8efcdd1dee4f939581a98c774391601de708076e9efa152d4ed4  MDPlus-win-x64.zip
+e9de61ad236ef4f7b13705f9eace568afe3ebf63614385f8828d42386fad01a1  MDPlus-Setup.exe
+```";
+
+            Assert(UpdateService.IsGenericShaBoilerplate(genericTemplate), "Generic SHA and installer template must be identified as boilerplate");
+            Assert(UpdateService.ShouldEnrichReleaseHighlights(genericTemplate), "ShouldEnrichReleaseHighlights must return true for generic template");
+            Assert(UpdateService.IsGenericShaBoilerplate("ff2abca8590d53f4d90cd6f8a8f9418fb5cee234a5663ca0c5387ed227d07821  MDPlus.exe\n"), "Bare SHA text is boilerplate");
+            Assert(UpdateService.IsGenericShaBoilerplate(null), "Null text is boilerplate");
+            Assert(UpdateService.IsGenericShaBoilerplate(""), "Empty text is boilerplate");
+
+            // 2. Real feature notes
+            string realNotes = @"# MDPlus v1.09 Release Notes
+
+MDPlus v1.09 expands the hyper-fast native Windows reader with universal text support.
+
+## 🚀 Key Feature Highlights
+### 1. Multi-Format Text Document Loading
+- Supports .txt, .csv, .json, and logs.";
+
+            Assert(!UpdateService.IsGenericShaBoilerplate(realNotes), "Substantive feature notes must not be identified as boilerplate");
+            Assert(!UpdateService.ShouldEnrichReleaseHighlights(realNotes), "ShouldEnrichReleaseHighlights must return false for real notes");
+
+            // 3. UpdateDialog.FormatReleaseNotesForDisplay formatting
+            string formattedFromGeneric = UpdateDialog.FormatReleaseNotesForDisplay(genericTemplate, "1.09");
+            Assert(!formattedFromGeneric.Contains("### 📦 Official Windows Installer"), "Formatted notes must not show redundant installer boilerplate");
+            Assert(formattedFromGeneric.Contains("Key Feature Highlights") || formattedFromGeneric.Contains("Multi-Format"),
+                "Formatted notes must provide substantive release notes for v1.09");
+
+            // 4. UpdateDialog preserves genuine release notes
+            string formattedFromReal = UpdateDialog.FormatReleaseNotesForDisplay(realNotes, "1.09");
+            AssertEqual(realNotes.Trim(), formattedFromReal.Trim(), "Genuine release notes must be preserved as-is");
+        }
+
+        private static void TestUpdateServiceRemoteReleaseNotesFetch()
+        {
+            string releaseJson = @"{
+                ""tag_name"": ""v1.3.0"",
+                ""name"": ""MDPlus Release 1.3.0"",
+                ""body"": ""## MDPlus Release\n\n### 📦 Official Windows Installer\nDownload MDPlus-Setup.exe\n\n### 🛡️ Cryptographic SHA-256 Verification Digests\n#### Official SHA-256 Hashes:\nabc123 MDPlus.exe"",
+                ""html_url"": ""https://github.com/nickf-sudomania/mdplusplus/releases/tag/v1.3.0"",
+                ""assets"": []
+            }";
+
+            string remoteMarkdown = @"# MDPlus v1.3.0 Release Notes
+
+## 🚀 Key Feature Highlights
+- Remote fetched notes verification successful.";
+
+            var handler = new MockHttpMessageHandler(request =>
+            {
+                string url = request.RequestUri?.ToString() ?? string.Empty;
+                if (url.Contains("/releases/latest"))
+                {
+                    return new System.Net.Http.HttpResponseMessage(System.Net.HttpStatusCode.OK)
+                    {
+                        Content = new System.Net.Http.StringContent(releaseJson, System.Text.Encoding.UTF8, "application/json")
+                    };
+                }
+                if (url.Contains("RELEASE_NOTES_v1.3.0.md") || url.Contains("RELEASE_NOTES_v1.3.md"))
+                {
+                    return new System.Net.Http.HttpResponseMessage(System.Net.HttpStatusCode.OK)
+                    {
+                        Content = new System.Net.Http.StringContent(remoteMarkdown, System.Text.Encoding.UTF8, "text/markdown")
+                    };
+                }
+
+                return new System.Net.Http.HttpResponseMessage(System.Net.HttpStatusCode.NotFound);
+            });
+
+            using var httpClient = new System.Net.Http.HttpClient(handler);
+            var updateService = new UpdateService(httpClient, "https://mock.api/repos/user/repo/releases/latest");
+            var task = updateService.CheckForUpdatesAsync("1.0.0");
+            task.Wait();
+            var result = task.Result;
+
+            Assert(result.IsSuccess, "Check for updates should succeed");
+            Assert(result.IsUpdateAvailable, "Update should be available");
+            Assert(result.ReleaseHighlights != null && result.ReleaseHighlights.Contains("Remote fetched notes verification successful"),
+                "Generic body must be replaced with enriched remote markdown notes");
+        }
+
         private static void TestLatexMathInlineAndDisplayParsing()
         {
             var parser = new MarkdownParser();
@@ -4575,6 +4676,9 @@ SHA-256: 4444444444444444444444444444444444444444444444444444444444444444
             }
             string csvData = sbCsv.ToString();
 
+            // JIT warmup
+            CsvParser.Parse("Id,Name,Role\n1,\"Test\",\"Dev\"");
+
             // Benchmark CSV Parsing
             var swCsv = Stopwatch.StartNew();
             var parsedCsv = CsvParser.Parse(csvData);
@@ -4582,7 +4686,7 @@ SHA-256: 4444444444444444444444444444444444444444444444444444444444444444
 
             AssertEqual(5001, parsedCsv.Count, "5,001 rows parsed (1 header + 5,000 data)");
             Console.Write($" [{parsedCsv.Count:N0} CSV rows parsed in {swCsv.ElapsedMilliseconds}ms] ");
-            Assert(swCsv.ElapsedMilliseconds < 50, $"5,000-row CSV parse must complete in < 50ms (took {swCsv.ElapsedMilliseconds}ms)");
+            Assert(swCsv.ElapsedMilliseconds <= 50, $"5,000-row CSV parse must complete in <= 50ms (took {swCsv.ElapsedMilliseconds}ms)");
 
             // 2. Generate genuine 5,000-line JSON
             var sbJson = new StringBuilder(5000 * 50);

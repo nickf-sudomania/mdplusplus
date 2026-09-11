@@ -67,15 +67,42 @@ jobs:
         run: |
           .\build.ps1 -Action Verify
 
-      - name: Read Checksums
-        id: hashes
+      - name: Prepare Release Notes & Checksums
+        id: release_notes
         shell: powershell
         run: |
-          $checksums = Get-Content dist\SHA256SUMS.txt -Raw
-          $checksums = $checksums -replace "`r", ""
-          Add-Content -Path $env:GITHUB_ENV -Value "RELEASE_CHECKSUMS<<EOF"
-          Add-Content -Path $env:GITHUB_ENV -Value "$checksums"
-          Add-Content -Path $env:GITHUB_ENV -Value "EOF"
+          $tag = "${{ github.ref_name }}"
+          $cleanTag = $tag.TrimStart('v', 'V')
+          $notesFile = "docs/RELEASE_NOTES_v${cleanTag}.md"
+          if (-not (Test-Path $notesFile)) {
+            $notesFile = "docs/RELEASE_NOTES_${tag}.md"
+          }
+
+          $notesContent = ""
+          if (Test-Path $notesFile) {
+            $notesContent = Get-Content $notesFile -Raw
+          } elseif (Test-Path "RELEASE_NOTES.md") {
+            $notesContent = Get-Content "RELEASE_NOTES.md" -Raw
+          } else {
+            $notesContent = "# MDPlus Release $tag"
+          }
+
+          $checksums = ""
+          if (Test-Path "dist\SHA256SUMS.txt") {
+            $checksums = Get-Content "dist\SHA256SUMS.txt" -Raw
+          }
+
+          $fullBody = @"
+$notesContent
+
+---
+
+### 🛡️ Cryptographic SHA-256 Verification Hashes
+```
+$checksums
+```
+"@
+          [System.IO.File]::WriteAllText("$PWD\release_body.md", $fullBody, [System.Text.Encoding]::UTF8)
 
       - name: Upload Release Assets to GitHub Release
         uses: softprops/action-gh-release@v2
@@ -92,32 +119,6 @@ jobs:
             dist/MDPlus-Setup.exe.sha256
             dist/MDPlus-win-x64.zip.sha256
             dist/MDPlus-*-src.zip.sha256
-          body: |
-            ## MDPlus Release
-
-            ### 📦 Official Windows Installer
-            Download `MDPlus-Setup.exe` for an effortless automated installation:
-            - **Prerequisite Bootstrapper:** Automatically detects if the .NET 8 Windows Desktop Runtime is installed; if missing, automatically downloads and installs it from Microsoft so you never have to hunt for prerequisites.
-            - **Shell Integration:** Registers Windows file associations for `.md` and `.markdown` files with "Open with MDPlus" context menu and branded icons.
-            - **Shortcuts:** Adds clean Start Menu and optional Desktop shortcuts.
-            - **Clean Uninstallation:** Registered in Windows Settings "Installed Apps" / Control Panel.
-
-            ### 🛡️ Cryptographic SHA-256 Verification Digests (Notepad++ Standard)
-            To ensure the integrity of your download and verify it has not been tampered with or corrupted, compare the SHA-256 hash using PowerShell or CMD:
-
-            ```powershell
-            # In PowerShell:
-            Get-FileHash MDPlus-Setup.exe -Algorithm SHA256
-            Get-FileHash MDPlus.exe -Algorithm SHA256
-
-            # In Command Prompt (CMD):
-            certutil -hashfile MDPlus-Setup.exe SHA256
-            certutil -hashfile MDPlus.exe SHA256
-            ```
-
-            #### Official SHA-256 Hashes:
-            ```
-            ${{ env.RELEASE_CHECKSUMS }}
-            ```
+          body_path: release_body.md
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

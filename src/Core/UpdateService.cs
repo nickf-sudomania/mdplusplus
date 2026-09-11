@@ -411,7 +411,25 @@ namespace MDPlus.Core
 
                 string json = await response.Content.ReadAsStringAsync(cancellationToken).ConfigureAwait(false);
                 using var doc = JsonDocument.Parse(json);
-                return ParseReleaseJsonElement(doc.RootElement, currentVer);
+                var result = ParseReleaseJsonElement(doc.RootElement, currentVer);
+
+                if (result.IsSuccess && result.IsUpdateAvailable && ShouldEnrichReleaseHighlights(result.ReleaseHighlights))
+                {
+                    try
+                    {
+                        string? remoteNotes = await TryFetchRemoteReleaseNotesAsync(result.LatestVersion, cancellationToken).ConfigureAwait(false);
+                        if (!string.IsNullOrWhiteSpace(remoteNotes) && !IsGenericShaBoilerplate(remoteNotes))
+                        {
+                            result.ReleaseHighlights = remoteNotes;
+                        }
+                    }
+                    catch
+                    {
+                        // Fall back to existing highlights
+                    }
+                }
+
+                return result;
             }
             catch (Exception ex)
             {
@@ -537,6 +555,89 @@ namespace MDPlus.Core
                     ErrorMessage = ex.Message
                 };
             }
+        }
+
+        /// <summary>
+        /// Checks whether the given text is merely generic installer boilerplate or cryptographic hashes
+        /// without substantive feature release notes or changelog details.
+        /// </summary>
+        public static bool IsGenericShaBoilerplate(string? text)
+        {
+            if (string.IsNullOrWhiteSpace(text)) return true;
+
+            string trimmed = text.Trim();
+            if (trimmed.Length < 60 && !trimmed.Contains('\n')) return true;
+
+            bool hasGenericHeader = trimmed.Contains("## MDPlus Release") || trimmed.Contains("Official Windows Installer");
+            bool hasSha = trimmed.Contains("Cryptographic SHA-256") || trimmed.Contains("Official SHA-256 Hashes") || trimmed.Contains("SHA256") || Regex.IsMatch(trimmed, @"\b[a-fA-F0-9]{64}\b");
+            bool hasFeatureDetails = trimmed.Contains("Highlights", StringComparison.OrdinalIgnoreCase) ||
+                                     trimmed.Contains("What's New", StringComparison.OrdinalIgnoreCase) ||
+                                     trimmed.Contains("Key Feature", StringComparison.OrdinalIgnoreCase) ||
+                                     trimmed.Contains("Changelog", StringComparison.OrdinalIgnoreCase) ||
+                                     trimmed.Contains("Bug Fixes", StringComparison.OrdinalIgnoreCase) ||
+                                     trimmed.Contains("Improvements", StringComparison.OrdinalIgnoreCase);
+
+            if (hasGenericHeader && hasSha && !hasFeatureDetails)
+            {
+                return true;
+            }
+
+            if (!hasFeatureDetails && hasSha && trimmed.Length < 1800)
+            {
+                return true;
+            }
+
+            return false;
+        }
+
+        /// <summary>
+        /// Determines whether the release highlights string lacks feature descriptions
+        /// (e.g. is empty, is just the version name, or consists solely of generic installer/SHA boilerplate).
+        /// </summary>
+        public static bool ShouldEnrichReleaseHighlights(string? highlights)
+        {
+            if (string.IsNullOrWhiteSpace(highlights)) return true;
+            return IsGenericShaBoilerplate(highlights);
+        }
+
+        /// <summary>
+        /// Attempts to fetch the dedicated release notes markdown for the given version tag
+        /// from the GitHub repository raw content.
+        /// </summary>
+        public async Task<string?> TryFetchRemoteReleaseNotesAsync(string? versionTag, CancellationToken cancellationToken = default)
+        {
+            if (string.IsNullOrWhiteSpace(versionTag)) return null;
+
+            string cleanVer = versionTag.Trim().TrimStart('v', 'V');
+            string[] candidateUrls = new[]
+            {
+                $"https://raw.githubusercontent.com/nickf-sudomania/mdplusplus/main/docs/RELEASE_NOTES_v{cleanVer}.md",
+                $"https://raw.githubusercontent.com/nickf-sudomania/mdplusplus/main/docs/RELEASE_NOTES_{versionTag}.md",
+                "https://raw.githubusercontent.com/nickf-sudomania/mdplusplus/main/RELEASE_NOTES.md"
+            };
+
+            foreach (var url in candidateUrls)
+            {
+                try
+                {
+                    using var req = new HttpRequestMessage(HttpMethod.Get, url);
+                    using var resp = await _httpClient.SendAsync(req, cancellationToken).ConfigureAwait(false);
+                    if (resp.IsSuccessStatusCode)
+                    {
+                        string content = await resp.Content.ReadAsStringAsync(cancellationToken).ConfigureAwait(false);
+                        if (!string.IsNullOrWhiteSpace(content))
+                        {
+                            return content;
+                        }
+                    }
+                }
+                catch
+                {
+                    // Continue to next candidate URL
+                }
+            }
+
+            return null;
         }
 
         /// <summary>
