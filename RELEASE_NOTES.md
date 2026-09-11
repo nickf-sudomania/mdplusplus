@@ -1,14 +1,14 @@
 # MDPlus Release Notes
 
-## Version 1.1 (Latest)
+## Version 1.10 (Latest)
 
-See [docs/RELEASE_NOTES_v1.1.md](docs/RELEASE_NOTES_v1.1.md) for full details.
+See [docs/RELEASE_NOTES_v1.10.md](docs/RELEASE_NOTES_v1.10.md) (and [docs/RELEASE_NOTES_v1.1.md](docs/RELEASE_NOTES_v1.1.md)) for full details.
 
 ### Highlights
 - **Multi-Format Lossless Saving Pipeline:** Fixed critical bug where saving JSON documents (and plain text, log, config documents) in rendered or split view failed to persist edits to disk.
 - **Dedicated FlowDocument Serializers:** Added native FlowDocument serializers for JSON (`JsonToFlowDocumentConverter.Serialize`) and Plain Text / Logs / Config (`PlainTextToFlowDocumentConverter.Serialize`), routed through `DocumentFormatHelper.SerializeFlowDocument`.
 - **Split View & Tab Switching Synchronization:** Guaranteed bidirectional synchronization between controls and document buffers via `SyncTabFromControls` with edit source tracking (`_lastEditSource`).
-- **Version 1.1 Synchronization:** Fully synchronized version 1.1 / 1.1.0.0 across all build, installer, and documentation assets.
+- **Version 1.10 Synchronization & Decimal Equivalence:** Fully synchronized version 1.10 / 1.10.0.0 across all build, installer, and documentation assets, with `UpdateService.CompareVersions` explicitly treating `1.1` and `1.10` as equivalent releases.
 
 ## Version 1.09
 

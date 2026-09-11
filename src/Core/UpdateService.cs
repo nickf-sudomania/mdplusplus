@@ -79,8 +79,9 @@ namespace MDPlus.Core
                 return infoVer;
             }
             var ver = assembly.GetName().Version;
-            if (ver == null) return "1.1";
-            return $"{ver.Major}.{ver.Minor}.{Math.Max(0, ver.Build)}";
+            if (ver == null) return "1.10";
+            if (ver.Build > 0) return $"{ver.Major}.{ver.Minor}.{ver.Build}";
+            return $"{ver.Major}.{ver.Minor}";
         }
 
         /// <summary>
@@ -169,18 +170,24 @@ namespace MDPlus.Core
             if (a == null) return -1;
             if (b == null) return 1;
 
-            // Normalize decimal versioning when one version uses 2-digit minor with leading zero (e.g. 1.09, 1.01)
-            // and another uses 1-digit minor (e.g. 1.1). In MDPlus history (v1.01..v1.09), 1.1 corresponds to 1.10.
+            // Normalize decimal versioning when one version uses minor 1 (e.g. 1.1) and another uses 10 (e.g. 1.10)
+            // or 2-digit minor with leading zero (e.g. 1.01..1.09). In MDPlus history (v1.01..v1.09..v1.10),
+            // "1.1" and "1.10" refer to the exact same release.
             if (a.Length >= 2 && b.Length >= 2 && a[0] == b[0])
             {
-                bool aIsSingleDigitMinor = IsSingleDigitMinor(versionA);
-                bool bHasLeadingZeroMinor = HasLeadingZeroMinor(versionB);
-                if (aIsSingleDigitMinor && bHasLeadingZeroMinor && a[1] == 1)
+                bool aIsMinorOne = IsSingleDigitMinorOne(versionA);
+                bool bIsMinorOne = IsSingleDigitMinorOne(versionB);
+                bool aIsMinorTen = IsMinorTen(versionA);
+                bool bIsMinorTen = IsMinorTen(versionB);
+                bool aHasLeadingZero = HasLeadingZeroMinor(versionA);
+                bool bHasLeadingZero = HasLeadingZeroMinor(versionB);
+
+                if (aIsMinorOne && (bIsMinorTen || bHasLeadingZero))
                 {
                     a = (int[])a.Clone();
                     a[1] = 10;
                 }
-                else if (HasLeadingZeroMinor(versionA) && IsSingleDigitMinor(versionB) && b[1] == 1)
+                else if (bIsMinorOne && (aIsMinorTen || aHasLeadingZero))
                 {
                     b = (int[])b.Clone();
                     b[1] = 10;
@@ -202,28 +209,51 @@ namespace MDPlus.Core
             return 0;
         }
 
-        private static bool IsSingleDigitMinor(string? v)
+        private static string? GetMinorString(string? v)
         {
-            if (string.IsNullOrWhiteSpace(v)) return false;
-            string clean = v.Trim().TrimStart('v', 'V');
-            int dotIdx = clean.IndexOf('.');
-            if (dotIdx < 0) return false;
-            string afterDot = clean.Substring(dotIdx + 1);
-            int nextDot = afterDot.IndexOfAny(new[] { '.', '-', '+' });
-            string minorStr = nextDot >= 0 ? afterDot.Substring(0, nextDot) : afterDot;
-            return minorStr.Length == 1 && char.IsDigit(minorStr[0]);
+            if (string.IsNullOrWhiteSpace(v)) return null;
+            string trimmed = v.Trim();
+            int firstDigitIdx = -1;
+            for (int i = 0; i < trimmed.Length; i++)
+            {
+                if (char.IsDigit(trimmed[i]))
+                {
+                    firstDigitIdx = i;
+                    break;
+                }
+            }
+            if (firstDigitIdx < 0) return null;
+            string versionPart = trimmed.Substring(firstDigitIdx);
+            int separatorIdx = versionPart.IndexOfAny(new[] { '-', '+' });
+            if (separatorIdx >= 0)
+            {
+                versionPart = versionPart.Substring(0, separatorIdx);
+            }
+
+            int dotIdx = versionPart.IndexOf('.');
+            if (dotIdx < 0) return null;
+
+            string afterDot = versionPart.Substring(dotIdx + 1);
+            int nextDot = afterDot.IndexOf('.');
+            return nextDot >= 0 ? afterDot.Substring(0, nextDot) : afterDot;
+        }
+
+        private static bool IsSingleDigitMinorOne(string? v)
+        {
+            string? minor = GetMinorString(v);
+            return minor == "1";
+        }
+
+        private static bool IsMinorTen(string? v)
+        {
+            string? minor = GetMinorString(v);
+            return minor == "10";
         }
 
         private static bool HasLeadingZeroMinor(string? v)
         {
-            if (string.IsNullOrWhiteSpace(v)) return false;
-            string clean = v.Trim().TrimStart('v', 'V');
-            int dotIdx = clean.IndexOf('.');
-            if (dotIdx < 0) return false;
-            string afterDot = clean.Substring(dotIdx + 1);
-            int nextDot = afterDot.IndexOfAny(new[] { '.', '-', '+' });
-            string minorStr = nextDot >= 0 ? afterDot.Substring(0, nextDot) : afterDot;
-            return minorStr.Length >= 2 && minorStr.StartsWith("0");
+            string? minor = GetMinorString(v);
+            return minor != null && minor.Length >= 2 && minor.StartsWith("0");
         }
 
         /// <summary>

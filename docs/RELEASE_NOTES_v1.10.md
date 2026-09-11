@@ -1,10 +1,10 @@
-# MDPlus v1.1 Release Notes
+# MDPlus v1.10 Release Notes
 
 > **Release Date:** September 11, 2026  
-> **Tag:** v1.1  
+> **Tag:** v1.10  
 > **Target Framework:** .NET 8.0 Windows Desktop (WPF)  
 
-MDPlus v1.1 delivers a major reliability fix for the editing and saving pipeline across all supported file formats (Markdown, JSON, Plain Text, Logs, CSV/TSV Tables, and Configuration files), ensuring that edits made in Rendered, Raw, or Split views are faithfully and losslessly persisted to disk.
+MDPlus v1.10 (also corresponding to v1.1) delivers a major reliability fix for the editing and saving pipeline across all supported file formats (Markdown, JSON, Plain Text, Logs, CSV/TSV Tables, and Configuration files), ensuring that edits made in Rendered, Raw, or Split views are faithfully and losslessly persisted to disk.
 
 ---
 
@@ -28,9 +28,10 @@ MDPlus v1.1 delivers a major reliability fix for the editing and saving pipeline
 - **Plain Text & Logs (.txt, .log):** Ergonomic typography, zoom scaling, and verified disk persistence.
 - **Configuration Files (.ini, .cfg, .yaml, .yml, .xml):** Verbatim preservation and syntax-friendly monospace viewing and editing.
 
-### 3. Version 1.1 Synchronization
-- Fully synchronized version numbers across `MDPlus.csproj` (1.1), `AssemblyInfo.cs` (1.1.0.0), `MainWindow.xaml` title, `UpdateService.cs`, Inno Setup script (`MDPlus.iss`), and `build.ps1`.
-- Updated release verification manifests targeting `MDPlus.1.1.checksums.sha256`.
+### 3. Version 1.10 Synchronization & Decimal Version Equivalence
+- Fully synchronized version numbers across `MDPlus.csproj` (1.10), `AssemblyInfo.cs` (1.10.0.0), `MainWindow.xaml` title, `UpdateService.cs`, Inno Setup script (`MDPlus.iss`), and `build.ps1`.
+- `UpdateService.CompareVersions` explicitly normalizes and recognizes equivalence between `1.1` and `1.10`, preventing repeated update notifications.
+- Updated release verification manifests targeting `MDPlus.1.10.checksums.sha256` and `MDPlus.1.1.checksums.sha256`.
 
 ---
 
@@ -42,20 +43,20 @@ All distributed assets are authenticated using cryptographic SHA-256 digests. Yo
 # PowerShell verification:
 Get-FileHash MDPlus-Setup.exe -Algorithm SHA256
 Get-FileHash MDPlus.exe -Algorithm SHA256
-Get-FileHash MDPlus-1.1-src.zip -Algorithm SHA256
+Get-FileHash MDPlus-1.10-src.zip -Algorithm SHA256
 ```
 
 ```cmd
 :: Command Prompt verification:
 certutil -hashfile MDPlus-Setup.exe SHA256
 certutil -hashfile MDPlus.exe SHA256
-certutil -hashfile MDPlus-1.1-src.zip SHA256
+certutil -hashfile MDPlus-1.10-src.zip SHA256
 ```
 
 ### Official Assets
-- [**MDPlus-Setup.exe**](https://github.com/nickf-sudomania/mdplusplus/releases/download/v1.1/MDPlus-Setup.exe) — Windows Setup Installer with .NET 8 Bootstrapper & Multi-Format Associations
-- [**MDPlus.exe**](https://github.com/nickf-sudomania/mdplusplus/releases/download/v1.1/MDPlus.exe) — Standalone Portable Single-File Binary
-- [**MDPlus-win-x64.zip**](https://github.com/nickf-sudomania/mdplusplus/releases/download/v1.1/MDPlus-win-x64.zip) — Portable Zip Distribution
-- [**MDPlus-1.1-src.zip**](https://github.com/nickf-sudomania/mdplusplus/releases/download/v1.1/MDPlus-1.1-src.zip) — Source Code Archive
-- [**MDPlus.1.1.checksums.sha256**](https://github.com/nickf-sudomania/mdplusplus/releases/download/v1.1/MDPlus.1.1.checksums.sha256) — Notepad++ Compatible Checksum Manifest
-- [**SHA256SUMS.txt**](https://github.com/nickf-sudomania/mdplusplus/releases/download/v1.1/SHA256SUMS.txt) — Master Cryptographic Checksum Manifest
+- [**MDPlus-Setup.exe**](https://github.com/nickf-sudomania/mdplusplus/releases/download/v1.10/MDPlus-Setup.exe) — Windows Setup Installer with .NET 8 Bootstrapper & Multi-Format Associations
+- [**MDPlus.exe**](https://github.com/nickf-sudomania/mdplusplus/releases/download/v1.10/MDPlus.exe) — Standalone Portable Single-File Binary
+- [**MDPlus-win-x64.zip**](https://github.com/nickf-sudomania/mdplusplus/releases/download/v1.10/MDPlus-win-x64.zip) — Portable Zip Distribution
+- [**MDPlus-1.10-src.zip**](https://github.com/nickf-sudomania/mdplusplus/releases/download/v1.10/MDPlus-1.10-src.zip) — Source Code Archive (also available as MDPlus-1.1-src.zip)
+- [**MDPlus.1.10.checksums.sha256**](https://github.com/nickf-sudomania/mdplusplus/releases/download/v1.10/MDPlus.1.10.checksums.sha256) — Notepad++ Compatible Checksum Manifest
+- [**SHA256SUMS.txt**](https://github.com/nickf-sudomania/mdplusplus/releases/download/v1.10/SHA256SUMS.txt) — Master Cryptographic Checksum Manifest
