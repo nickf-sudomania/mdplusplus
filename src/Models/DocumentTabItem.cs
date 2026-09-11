@@ -28,6 +28,7 @@ namespace MDPlus.Models
         private string _encodingName = "UTF-8";
         private string _lineEndingName = "CRLF";
         private bool _isDirty;
+        private DocumentFormat _format = DocumentFormat.Markdown;
 
         public event EventHandler? DirtyStateChanged;
 
@@ -105,9 +106,45 @@ namespace MDPlus.Models
                 {
                     _rawMarkdown = value;
                     OnPropertyChanged();
+                    OnPropertyChanged(nameof(RawText));
+                    OnPropertyChanged(nameof(StatsText));
                 }
             }
         }
+
+        public string RawText
+        {
+            get => _rawMarkdown;
+            set
+            {
+                if (_rawMarkdown != value)
+                {
+                    _rawMarkdown = value;
+                    OnPropertyChanged();
+                    OnPropertyChanged(nameof(RawMarkdown));
+                    OnPropertyChanged(nameof(StatsText));
+                }
+            }
+        }
+
+        public DocumentFormat Format
+        {
+            get => _format;
+            set
+            {
+                if (_format != value)
+                {
+                    _format = value;
+                    OnPropertyChanged();
+                    OnPropertyChanged(nameof(FormatBadge));
+                    OnPropertyChanged(nameof(FormatDisplayName));
+                    OnPropertyChanged(nameof(StatsText));
+                }
+            }
+        }
+
+        public string FormatBadge => DocumentFormatHelper.GetFormatBadge(Format);
+        public string FormatDisplayName => DocumentFormatHelper.GetFormatDisplayName(Format);
 
         public MarkdownDocument Document
         {
@@ -210,7 +247,23 @@ namespace MDPlus.Models
             }
         }
 
-        public string StatsText => $"{Document.WordCount:N0} words • {Document.CharacterCount:N0} chars • {Document.ReadingTimeMinutes} min read";
+        public string StatsText
+        {
+            get
+            {
+                if (Format == DocumentFormat.Markdown)
+                {
+                    return $"{Document.WordCount:N0} words • {Document.CharacterCount:N0} chars • {Document.ReadingTimeMinutes} min read";
+                }
+                if (Format == DocumentFormat.Csv || Format == DocumentFormat.Tsv)
+                {
+                    int lineCount = string.IsNullOrEmpty(RawText) ? 0 : RawText.Split('\n').Length;
+                    return $"{lineCount:N0} rows • {FormatBadge} • {RawText.Length:N0} chars";
+                }
+                int lines = string.IsNullOrEmpty(RawText) ? 0 : RawText.Split('\n').Length;
+                return $"{lines:N0} lines • {FormatDisplayName} • {RawText.Length:N0} chars";
+            }
+        }
 
         public event PropertyChangedEventHandler? PropertyChanged;
         protected void OnPropertyChanged([CallerMemberName] string? name = null)

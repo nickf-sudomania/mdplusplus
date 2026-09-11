@@ -12,6 +12,10 @@ using MDPlus.Controls;
 using MDPlus.Models;
 using MDPlus.E2E.Harness;
 using static MDPlus.E2E.Harness.E2ETestHarness;
+using WpfTable = System.Windows.Documents.Table;
+using WpfTableCell = System.Windows.Documents.TableCell;
+using WpfTableRow = System.Windows.Documents.TableRow;
+using WpfTableRowGroup = System.Windows.Documents.TableRowGroup;
 
 namespace MDPlus.E2E.Tiers
 {
@@ -72,6 +76,48 @@ namespace MDPlus.E2E.Tiers
             RunTest("Tier1", "F7.3: OpenFilesInNewTab tab reuse vs tab creation semantics", TestF7_OpenFilesInNewTabSemantics);
             RunTest("Tier1", "F7.4: Already-open document tab switching and anchor target resolution", TestF7_AlreadyOpenTabSwitching);
             RunTest("Tier1", "F7.5: MarkdownScrollViewer hyperlink hand cursor and hit testing", TestF7_ViewerHyperlinkDetection);
+
+            // Feature 8: Multi-Format Detection, Badges, and Open/Save Dialog Filters (v1.09)
+            RunTest("Tier1", "F8.1: Document format detection and extension mapping for all 10 formats", TestF8_FormatDetection);
+            RunTest("Tier1", "F8.2: Format badges and display names validation for all formats", TestF8_FormatBadgesAndNames);
+            RunTest("Tier1", "F8.3: OpenFileDialog filter contains 'All Supported Files' and all extensions", TestF8_OpenFileDialogFilter);
+            RunTest("Tier1", "F8.4: SaveFileDialog filter adapts per DocumentFormat", TestF8_SaveFileDialogFilter);
+            RunTest("Tier1", "F8.5: DocumentTabItem StatsText formatting for Markdown, CSV/TSV, and text/code formats", TestF8_TabStatsText);
+
+            // Feature 9: Formatted CSV and TSV Tabular Loading & Layout (v1.09)
+            RunTest("Tier1", "F9.1: CSV table FlowDocument structure (columns, header row, body rows)", TestF9_CsvTableStructure);
+            RunTest("Tier1", "F9.2: Distinct header styling with TableHeaderBg and semi-bold font", TestF9_HeaderStyling);
+            RunTest("Tier1", "F9.3: Alternating row zebra striping with TableAltRowBg", TestF9_ZebraRowStriping);
+            RunTest("Tier1", "F9.4: Automatic numeric right-alignment and currency/percentage recognition", TestF9_NumericRightAlignment);
+            RunTest("Tier1", "F9.5: TSV tab-delimiter parsing and layout parity with CSV", TestF9_TsvTabDelimitedLayout);
+
+            // Feature 10: JSON 2-Space Pretty-Printing and Syntax Highlighting (v1.09)
+            RunTest("Tier1", "F10.1: JSON automatic 2-space pretty-printing and indentation", TestF10_JsonPrettyPrinting2Spaces);
+            RunTest("Tier1", "F10.2: JSON token syntax highlighting (keys, strings, numbers, booleans, null)", TestF10_JsonTokenSyntaxHighlighting);
+            RunTest("Tier1", "F10.3: JSON syntax color mapping across all 8 theme palettes", TestF10_JsonThemePaletteContracts);
+            RunTest("Tier1", "F10.4: JSON monospace typography (Cascadia Code / Consolas, size 13)", TestF10_JsonMonospaceTypography);
+            RunTest("Tier1", "F10.5: Malformed JSON syntax error notification banner and raw fallback", TestF10_JsonMalformedFallbackBanner);
+
+            // Feature 11: Plain Text & Log Typography, Zoom, and Find Navigation (v1.09)
+            RunTest("Tier1", "F11.1: Log file Cascadia Code typography (size 13, line height 20)", TestF11_LogTypography);
+            RunTest("Tier1", "F11.2: Plain text Segoe UI typography (size 14, line height 22)", TestF11_PlainTextTypography);
+            RunTest("Tier1", "F11.3: Font scaling and zoom levels (50% to 300%) for text documents", TestF11_FontScalingAndZoom);
+            RunTest("Tier1", "F11.4: Word wrap and responsive FlowDocument page settings", TestF11_TextWordWrapAndPagePadding);
+            RunTest("Tier1", "F11.5: In-page find navigation text accessibility across text and log documents", TestF11_InPageFindTextAccessibility);
+
+            // Feature 12: Multi-Format View Toggle & Lossless Serialization Safeguard (v1.09)
+            RunTest("Tier1", "F12.1: CSV lossless view toggle (Rendered table -> CsvSerializer -> Raw CSV)", TestF12_CsvViewToggleRoundTrip);
+            RunTest("Tier1", "F12.2: TSV lossless view toggle (Rendered table -> CsvSerializer -> Raw TSV)", TestF12_TsvViewToggleRoundTrip);
+            RunTest("Tier1", "F12.3: JSON view toggle preserves raw JSON without MarkdownSerializer corruption", TestF12_JsonViewTogglePreservation);
+            RunTest("Tier1", "F12.4: Plain text & log view toggle preserves raw text losslessly", TestF12_PlainTextAndLogViewTogglePreservation);
+            RunTest("Tier1", "F12.5: Config files (.ini, .cfg, .yaml, .xml) view toggle serialization safeguard", TestF12_ConfigViewTogglePreservation);
+
+            // Feature 13: Version 1.09 Synchronization & File Associations (v1.09)
+            RunTest("Tier1", "F13.1: Version 1.09 / 1.0.9.0 synchronized across all 8 required files", TestF13_Version109SyncAcross8Files);
+            RunTest("Tier1", "F13.2: Inno Setup tasks for .txt, .csv, .tsv, .json file associations", TestF13_InnoSetupFileAssociationTasks);
+            RunTest("Tier1", "F13.3: Inno Setup Default Apps capabilities registry directives for multi-format", TestF13_InnoSetupRegistryDirectives);
+            RunTest("Tier1", "F13.4: Release notes RELEASE_NOTES_v1.09.md and RELEASE_NOTES.md present", TestF13_ReleaseNotesDocumentation);
+            RunTest("Tier1", "F13.5: SHA-256 build verification target MDPlus.1.09.checksums.sha256 in build.ps1", TestF13_BuildScriptChecksumManifest);
         }
 
         #region Feature 1: Markdown Parsing & AST
@@ -902,6 +948,593 @@ int a = 1;
 
             var detectedFromCode = viewer.FindHyperlinkFromSource(codeText);
             AssertEqual(complexLink, detectedFromCode, "Hyperlink must be detected from TextBlock inside InlineUIContainer.");
+        }
+
+        #endregion
+
+        #region Feature 8: Multi-Format Detection, Badges, and Open/Save Dialog Filters
+
+        private static void TestF8_FormatDetection()
+        {
+            // Extension detection
+            AssertEqual(DocumentFormat.Markdown, DocumentFormatHelper.DetectFromExtension(".md"));
+            AssertEqual(DocumentFormat.Markdown, DocumentFormatHelper.DetectFromExtension(".markdown"));
+            AssertEqual(DocumentFormat.Markdown, DocumentFormatHelper.DetectFromExtension(".mdown"));
+            AssertEqual(DocumentFormat.Markdown, DocumentFormatHelper.DetectFromExtension(".mkd"));
+            AssertEqual(DocumentFormat.PlainText, DocumentFormatHelper.DetectFromExtension(".txt"));
+            AssertEqual(DocumentFormat.Log, DocumentFormatHelper.DetectFromExtension(".log"));
+            AssertEqual(DocumentFormat.Csv, DocumentFormatHelper.DetectFromExtension(".csv"));
+            AssertEqual(DocumentFormat.Tsv, DocumentFormatHelper.DetectFromExtension(".tsv"));
+            AssertEqual(DocumentFormat.Json, DocumentFormatHelper.DetectFromExtension(".json"));
+            AssertEqual(DocumentFormat.Ini, DocumentFormatHelper.DetectFromExtension(".ini"));
+            AssertEqual(DocumentFormat.Cfg, DocumentFormatHelper.DetectFromExtension(".cfg"));
+            AssertEqual(DocumentFormat.Yaml, DocumentFormatHelper.DetectFromExtension(".yaml"));
+            AssertEqual(DocumentFormat.Yaml, DocumentFormatHelper.DetectFromExtension(".yml"));
+            AssertEqual(DocumentFormat.Xml, DocumentFormatHelper.DetectFromExtension(".xml"));
+
+            // Edge cases
+            AssertEqual(DocumentFormat.PlainText, DocumentFormatHelper.DetectFromExtension(""));
+            AssertEqual(DocumentFormat.PlainText, DocumentFormatHelper.DetectFromExtension(".unknownext"));
+            AssertEqual(DocumentFormat.Csv, DocumentFormatHelper.DetectFromExtension("csv")); // without leading dot
+
+            // Path detection (case-insensitive)
+            AssertEqual(DocumentFormat.Csv, DocumentFormatHelper.DetectFromPath(@"C:\Data\FINANCE.CSV"));
+            AssertEqual(DocumentFormat.Json, DocumentFormatHelper.DetectFromPath(@"/var/log/settings.JSON"));
+            AssertEqual(DocumentFormat.Log, DocumentFormatHelper.DetectFromPath(@"C:\Logs\app.LOG"));
+
+            // Tabular classification
+            AssertTrue(DocumentFormatHelper.IsTabular(DocumentFormat.Csv), "CSV is tabular");
+            AssertTrue(DocumentFormatHelper.IsTabular(DocumentFormat.Tsv), "TSV is tabular");
+            AssertFalse(DocumentFormatHelper.IsTabular(DocumentFormat.Markdown), "Markdown is not tabular");
+            AssertFalse(DocumentFormatHelper.IsTabular(DocumentFormat.Json), "JSON is not tabular");
+
+            // Config classification
+            AssertTrue(DocumentFormatHelper.IsConfig(DocumentFormat.Ini), "INI is config");
+            AssertTrue(DocumentFormatHelper.IsConfig(DocumentFormat.Cfg), "CFG is config");
+            AssertTrue(DocumentFormatHelper.IsConfig(DocumentFormat.Yaml), "YAML is config");
+            AssertTrue(DocumentFormatHelper.IsConfig(DocumentFormat.Xml), "XML is config");
+            AssertFalse(DocumentFormatHelper.IsConfig(DocumentFormat.Csv), "CSV is not config");
+        }
+
+        private static void TestF8_FormatBadgesAndNames()
+        {
+            AssertEqual("MD", DocumentFormatHelper.GetFormatBadge(DocumentFormat.Markdown));
+            AssertEqual("TXT", DocumentFormatHelper.GetFormatBadge(DocumentFormat.PlainText));
+            AssertEqual("LOG", DocumentFormatHelper.GetFormatBadge(DocumentFormat.Log));
+            AssertEqual("CSV", DocumentFormatHelper.GetFormatBadge(DocumentFormat.Csv));
+            AssertEqual("TSV", DocumentFormatHelper.GetFormatBadge(DocumentFormat.Tsv));
+            AssertEqual("JSON", DocumentFormatHelper.GetFormatBadge(DocumentFormat.Json));
+            AssertEqual("INI", DocumentFormatHelper.GetFormatBadge(DocumentFormat.Ini));
+            AssertEqual("CFG", DocumentFormatHelper.GetFormatBadge(DocumentFormat.Cfg));
+            AssertEqual("YAML", DocumentFormatHelper.GetFormatBadge(DocumentFormat.Yaml));
+            AssertEqual("XML", DocumentFormatHelper.GetFormatBadge(DocumentFormat.Xml));
+
+            AssertEqual("Markdown Document", DocumentFormatHelper.GetFormatDisplayName(DocumentFormat.Markdown));
+            AssertEqual("Plain Text", DocumentFormatHelper.GetFormatDisplayName(DocumentFormat.PlainText));
+            AssertEqual("Log File", DocumentFormatHelper.GetFormatDisplayName(DocumentFormat.Log));
+            AssertEqual("CSV Document", DocumentFormatHelper.GetFormatDisplayName(DocumentFormat.Csv));
+            AssertEqual("TSV Document", DocumentFormatHelper.GetFormatDisplayName(DocumentFormat.Tsv));
+            AssertEqual("JSON Document", DocumentFormatHelper.GetFormatDisplayName(DocumentFormat.Json));
+            AssertEqual("INI Configuration", DocumentFormatHelper.GetFormatDisplayName(DocumentFormat.Ini));
+            AssertEqual("Configuration File", DocumentFormatHelper.GetFormatDisplayName(DocumentFormat.Cfg));
+            AssertEqual("YAML Document", DocumentFormatHelper.GetFormatDisplayName(DocumentFormat.Yaml));
+            AssertEqual("XML Document", DocumentFormatHelper.GetFormatDisplayName(DocumentFormat.Xml));
+        }
+
+        private static void TestF8_OpenFileDialogFilter()
+        {
+            string filter = DocumentFormatHelper.GetOpenFileDialogFilter();
+            AssertNotNull(filter);
+
+            // First entry must be All Supported Files
+            AssertTrue(filter.StartsWith("All Supported Files (*.md;*.txt;*.log;*.csv;*.tsv;*.json;*.ini;*.cfg;*.yaml;*.yml;*.xml)|"),
+                "Filter must start with All Supported Files");
+
+            // Must contain dedicated categories
+            AssertContains("Markdown Files (*.md;*.markdown;*.mdown;*.mkd)|", filter);
+            AssertContains("Text & Log Files (*.txt;*.log)|", filter);
+            AssertContains("Tabular Data (*.csv;*.tsv)|", filter);
+            AssertContains("JSON Files (*.json)|", filter);
+            AssertContains("Configuration Files (*.ini;*.cfg;*.yaml;*.yml;*.xml)|", filter);
+            AssertTrue(filter.EndsWith("All Files (*.*)|*.*"), "Filter must end with All Files");
+        }
+
+        private static void TestF8_SaveFileDialogFilter()
+        {
+            string csvFilter = DocumentFormatHelper.GetSaveFileDialogFilter(DocumentFormat.Csv);
+            AssertTrue(csvFilter.StartsWith("CSV Files (*.csv)|*.csv|"), "CSV save filter starts with CSV");
+
+            string tsvFilter = DocumentFormatHelper.GetSaveFileDialogFilter(DocumentFormat.Tsv);
+            AssertTrue(tsvFilter.StartsWith("TSV Files (*.tsv)|*.tsv|"), "TSV save filter starts with TSV");
+
+            string jsonFilter = DocumentFormatHelper.GetSaveFileDialogFilter(DocumentFormat.Json);
+            AssertTrue(jsonFilter.StartsWith("JSON Files (*.json)|*.json|"), "JSON save filter starts with JSON");
+
+            string logFilter = DocumentFormatHelper.GetSaveFileDialogFilter(DocumentFormat.Log);
+            AssertTrue(logFilter.StartsWith("Log Files (*.log)|*.log|"), "Log save filter starts with Log");
+
+            string mdFilter = DocumentFormatHelper.GetSaveFileDialogFilter(DocumentFormat.Markdown);
+            AssertTrue(mdFilter.StartsWith("Markdown Files (*.md)|*.md|"), "Markdown save filter starts with Markdown");
+
+            string txtFilter = DocumentFormatHelper.GetSaveFileDialogFilter(DocumentFormat.PlainText);
+            AssertTrue(txtFilter.StartsWith("Text Files (*.txt)|*.txt|"), "PlainText save filter starts with Text");
+        }
+
+        private static void TestF8_TabStatsText()
+        {
+            // 1. Markdown
+            var tabMd = new DocumentTabItem { Format = DocumentFormat.Markdown };
+            tabMd.Document.WordCount = 250;
+            tabMd.Document.CharacterCount = 1400;
+            AssertContains("250 words", tabMd.StatsText);
+            AssertContains("1,400 chars", tabMd.StatsText);
+            AssertContains("2 min read", tabMd.StatsText);
+
+            // 2. CSV / TSV
+            var tabCsv = new DocumentTabItem { Format = DocumentFormat.Csv, RawText = "h1,h2\r\nv1,v2\r\nv3,v4" };
+            AssertContains("3 rows", tabCsv.StatsText);
+            AssertContains("CSV", tabCsv.StatsText);
+
+            var tabTsv = new DocumentTabItem { Format = DocumentFormat.Tsv, RawText = "c1\tc2\r\nr1\tr2" };
+            AssertContains("2 rows", tabTsv.StatsText);
+            AssertContains("TSV", tabTsv.StatsText);
+
+            // 3. Plain Text / JSON / Logs
+            var tabTxt = new DocumentTabItem { Format = DocumentFormat.PlainText, RawText = "Line1\r\nLine2\r\nLine3" };
+            AssertContains("3 lines", tabTxt.StatsText);
+            AssertContains("Plain Text", tabTxt.StatsText);
+
+            var tabJson = new DocumentTabItem { Format = DocumentFormat.Json, RawText = "{\n  \"k\": 1\n}" };
+            AssertContains("3 lines", tabJson.StatsText);
+            AssertContains("JSON Document", tabJson.StatsText);
+        }
+
+        #endregion
+
+        #region Feature 9: Formatted CSV and TSV Tabular Loading & Layout
+
+        private static void TestF9_CsvTableStructure()
+        {
+            string csv = "Name,Department,Salary,Status\r\nAlice,Engineering,125000,Active\r\nBob,Design,95000,Pending";
+            var palette = ThemePalette.GitHubDark;
+            var doc = CsvToFlowDocumentConverter.Convert(csv, palette, isTsv: false);
+
+            AssertNotNull(doc);
+            var table = doc.Blocks.OfType<WpfTable>().FirstOrDefault();
+            AssertNotNull(table, "FlowDocument must contain a Table element.");
+            AssertEqual(4, table!.Columns.Count, "Table must have 4 columns.");
+            AssertEqual(2, table.RowGroups.Count, "Table must contain Header and Body row groups.");
+
+            var headerGroup = table.RowGroups[0];
+            AssertEqual(1, headerGroup.Rows.Count, "Header group must have exactly 1 row.");
+            AssertEqual(4, headerGroup.Rows[0].Cells.Count, "Header row must have 4 cells.");
+
+            var bodyGroup = table.RowGroups[1];
+            AssertEqual(2, bodyGroup.Rows.Count, "Body group must have 2 data rows.");
+            AssertEqual(4, bodyGroup.Rows[0].Cells.Count, "Data row 1 must have 4 cells.");
+            AssertEqual(4, bodyGroup.Rows[1].Cells.Count, "Data row 2 must have 4 cells.");
+        }
+
+        private static void TestF9_HeaderStyling()
+        {
+            string csv = "Col1,Col2\r\nVal1,Val2";
+            var palette = ThemePalette.Nord;
+            var doc = CsvToFlowDocumentConverter.Convert(csv, palette, isTsv: false);
+            var table = doc.Blocks.OfType<WpfTable>().First();
+
+            var headerRow = table.RowGroups[0].Rows[0];
+            AssertEqual(palette.TableHeaderBg, headerRow.Background, "Header row must use TableHeaderBg.");
+
+            foreach (var cell in headerRow.Cells)
+            {
+                var p = cell.Blocks.OfType<Paragraph>().First();
+                AssertEqual(FontWeights.SemiBold, p.FontWeight, "Header cell text must be SemiBold.");
+                AssertEqual(palette.HeadingFg, p.Foreground, "Header cell text must use HeadingFg.");
+                AssertEqual(2.0, cell.BorderThickness.Bottom, "Header cell bottom border must be 2px.");
+            }
+        }
+
+        private static void TestF9_ZebraRowStriping()
+        {
+            string csv = "H1,H2\r\nR1C1,R1C2\r\nR2C1,R2C2\r\nR3C1,R3C2\r\nR4C1,R4C2";
+            var palette = ThemePalette.OneDark;
+            var doc = CsvToFlowDocumentConverter.Convert(csv, palette, isTsv: false);
+            var table = doc.Blocks.OfType<WpfTable>().First();
+
+            var bodyRows = table.RowGroups[1].Rows;
+            AssertEqual(4, bodyRows.Count, "Must have 4 data rows.");
+
+            // Alternating zebra row pattern: even index transparent, odd index TableAltRowBg
+            AssertEqual(Brushes.Transparent, bodyRows[0].Background, "Data row 0 should be transparent.");
+            AssertEqual(palette.TableAltRowBg, bodyRows[1].Background, "Data row 1 should have TableAltRowBg.");
+            AssertEqual(Brushes.Transparent, bodyRows[2].Background, "Data row 2 should be transparent.");
+            AssertEqual(palette.TableAltRowBg, bodyRows[3].Background, "Data row 3 should have TableAltRowBg.");
+        }
+
+        private static void TestF9_NumericRightAlignment()
+        {
+            string csv = "Product,Price,Quantity,Change,Category\r\nLaptop,$1,299.99,15,+5.2%,Electronics\r\nPhone,$799.00,42,-2.1%,Electronics\r\nDesk,$250.50,8,0.0%,Furniture";
+            var palette = ThemePalette.GitHubLight;
+            var doc = CsvToFlowDocumentConverter.Convert(csv, palette, isTsv: false);
+            var table = doc.Blocks.OfType<WpfTable>().First();
+
+            var headerRow = table.RowGroups[0].Rows[0];
+            var firstDataRow = table.RowGroups[1].Rows[0];
+
+            // Col 0: Product (text) -> Left
+            AssertEqual(TextAlignment.Left, ((Paragraph)headerRow.Cells[0].Blocks.First()).TextAlignment);
+            AssertEqual(TextAlignment.Left, ((Paragraph)firstDataRow.Cells[0].Blocks.First()).TextAlignment);
+
+            // Col 1: Price ($1,299.99) -> Right
+            AssertEqual(TextAlignment.Right, ((Paragraph)headerRow.Cells[1].Blocks.First()).TextAlignment);
+            AssertEqual(TextAlignment.Right, ((Paragraph)firstDataRow.Cells[1].Blocks.First()).TextAlignment);
+
+            // Col 2: Quantity (15) -> Right
+            AssertEqual(TextAlignment.Right, ((Paragraph)headerRow.Cells[2].Blocks.First()).TextAlignment);
+            AssertEqual(TextAlignment.Right, ((Paragraph)firstDataRow.Cells[2].Blocks.First()).TextAlignment);
+
+            // Col 3: Change (+5.2%) -> Right
+            AssertEqual(TextAlignment.Right, ((Paragraph)headerRow.Cells[3].Blocks.First()).TextAlignment);
+            AssertEqual(TextAlignment.Right, ((Paragraph)firstDataRow.Cells[3].Blocks.First()).TextAlignment);
+
+            // Col 4: Category (text) -> Left
+            AssertEqual(TextAlignment.Left, ((Paragraph)headerRow.Cells[4].Blocks.First()).TextAlignment);
+            AssertEqual(TextAlignment.Left, ((Paragraph)firstDataRow.Cells[4].Blocks.First()).TextAlignment);
+        }
+
+        private static void TestF9_TsvTabDelimitedLayout()
+        {
+            string tsv = "ID\tProduct\tScore\r\n101\tAlpha\t99.5\r\n102\tBeta\t88.0";
+            var palette = ThemePalette.Monokai;
+            var doc = CsvToFlowDocumentConverter.Convert(tsv, palette, isTsv: true);
+
+            var table = doc.Blocks.OfType<WpfTable>().First();
+            AssertEqual(3, table.Columns.Count, "TSV table must have 3 columns.");
+            AssertEqual(2, table.RowGroups[1].Rows.Count, "TSV table must have 2 data rows.");
+
+            string cellText = ((Run)((Paragraph)table.RowGroups[1].Rows[0].Cells[1].Blocks.First()).Inlines.First()).Text;
+            AssertEqual("Alpha", cellText, "TSV tab delimiter extracted cell content accurately.");
+        }
+
+        #endregion
+
+        #region Feature 10: JSON 2-Space Pretty-Printing and Syntax Highlighting
+
+        private static void TestF10_JsonPrettyPrinting2Spaces()
+        {
+            string compactJson = "{\"title\":\"MDPlus\",\"count\":42,\"nested\":{\"ready\":true}}";
+            var palette = ThemePalette.OneDark;
+            var doc = JsonToFlowDocumentConverter.Convert(compactJson, palette);
+
+            AssertNotNull(doc);
+            var lines = doc.Blocks.OfType<Paragraph>()
+                .Select(p => string.Concat(p.Inlines.OfType<Run>().Select(r => r.Text)))
+                .ToList();
+
+            AssertTrue(lines.Any(l => l.StartsWith("  \"title\":")), "First-level key must be indented by 2 spaces.");
+            AssertTrue(lines.Any(l => l.StartsWith("    \"ready\":")), "Nested key must be indented by 4 spaces (2x2).");
+        }
+
+        private static void TestF10_JsonTokenSyntaxHighlighting()
+        {
+            string json = "{\n  \"app\": \"MDPlus\",\n  \"version\": 1.09,\n  \"ready\": true,\n  \"missing\": null\n}";
+            var palette = ThemePalette.GitHubDark;
+            var doc = JsonToFlowDocumentConverter.Convert(json, palette);
+
+            Run? keyRun = null;
+            Run? strRun = null;
+            Run? numRun = null;
+            Run? boolRun = null;
+            Run? nullRun = null;
+
+            foreach (var p in doc.Blocks.OfType<Paragraph>())
+            {
+                foreach (var r in p.Inlines.OfType<Run>())
+                {
+                    if (r.Text == "\"app\"") keyRun = r;
+                    if (r.Text == "\"MDPlus\"") strRun = r;
+                    if (r.Text == "1.09") numRun = r;
+                    if (r.Text == "true") boolRun = r;
+                    if (r.Text == "null") nullRun = r;
+                }
+            }
+
+            AssertNotNull(keyRun, "JSON key token must be present.");
+            AssertEqual(palette.SyntaxProperty, keyRun!.Foreground, "Key token must use SyntaxProperty brush.");
+
+            AssertNotNull(strRun, "JSON string token must be present.");
+            AssertEqual(palette.SyntaxString, strRun!.Foreground, "String token must use SyntaxString brush.");
+
+            AssertNotNull(numRun, "JSON number token must be present.");
+            AssertEqual(palette.SyntaxNumber, numRun!.Foreground, "Number token must use SyntaxNumber brush.");
+
+            AssertNotNull(boolRun, "JSON boolean token must be present.");
+            AssertEqual(palette.SyntaxKeyword, boolRun!.Foreground, "Boolean token must use SyntaxKeyword brush.");
+
+            AssertNotNull(nullRun, "JSON null token must be present.");
+            AssertEqual(palette.SyntaxKeyword, nullRun!.Foreground, "Null token must use SyntaxKeyword brush.");
+        }
+
+        private static void TestF10_JsonThemePaletteContracts()
+        {
+            string sample = "{\"name\": \"MDPlus\", \"active\": true}";
+            foreach (ThemePreset preset in Enum.GetValues<ThemePreset>())
+            {
+                var palette = ThemePalette.GetPalette(preset);
+                var doc = JsonToFlowDocumentConverter.Convert(sample, palette);
+                AssertNotNull(doc, $"FlowDocument for {preset} must not be null.");
+                AssertEqual(palette.EditorBg, doc.Background, $"{preset} background must match palette.EditorBg.");
+                AssertEqual(palette.EditorFg, doc.Foreground, $"{preset} foreground must match palette.EditorFg.");
+            }
+        }
+
+        private static void TestF10_JsonMonospaceTypography()
+        {
+            var palette = ThemePalette.QuietLight;
+            var doc = JsonToFlowDocumentConverter.Convert("{\"test\": 1}", palette);
+
+            AssertEqual(13.0, doc.FontSize, "JSON document font size must be 13.");
+            AssertTrue(doc.FontFamily.Source.Contains("Cascadia Code") || doc.FontFamily.Source.Contains("Consolas"),
+                "JSON document must use monospace font family.");
+
+            var p = doc.Blocks.OfType<Paragraph>().First();
+            AssertEqual(20.0, p.LineHeight, "JSON line height must be 20.");
+        }
+
+        private static void TestF10_JsonMalformedFallbackBanner()
+        {
+            string malformed = "{\n  \"valid\": true,\n  corrupted unquoted text here\n}";
+            var palette = ThemePalette.GitHubDark;
+            var doc = JsonToFlowDocumentConverter.Convert(malformed, palette);
+
+            AssertNotNull(doc, "Malformed JSON must generate fallback FlowDocument without crashing.");
+            var firstPara = doc.Blocks.OfType<Paragraph>().First();
+            AssertEqual(palette.CodeBg, firstPara.Background, "Error banner must use palette.CodeBg.");
+            AssertEqual(palette.Accent, firstPara.BorderBrush, "Error banner must use palette.Accent.");
+
+            string bannerText = string.Concat(firstPara.Inlines.OfType<Run>().Select(r => r.Text));
+            AssertContains("Malformed JSON Syntax", bannerText);
+            AssertContains("Line", bannerText);
+
+            AssertTrue(doc.Blocks.Count > 1, "Raw text lines must be displayed below the syntax error banner.");
+        }
+
+        #endregion
+
+        #region Feature 11: Plain Text & Log Typography, Zoom, and Find Navigation
+
+        private static void TestF11_LogTypography()
+        {
+            string log = "2026-09-11 03:00:00 [INFO] Service started";
+            var palette = ThemePalette.GitHubDark;
+            var doc = PlainTextToFlowDocumentConverter.Convert(log, DocumentFormat.Log, palette);
+
+            AssertEqual(13.0, doc.FontSize, "Log font size must be 13.");
+            AssertTrue(doc.FontFamily.Source.Contains("Cascadia Code") || doc.FontFamily.Source.Contains("Consolas"),
+                "Log font must be Cascadia Code or monospace.");
+
+            var p = doc.Blocks.OfType<Paragraph>().First();
+            AssertEqual(20.0, p.LineHeight, "Log line height must be 20.");
+        }
+
+        private static void TestF11_PlainTextTypography()
+        {
+            string text = "Standard plain text note.";
+            var palette = ThemePalette.GitHubLight;
+            var doc = PlainTextToFlowDocumentConverter.Convert(text, DocumentFormat.PlainText, palette);
+
+            AssertEqual(14.0, doc.FontSize, "Plain text font size must be 14.");
+            AssertTrue(doc.FontFamily.Source.Contains("Segoe UI"), "Plain text font must be Segoe UI.");
+
+            var p = doc.Blocks.OfType<Paragraph>().First();
+            AssertEqual(22.0, p.LineHeight, "Plain text line height must be 22.");
+        }
+
+        private static void TestF11_FontScalingAndZoom()
+        {
+            var tab = new DocumentTabItem();
+            tab.Zoom = 150.0;
+            AssertEqual(150.0, tab.Zoom);
+            AssertEqual("150%", tab.ZoomText);
+
+            // Boundary clamping: max 300%
+            tab.Zoom = 450.0;
+            AssertEqual(300.0, tab.Zoom, "Zoom must be clamped at 300%.");
+            AssertEqual("300%", tab.ZoomText);
+
+            // Boundary clamping: min 50%
+            tab.Zoom = 25.0;
+            AssertEqual(50.0, tab.Zoom, "Zoom must be clamped at 50%.");
+            AssertEqual("50%", tab.ZoomText);
+        }
+
+        private static void TestF11_TextWordWrapAndPagePadding()
+        {
+            var palette = ThemePalette.Nord;
+            var doc = PlainTextToFlowDocumentConverter.Convert("Sample line", DocumentFormat.PlainText, palette);
+
+            AssertEqual(new Thickness(32, 24, 32, 32), doc.PagePadding, "Document PagePadding must be (32, 24, 32, 32).");
+            AssertEqual(double.PositiveInfinity, doc.ColumnWidth, "ColumnWidth must be PositiveInfinity for word wrap.");
+        }
+
+        private static void TestF11_InPageFindTextAccessibility()
+        {
+            string content = "Header text\r\nAlphaTargetKeyword999\r\nFooter text";
+            var palette = ThemePalette.GitHubDark;
+            var doc = PlainTextToFlowDocumentConverter.Convert(content, DocumentFormat.PlainText, palette);
+
+            bool found = false;
+            foreach (var p in doc.Blocks.OfType<Paragraph>())
+            {
+                foreach (var r in p.Inlines.OfType<Run>())
+                {
+                    if (r.Text.Contains("AlphaTargetKeyword999"))
+                    {
+                        found = true;
+                        break;
+                    }
+                }
+            }
+            AssertTrue(found, "Find navigation target keyword must be located in FlowDocument runs.");
+        }
+
+        #endregion
+
+        #region Feature 12: Multi-Format View Toggle & Lossless Serialization Safeguard
+
+        private static void TestF12_CsvViewToggleRoundTrip()
+        {
+            string originalCsv = "Id,Name,Score\r\n1,Alice,98\r\n2,Bob,85\r\n";
+            var doc = CsvToFlowDocumentConverter.Convert(originalCsv, ThemePalette.GitHubDark, isTsv: false);
+            string serialized = CsvSerializer.Serialize(doc, ',');
+            AssertEqual(originalCsv, serialized, "CSV round-trip serialization must be 100% lossless.");
+        }
+
+        private static void TestF12_TsvViewToggleRoundTrip()
+        {
+            string originalTsv = "Id\tName\tScore\r\n1\tAlice\t98\r\n2\tBob\t85\r\n";
+            var doc = CsvToFlowDocumentConverter.Convert(originalTsv, ThemePalette.GitHubDark, isTsv: true);
+            string serialized = CsvSerializer.Serialize(doc, '\t');
+            AssertEqual(originalTsv, serialized, "TSV round-trip serialization must be 100% lossless.");
+        }
+
+        private static void TestF12_JsonViewTogglePreservation()
+        {
+            string rawJson = "{\n  \"hello\": \"world\",\n  \"count\": 123\n}";
+            var tab = new DocumentTabItem
+            {
+                Format = DocumentFormat.Json,
+                RawMarkdown = rawJson,
+                ViewMode = ViewDisplayMode.Rendered
+            };
+
+            // Switch to Raw
+            tab.ViewMode = ViewDisplayMode.Raw;
+            AssertEqual(rawJson, tab.RawMarkdown, "Raw JSON must be preserved verbatim when switching to Raw.");
+
+            // Switch back to Rendered
+            tab.ViewMode = ViewDisplayMode.Rendered;
+            AssertEqual(rawJson, tab.RawMarkdown, "Raw JSON must be preserved verbatim when switching to Rendered.");
+        }
+
+        private static void TestF12_PlainTextAndLogViewTogglePreservation()
+        {
+            string rawLog = "2026-09-11 03:00:00 [ERROR] Connection timed out\nDetails: timeout after 30s";
+            var tab = new DocumentTabItem
+            {
+                Format = DocumentFormat.Log,
+                RawMarkdown = rawLog,
+                ViewMode = ViewDisplayMode.Rendered
+            };
+
+            tab.ViewMode = ViewDisplayMode.Raw;
+            AssertEqual(rawLog, tab.RawMarkdown, "Raw log text preserved without alteration.");
+
+            tab.ViewMode = ViewDisplayMode.Rendered;
+            AssertEqual(rawLog, tab.RawMarkdown, "Raw log text preserved back in rendered mode.");
+        }
+
+        private static void TestF12_ConfigViewTogglePreservation()
+        {
+            var configFormats = new[] { DocumentFormat.Ini, DocumentFormat.Cfg, DocumentFormat.Yaml, DocumentFormat.Xml };
+            foreach (var fmt in configFormats)
+            {
+                AssertTrue(DocumentFormatHelper.IsConfig(fmt), $"{fmt} must be identified as config.");
+                string sample = $"# Sample config for {fmt}\nkey = value\nsection.enabled = true";
+                var tab = new DocumentTabItem { Format = fmt, RawMarkdown = sample, ViewMode = ViewDisplayMode.Rendered };
+                tab.ViewMode = ViewDisplayMode.Raw;
+                AssertEqual(sample, tab.RawMarkdown, $"{fmt} must retain verbatim text across view mode switches.");
+            }
+        }
+
+        #endregion
+
+        #region Feature 13: Version 1.09 Synchronization & File Associations
+
+        private static void TestF13_Version109SyncAcross8Files()
+        {
+            string repoRoot = GetRepositoryRoot();
+
+            // 1. src/MDPlus.csproj
+            string csproj = File.ReadAllText(Path.Combine(repoRoot, "src", "MDPlus.csproj"));
+            AssertContains("<Version>1.09</Version>", csproj, "MDPlus.csproj Version must be 1.09.");
+
+            // 2. src/Properties/AssemblyInfo.cs
+            string assemblyInfo = File.ReadAllText(Path.Combine(repoRoot, "src", "Properties", "AssemblyInfo.cs"));
+            AssertContains("[assembly: AssemblyVersion(\"1.0.9.0\")]", assemblyInfo, "AssemblyInfo Version must be 1.0.9.0.");
+            AssertContains("[assembly: AssemblyFileVersion(\"1.0.9.0\")]", assemblyInfo, "AssemblyInfo FileVersion must be 1.0.9.0.");
+
+            // 3. src/MainWindow.xaml
+            string mainXaml = File.ReadAllText(Path.Combine(repoRoot, "src", "MainWindow.xaml"));
+            AssertContains("Title=\"MDPlus v1.09", mainXaml, "MainWindow.xaml Title must specify v1.09.");
+
+            // 4. src/Core/UpdateService.cs
+            string updateService = File.ReadAllText(Path.Combine(repoRoot, "src", "Core", "UpdateService.cs"));
+            AssertContains("\"1.09\"", updateService, "UpdateService must specify 1.09 fallback version.");
+
+            // 5. installer/MDPlus.iss
+            string iss = File.ReadAllText(Path.Combine(repoRoot, "installer", "MDPlus.iss"));
+            AssertContains("#define MyAppVersion \"1.09\"", iss, "MDPlus.iss MyAppVersion must be 1.09.");
+            AssertContains("VersionInfoVersion=1.0.9.0", iss, "MDPlus.iss VersionInfoVersion must be 1.0.9.0.");
+
+            // 6. build.ps1
+            string buildScript = File.ReadAllText(Path.Combine(repoRoot, "build.ps1"));
+            AssertContains("1.09", buildScript, "build.ps1 must reference version 1.09.");
+
+            // 7. sample_docs/welcome.md
+            string welcome = File.ReadAllText(Path.Combine(repoRoot, "sample_docs", "welcome.md"));
+            AssertContains("1.09", welcome, "welcome.md must document version 1.09.");
+
+            // 8. README.md
+            string readme = File.ReadAllText(Path.Combine(repoRoot, "README.md"));
+            AssertContains("1.09", readme, "README.md must document version 1.09.");
+        }
+
+        private static void TestF13_InnoSetupFileAssociationTasks()
+        {
+            string repoRoot = GetRepositoryRoot();
+            string iss = File.ReadAllText(Path.Combine(repoRoot, "installer", "MDPlus.iss"));
+            AssertContains("Name: \"fileassoc_txt\"", iss, "Inno Setup must declare task for .txt files.");
+            AssertContains("Name: \"fileassoc_csv\"", iss, "Inno Setup must declare task for .csv files.");
+            AssertContains("Name: \"fileassoc_tsv\"", iss, "Inno Setup must declare task for .tsv files.");
+            AssertContains("Name: \"fileassoc_json\"", iss, "Inno Setup must declare task for .json files.");
+        }
+
+        private static void TestF13_InnoSetupRegistryDirectives()
+        {
+            string repoRoot = GetRepositoryRoot();
+            string iss = File.ReadAllText(Path.Combine(repoRoot, "installer", "MDPlus.iss"));
+            AssertContains("ValueName: \".txt\"", iss, "Inno Setup must register .txt in Capabilities\\FileAssociations.");
+            AssertContains("ValueName: \".csv\"", iss, "Inno Setup must register .csv in Capabilities\\FileAssociations.");
+            AssertContains("ValueName: \".tsv\"", iss, "Inno Setup must register .tsv in Capabilities\\FileAssociations.");
+            AssertContains("ValueName: \".json\"", iss, "Inno Setup must register .json in Capabilities\\FileAssociations.");
+            AssertContains("SystemFileAssociations\\.txt", iss, "Inno Setup must register shell context menu for .txt.");
+            AssertContains("SystemFileAssociations\\.csv", iss, "Inno Setup must register shell context menu for .csv.");
+            AssertContains("SystemFileAssociations\\.tsv", iss, "Inno Setup must register shell context menu for .tsv.");
+            AssertContains("SystemFileAssociations\\.json", iss, "Inno Setup must register shell context menu for .json.");
+        }
+
+        private static void TestF13_ReleaseNotesDocumentation()
+        {
+            string repoRoot = GetRepositoryRoot();
+            string releaseNotes109 = Path.Combine(repoRoot, "docs", "RELEASE_NOTES_v1.09.md");
+            AssertTrue(File.Exists(releaseNotes109), "docs/RELEASE_NOTES_v1.09.md must exist.");
+
+            string content109 = File.ReadAllText(releaseNotes109);
+            AssertContains("MDPlus v1.09 Release Notes", content109);
+            AssertContains("CSV/TSV Tabular Data", content109);
+            AssertContains("JSON Documents", content109);
+
+            string generalNotes = File.ReadAllText(Path.Combine(repoRoot, "RELEASE_NOTES.md"));
+            AssertContains("Version 1.09", generalNotes, "RELEASE_NOTES.md must reference v1.09.");
+        }
+
+        private static void TestF13_BuildScriptChecksumManifest()
+        {
+            string repoRoot = GetRepositoryRoot();
+            string buildScript = File.ReadAllText(Path.Combine(repoRoot, "build.ps1"));
+            AssertContains("MDPlus.1.09.checksums.sha256", buildScript, "build.ps1 must specify MDPlus.1.09.checksums.sha256 target.");
+            AssertContains("-Action Verify", buildScript, "build.ps1 must implement -Action Verify.");
         }
 
         #endregion

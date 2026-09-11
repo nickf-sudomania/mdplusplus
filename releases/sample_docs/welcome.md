@@ -1,8 +1,8 @@
 ---
 title: "Welcome to MDPlus"
 author: "Nick"
-date: "2026-09-10"
-version: "1.08"
+date: "2026-09-11"
+version: "1.09"
 category: "Documentation"
 ---
 
@@ -81,6 +81,16 @@ var document = parser.Parse(fileContent);
 var converter = new MarkdownToWpfConverter(directory, isDarkTheme);
 FlowDocument flowDoc = converter.Convert(document);
 ```
+
+---
+
+## 📊 Multi-Format Support: Plain Text, CSV/TSV Tables & JSON (v1.09)
+
+MDPlus v1.09 extends beyond Markdown into an ultra-fast universal notepad and structured data viewer:
+- **Tabular Data (.csv, .tsv)**: Auto-detects delimiters, parses RFC 4180 escaped fields, and displays styled tables with distinct headers, 1px grid borders, subtle alternating row stripes, and numeric right-alignment.
+- **Structured Data (.json)**: Automatically formats and pretty-prints valid JSON with 2-space indentation and token syntax highlighting (keys, strings, numbers, booleans, null) matching your active theme.
+- **Plain Text & Logs (.txt, .log)**: High-speed reading with clean typography, smooth font zoom (`Ctrl + Plus/Minus/0`), line wrapping, and instant in-page find (`Ctrl+F`).
+- **Seamless View Switching**: Toggle between formatted layouts and raw source text using `Ctrl+1` (Rendered) and `Ctrl+3` (Raw).
 
 ---
 

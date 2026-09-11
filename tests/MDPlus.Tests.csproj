@@ -8,7 +8,7 @@
     <RootNamespace>MDPlus.Tests</RootNamespace>
     <AssemblyName>MDPlus.Tests</AssemblyName>
     <StartupObject>MDPlus.Tests.TestRunner</StartupObject>
-    <DefaultItemExcludes>$(DefaultItemExcludes);e2e/**</DefaultItemExcludes>
+    <DefaultItemExcludes>$(DefaultItemExcludes);adversarial*/**;e2e/**</DefaultItemExcludes>
   </PropertyGroup>
 
   <ItemGroup>

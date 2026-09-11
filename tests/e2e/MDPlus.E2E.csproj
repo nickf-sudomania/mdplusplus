@@ -8,6 +8,7 @@
     <RootNamespace>MDPlus.E2E</RootNamespace>
     <AssemblyName>MDPlus.E2E</AssemblyName>
     <StartupObject>MDPlus.E2E.Program</StartupObject>
+    <DefaultItemExcludes>$(DefaultItemExcludes);Adversarial/**</DefaultItemExcludes>
   </PropertyGroup>
 
   <ItemGroup>

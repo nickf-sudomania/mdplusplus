@@ -1,6 +1,17 @@
 # MDPlus Release Notes
 
-## Version 1.08 (Latest)
+## Version 1.09 (Latest)
+
+See [docs/RELEASE_NOTES_v1.09.md](docs/RELEASE_NOTES_v1.09.md) for full details.
+
+### Highlights
+- **Multi-Format Text Document Loading:** Open, view, and edit `.txt`, `.log`, `.csv`, `.tsv`, `.json`, `.ini`, `.cfg`, `.yaml`, `.yml`, and `.xml` alongside Markdown with dynamic format detection and tab strip format badges.
+- **High-Legibility Formatted CSV & TSV Tables:** RFC 4180 compliant parser renders clean tables with semi-bold headers, 1px grid borders, subtle alternating row stripes, and numeric right-alignment, with instant toggling between Rendered Table (`Ctrl+1`) and Raw Monospace (`Ctrl+3`).
+- **Structured JSON Pretty-Printing & Syntax Highlighting:** High-speed 2-space formatting using built-in `System.Text.Json` with token highlights matching all 8 themes, plus resilient syntax error fallback.
+- **Plain Text & Log Typography:** Monospace Cascadia Code font stack for logs and clean Segoe UI for plain text, with zoom scaling (`Ctrl + Plus/Minus/0`) and in-page find (`Ctrl+F`).
+- **Inno Setup File Associations:** Installer tasks and registry configuration for `.txt`, `.csv`, `.tsv`, and `.json` files, including right-click "Open with MDPlus" context menu verbs.
+
+## Version 1.08
 
 See [docs/RELEASE_NOTES_v1.08.md](docs/RELEASE_NOTES_v1.08.md) for full details.
 

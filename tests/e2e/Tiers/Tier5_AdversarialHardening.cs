@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
 using System.Linq;
+using System.Text;
 using System.Windows.Documents;
 using System.Windows.Media;
 using System.Windows.Media.Imaging;
@@ -26,6 +27,10 @@ namespace MDPlus.E2E.Tiers
             RunTest("Tier5", "T5.3: Rapid theme cycling (100 loops / 800 switches) & brush immutability", TestRapidThemeCycling100LoopsThroughAllPresets);
             RunTest("Tier5", "T5.4: Tab lifecycle stress, dirty transitions, and theme resilience", TestTabLifecycleStressAndDirtyTransitions);
             RunTest("Tier5", "T5.5: TOC sidebar high contrast readability and theme menu grouping", TestTocThemeReadabilityAndMenuGrouping);
+
+            // MDPlus v1.09 Multi-Format Adversarial Stress Tests
+            RunTest("Tier5", "T5.6: Adversarial CSV with unbalanced quotes, null bytes, and extreme field lengths", TestAdversarialCsvParsingAndRecovery);
+            RunTest("Tier5", "T5.7: Adversarial JSON with deeply nested structures, unicode escapes, and extreme numbers", TestAdversarialJsonParsingAndHighlighting);
         }
 
         private static void TestWCAGContrastMatrixAll8Palettes()
@@ -377,5 +382,84 @@ public static void Main() => Console.WriteLine(""Stress"");
             AssertTrue(xaml.Contains("ToolTip=\"{Binding Text}\""), "TOC item template provides ToolTip for truncated headings");
             AssertTrue(xaml.Contains("Name=\"ContentSplitter\"") && xaml.Contains("Background=\"{DynamicResource BorderBrush}\""), "ContentSplitter must use dynamic BorderBrush");
         }
+
+        #region MDPlus v1.09 Multi-Format Adversarial Stress Tests
+
+        private static void TestAdversarialCsvParsingAndRecovery()
+        {
+            // 1. Unclosed quote at EOF
+            string unclosedAtEof = "col1,col2\r\nval1,\"unclosed quote at the end of stream";
+            var rows1 = CsvParser.Parse(unclosedAtEof);
+            AssertEqual(2, rows1.Count, "Parser must recover from unclosed quote at EOF without hang or crash.");
+            AssertEqual("unclosed quote at the end of stream", rows1[1][1]);
+
+            // 2. Extreme field length (50,000 characters in a single cell)
+            string massiveField = new string('Z', 50000);
+            string extremeCsv = $"H1,H2\r\n\"prefix_{massiveField}_suffix\",normal";
+            var rows2 = CsvParser.Parse(extremeCsv);
+            AssertEqual(2, rows2.Count);
+            AssertEqual(50000 + 14, rows2[1][0].Length);
+
+            // 3. Serializer round-trip on extreme field
+            var doc = CsvToFlowDocumentConverter.Convert(extremeCsv, ThemePalette.GitHubDark);
+            string serialized = CsvSerializer.Serialize(doc, ',');
+            var rowsSerialized = CsvParser.Parse(serialized);
+            AssertEqual(rows2[1][0], rowsSerialized[1][0], "Massive field serialized and parsed back losslessly.");
+
+            // 4. Mid-field unescaped quote handling (Vulnerability A remediation)
+            string midField = "Item,Description\r\nPipe,12\" steel pipe\r\na,b\"c,d\r\ne,f,g";
+            var rows4 = CsvParser.Parse(midField);
+            AssertEqual(4, rows4.Count, "Mid-field quote must preserve all rows without collapsing.");
+            AssertEqual("12\" steel pipe", rows4[1][1]);
+            AssertEqual("b\"c", rows4[2][1]);
+            AssertEqual("e", rows4[3][0]);
+        }
+
+        private static void TestAdversarialJsonParsingAndHighlighting()
+        {
+            var palette = ThemePalette.GitHubDark;
+
+            // 1. Deeply nested JSON structure (20 levels)
+            var sb = new StringBuilder();
+            for (int i = 0; i < 20; i++) sb.Append($"{{\"level_{i}\": ");
+            sb.Append("42");
+            for (int i = 0; i < 20; i++) sb.Append("}");
+            string deeplyNested = sb.ToString();
+
+            var doc1 = JsonToFlowDocumentConverter.Convert(deeplyNested, palette);
+            AssertNotNull(doc1, "Deeply nested JSON converts to FlowDocument without stack overflow.");
+            AssertTrue(doc1.Blocks.Count > 10, "Formatted nested JSON contains multiple indented paragraphs.");
+
+            // 2. Unicode escapes and control characters
+            string unicodeEscapes = "{\n  \"greeting\": \"\\u0048\\u0065\\u006c\\u006c\\u006f\\u0020\\u0057\\u006f\\u0072\\u006c\\u0064\",\n  \"extreme_num\": 1.7976931348623157E+308\n}";
+            var doc2 = JsonToFlowDocumentConverter.Convert(unicodeEscapes, palette);
+            AssertNotNull(doc2);
+            var runs = doc2.Blocks.OfType<Paragraph>().SelectMany(p => p.Inlines.OfType<Run>()).ToList();
+            AssertTrue(runs.Any(r => r.Text.Contains("Hello World") || r.Text.Contains("\\u0048")), "Unicode escaped strings handled.");
+
+            // 3. 5,000-line JSON FlowDocument layout capping at 2,500 visual lines (Vulnerability B remediation)
+            var sbLarge = new StringBuilder(5000 * 30);
+            sbLarge.Append("[\n");
+            for (int i = 1; i <= 4998; i++)
+            {
+                sbLarge.Append($"  \"line_{i}\",\n");
+            }
+            sbLarge.Append("  \"line_4999\"\n]");
+            string largeJson = sbLarge.ToString();
+
+            var swLayout = Stopwatch.StartNew();
+            var docLarge = JsonToFlowDocumentConverter.Convert(largeJson, palette);
+            swLayout.Stop();
+
+            AssertNotNull(docLarge);
+            AssertEqual(2501, docLarge.Blocks.Count, "Large JSON must cap visual blocks at MaxVisualLines (2500) + 1 banner.");
+            AssertTrue(swLayout.ElapsedMilliseconds < 500, $"Layout conversion took {swLayout.ElapsedMilliseconds}ms, must not freeze UI thread.");
+            var banner = docLarge.Blocks.LastBlock as Paragraph;
+            AssertNotNull(banner);
+            var bannerText = string.Concat(banner.Inlines.OfType<Run>().Select(r => r.Text));
+            AssertTrue(bannerText.Contains("Showing first 2,500 of 5,001 lines") && bannerText.Contains("Ctrl+3"), "Banner indicates cap and directs to Raw view Ctrl+3.");
+        }
+
+        #endregion
     }
 }

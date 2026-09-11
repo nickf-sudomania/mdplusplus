@@ -4,7 +4,7 @@
 ; =====================================================================
 
 #define MyAppName "MDPlus"
-#define MyAppVersion "1.08"
+#define MyAppVersion "1.09"
 #define MyAppPublisher "MDPlus"
 #define MyAppURL "https://github.com/nickf-sudomania/mdplusplus"
 #define MyAppExeName "MDPlus.exe"
@@ -38,10 +38,10 @@ PrivilegesRequiredOverridesAllowed=dialog commandline
 ArchitecturesAllowed=x64compatible
 ArchitecturesInstallIn64BitMode=x64compatible
 ChangesAssociations=yes
-VersionInfoVersion=1.0.8.0
+VersionInfoVersion=1.0.9.0
 VersionInfoCompany={#MyAppPublisher}
 VersionInfoDescription=MDPlus Setup Installer
-VersionInfoProductVersion=1.0.8.0
+VersionInfoProductVersion=1.0.9.0
 VersionInfoProductName=MDPlus Markdown Viewer
 CloseApplications=yes
 RestartApplications=no
@@ -53,6 +53,10 @@ Name: "english"; MessagesFile: "compiler:Default.isl"
 Name: "desktopicon"; Description: "{cm:CreateDesktopIcon}"; GroupDescription: "{cm:AdditionalIcons}"; Flags: unchecked
 Name: "fileassoc_md"; Description: "Associate Markdown files (.md) with MDPlus"; GroupDescription: "File associations:"; Flags: checkedonce
 Name: "fileassoc_markdown"; Description: "Associate Markdown files (.markdown) with MDPlus"; GroupDescription: "File associations:"; Flags: checkedonce
+Name: "fileassoc_txt"; Description: "Associate Plain Text files (.txt) with MDPlus"; GroupDescription: "File associations:"; Flags: unchecked
+Name: "fileassoc_csv"; Description: "Associate CSV spreadsheet files (.csv) with MDPlus"; GroupDescription: "File associations:"; Flags: unchecked
+Name: "fileassoc_tsv"; Description: "Associate TSV spreadsheet files (.tsv) with MDPlus"; GroupDescription: "File associations:"; Flags: unchecked
+Name: "fileassoc_json"; Description: "Associate JSON data files (.json) with MDPlus"; GroupDescription: "File associations:"; Flags: unchecked
 
 [Files]
 ; Primary MDPlus application files
@@ -76,6 +80,10 @@ Root: HKA; Subkey: "Software\MDPlus\Capabilities"; ValueType: string; ValueName:
 Root: HKA; Subkey: "Software\MDPlus\Capabilities"; ValueType: string; ValueName: "ApplicationName"; ValueData: "{#MyAppName}"; Flags: uninsdeletekey
 Root: HKA; Subkey: "Software\MDPlus\Capabilities\FileAssociations"; ValueType: string; ValueName: ".md"; ValueData: "{#MyAppAssocKey}"; Flags: uninsdeletekey; Tasks: fileassoc_md
 Root: HKA; Subkey: "Software\MDPlus\Capabilities\FileAssociations"; ValueType: string; ValueName: ".markdown"; ValueData: "{#MyAppAssocKey}"; Flags: uninsdeletekey; Tasks: fileassoc_markdown
+Root: HKA; Subkey: "Software\MDPlus\Capabilities\FileAssociations"; ValueType: string; ValueName: ".txt"; ValueData: "{#MyAppAssocKey}"; Flags: uninsdeletekey; Tasks: fileassoc_txt
+Root: HKA; Subkey: "Software\MDPlus\Capabilities\FileAssociations"; ValueType: string; ValueName: ".csv"; ValueData: "{#MyAppAssocKey}"; Flags: uninsdeletekey; Tasks: fileassoc_csv
+Root: HKA; Subkey: "Software\MDPlus\Capabilities\FileAssociations"; ValueType: string; ValueName: ".tsv"; ValueData: "{#MyAppAssocKey}"; Flags: uninsdeletekey; Tasks: fileassoc_tsv
+Root: HKA; Subkey: "Software\MDPlus\Capabilities\FileAssociations"; ValueType: string; ValueName: ".json"; ValueData: "{#MyAppAssocKey}"; Flags: uninsdeletekey; Tasks: fileassoc_json
 Root: HKA; Subkey: "Software\RegisteredApplications"; ValueType: string; ValueName: "{#MyAppName}"; ValueData: "Software\MDPlus\Capabilities"; Flags: uninsdeletevalue
 
 ; Document ProgID
@@ -91,6 +99,22 @@ Root: HKA; Subkey: "Software\Classes\.md\OpenWithProgids"; ValueType: string; Va
 Root: HKA; Subkey: "Software\Classes\.markdown"; ValueType: string; ValueName: ""; ValueData: "{#MyAppAssocKey}"; Flags: uninsdeletevalue; Tasks: fileassoc_markdown
 Root: HKA; Subkey: "Software\Classes\.markdown\OpenWithProgids"; ValueType: string; ValueName: "{#MyAppAssocKey}"; ValueData: ""; Flags: uninsdeletevalue; Tasks: fileassoc_markdown
 
+; File Extension Associations (.txt)
+Root: HKA; Subkey: "Software\Classes\.txt"; ValueType: string; ValueName: ""; ValueData: "{#MyAppAssocKey}"; Flags: uninsdeletevalue; Tasks: fileassoc_txt
+Root: HKA; Subkey: "Software\Classes\.txt\OpenWithProgids"; ValueType: string; ValueName: "{#MyAppAssocKey}"; ValueData: ""; Flags: uninsdeletevalue; Tasks: fileassoc_txt
+
+; File Extension Associations (.csv)
+Root: HKA; Subkey: "Software\Classes\.csv"; ValueType: string; ValueName: ""; ValueData: "{#MyAppAssocKey}"; Flags: uninsdeletevalue; Tasks: fileassoc_csv
+Root: HKA; Subkey: "Software\Classes\.csv\OpenWithProgids"; ValueType: string; ValueName: "{#MyAppAssocKey}"; ValueData: ""; Flags: uninsdeletevalue; Tasks: fileassoc_csv
+
+; File Extension Associations (.tsv)
+Root: HKA; Subkey: "Software\Classes\.tsv"; ValueType: string; ValueName: ""; ValueData: "{#MyAppAssocKey}"; Flags: uninsdeletevalue; Tasks: fileassoc_tsv
+Root: HKA; Subkey: "Software\Classes\.tsv\OpenWithProgids"; ValueType: string; ValueName: "{#MyAppAssocKey}"; ValueData: ""; Flags: uninsdeletevalue; Tasks: fileassoc_tsv
+
+; File Extension Associations (.json)
+Root: HKA; Subkey: "Software\Classes\.json"; ValueType: string; ValueName: ""; ValueData: "{#MyAppAssocKey}"; Flags: uninsdeletevalue; Tasks: fileassoc_json
+Root: HKA; Subkey: "Software\Classes\.json\OpenWithProgids"; ValueType: string; ValueName: "{#MyAppAssocKey}"; ValueData: ""; Flags: uninsdeletevalue; Tasks: fileassoc_json
+
 ; Shell Context Menu: "Open with MDPlus" on right-click
 Root: HKA; Subkey: "Software\Classes\SystemFileAssociations\.md\shell\OpenWithMDPlus"; ValueType: string; ValueName: ""; ValueData: "Open with MDPlus"; Flags: uninsdeletekey; Tasks: fileassoc_md
 Root: HKA; Subkey: "Software\Classes\SystemFileAssociations\.md\shell\OpenWithMDPlus"; ValueType: string; ValueName: "Icon"; ValueData: """{app}\{#MyAppExeName}"",0"; Flags: uninsdeletekey; Tasks: fileassoc_md
@@ -99,6 +123,22 @@ Root: HKA; Subkey: "Software\Classes\SystemFileAssociations\.md\shell\OpenWithMD
 Root: HKA; Subkey: "Software\Classes\SystemFileAssociations\.markdown\shell\OpenWithMDPlus"; ValueType: string; ValueName: ""; ValueData: "Open with MDPlus"; Flags: uninsdeletekey; Tasks: fileassoc_markdown
 Root: HKA; Subkey: "Software\Classes\SystemFileAssociations\.markdown\shell\OpenWithMDPlus"; ValueType: string; ValueName: "Icon"; ValueData: """{app}\{#MyAppExeName}"",0"; Flags: uninsdeletekey; Tasks: fileassoc_markdown
 Root: HKA; Subkey: "Software\Classes\SystemFileAssociations\.markdown\shell\OpenWithMDPlus\command"; ValueType: string; ValueName: ""; ValueData: """{app}\{#MyAppExeName}"" ""%1"""; Flags: uninsdeletekey; Tasks: fileassoc_markdown
+
+Root: HKA; Subkey: "Software\Classes\SystemFileAssociations\.txt\shell\OpenWithMDPlus"; ValueType: string; ValueName: ""; ValueData: "Open with MDPlus"; Flags: uninsdeletekey; Tasks: fileassoc_txt
+Root: HKA; Subkey: "Software\Classes\SystemFileAssociations\.txt\shell\OpenWithMDPlus"; ValueType: string; ValueName: "Icon"; ValueData: """{app}\{#MyAppExeName}"",0"; Flags: uninsdeletekey; Tasks: fileassoc_txt
+Root: HKA; Subkey: "Software\Classes\SystemFileAssociations\.txt\shell\OpenWithMDPlus\command"; ValueType: string; ValueName: ""; ValueData: """{app}\{#MyAppExeName}"" ""%1"""; Flags: uninsdeletekey; Tasks: fileassoc_txt
+
+Root: HKA; Subkey: "Software\Classes\SystemFileAssociations\.csv\shell\OpenWithMDPlus"; ValueType: string; ValueName: ""; ValueData: "Open with MDPlus"; Flags: uninsdeletekey; Tasks: fileassoc_csv
+Root: HKA; Subkey: "Software\Classes\SystemFileAssociations\.csv\shell\OpenWithMDPlus"; ValueType: string; ValueName: "Icon"; ValueData: """{app}\{#MyAppExeName}"",0"; Flags: uninsdeletekey; Tasks: fileassoc_csv
+Root: HKA; Subkey: "Software\Classes\SystemFileAssociations\.csv\shell\OpenWithMDPlus\command"; ValueType: string; ValueName: ""; ValueData: """{app}\{#MyAppExeName}"" ""%1"""; Flags: uninsdeletekey; Tasks: fileassoc_csv
+
+Root: HKA; Subkey: "Software\Classes\SystemFileAssociations\.tsv\shell\OpenWithMDPlus"; ValueType: string; ValueName: ""; ValueData: "Open with MDPlus"; Flags: uninsdeletekey; Tasks: fileassoc_tsv
+Root: HKA; Subkey: "Software\Classes\SystemFileAssociations\.tsv\shell\OpenWithMDPlus"; ValueType: string; ValueName: "Icon"; ValueData: """{app}\{#MyAppExeName}"",0"; Flags: uninsdeletekey; Tasks: fileassoc_tsv
+Root: HKA; Subkey: "Software\Classes\SystemFileAssociations\.tsv\shell\OpenWithMDPlus\command"; ValueType: string; ValueName: ""; ValueData: """{app}\{#MyAppExeName}"" ""%1"""; Flags: uninsdeletekey; Tasks: fileassoc_tsv
+
+Root: HKA; Subkey: "Software\Classes\SystemFileAssociations\.json\shell\OpenWithMDPlus"; ValueType: string; ValueName: ""; ValueData: "Open with MDPlus"; Flags: uninsdeletekey; Tasks: fileassoc_json
+Root: HKA; Subkey: "Software\Classes\SystemFileAssociations\.json\shell\OpenWithMDPlus"; ValueType: string; ValueName: "Icon"; ValueData: """{app}\{#MyAppExeName}"",0"; Flags: uninsdeletekey; Tasks: fileassoc_json
+Root: HKA; Subkey: "Software\Classes\SystemFileAssociations\.json\shell\OpenWithMDPlus\command"; ValueType: string; ValueName: ""; ValueData: """{app}\{#MyAppExeName}"" ""%1"""; Flags: uninsdeletekey; Tasks: fileassoc_json
 
 [Run]
 Filename: "{app}\{#MyAppExeName}"; Description: "{cm:LaunchProgram,{#StringChange(MyAppName, '&', '&&')}}"; Flags: nowait postinstall skipifsilent runasoriginaluser

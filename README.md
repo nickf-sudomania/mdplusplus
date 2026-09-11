@@ -12,7 +12,7 @@
   <img src="https://img.shields.io/badge/Dependencies-Zero%20Third--Party-blue?style=flat-square" alt="Zero Third-Party Dependencies" />
   <a href="LICENSE"><img src="https://img.shields.io/badge/License-MIT-yellow.svg?style=flat-square" alt="License MIT" /></a>
   <img src="https://img.shields.io/badge/Binary%20Size-0.7%20MB%20(738%20KB)-success?style=flat-square" alt="Binary Size 0.7 MB" />
-  <img src="https://img.shields.io/badge/Unit%20Tests-111%20Passing-brightgreen?style=flat-square" alt="111 Unit Tests Passing" />
+  <img src="https://img.shields.io/badge/Unit%20Tests-112%20Passing-brightgreen?style=flat-square" alt="112 Unit Tests Passing" />
   <img src="https://img.shields.io/badge/E2E%20Tests-58%20Passing-brightgreen?style=flat-square" alt="58 E2E Tests Passing" />
   <img src="https://img.shields.io/badge/Managed%20Heap-~8--12%20MB-success?style=flat-square" alt="Managed Heap ~8-12 MB" />
   <img src="https://img.shields.io/badge/Serialization%20(5k%20lines)-%3C%2050%20ms-brightgreen?style=flat-square" alt="Serialization < 50 ms" />
@@ -26,10 +26,10 @@ Looking to install or try MDPlus? Download pre-built binaries and installers dir
 
 | Asset | File | Size | Description | Direct Download | Repository Link |
 | :--- | :---: | :---: | :--- | :---: | :---: |
-| **Windows Setup Installer** | `MDPlus-Setup.exe` | **2.47 MB** | **Recommended.** Complete Windows installer: auto-detects and installs .NET 8 runtime if missing, registers `.md` file associations, creates Start Menu & Desktop shortcuts, and registers uninstaller. | [⬇️ **Download Setup**](https://github.com/nickf-sudomania/mdplusplus/raw/main/releases/MDPlus-Setup.exe) | [`releases/MDPlus-Setup.exe`](releases/MDPlus-Setup.exe) |
+| **Windows Setup Installer** | `MDPlus-Setup.exe` | **2.47 MB** | **Recommended.** Complete Windows installer: auto-detects and installs .NET 8 runtime if missing, registers `.md`, `.txt`, `.csv`, `.tsv`, `.json` file associations, creates Start Menu & Desktop shortcuts, and registers uninstaller. | [⬇️ **Download Setup**](https://github.com/nickf-sudomania/mdplusplus/raw/main/releases/MDPlus-Setup.exe) | [`releases/MDPlus-Setup.exe`](releases/MDPlus-Setup.exe) |
 | **Standalone Portable App** | `MDPlus.exe` | **758 KB** | Single-file zero-install executable. Runs immediately anywhere. *(Requires .NET 8 Desktop Runtime).* | [⬇️ **Download EXE**](https://github.com/nickf-sudomania/mdplusplus/raw/main/releases/MDPlus.exe) | [`releases/MDPlus.exe`](releases/MDPlus.exe) |
 | **Portable Zip Archive** | `MDPlus-win-x64.zip` | **363 KB** | Compressed zip package containing `MDPlus.exe` and sample markdown documents. | [⬇️ **Download ZIP**](https://github.com/nickf-sudomania/mdplusplus/raw/main/releases/MDPlus-win-x64.zip) | [`releases/MDPlus-win-x64.zip`](releases/MDPlus-win-x64.zip) |
-| **Source Code Archive** | `MDPlus-1.08-src.zip` | **650 KB** | Full source code archive for offline builds and audits. | [⬇️ **Download Source**](https://github.com/nickf-sudomania/mdplusplus/raw/main/releases/MDPlus-1.08-src.zip) | [`releases/MDPlus-1.08-src.zip`](releases/MDPlus-1.08-src.zip) |
+| **Source Code Archive** | `MDPlus-1.09-src.zip` | **650 KB** | Full source code archive for offline builds and audits. | [⬇️ **Download Source**](https://github.com/nickf-sudomania/mdplusplus/raw/main/releases/MDPlus-1.09-src.zip) | [`releases/MDPlus-1.09-src.zip`](releases/MDPlus-1.09-src.zip) |
 | **Inno Setup Script** | `MDPlus.iss` | **16 KB** | Source script used to build the Windows Setup installer with WinINet bootstrapper. | [📄 **View Script**](https://github.com/nickf-sudomania/mdplusplus/blob/main/installer/MDPlus.iss) | [`installer/MDPlus.iss`](installer/MDPlus.iss) |
 | **SHA-256 Checksums** | `SHA256SUMS.txt` | **< 1 KB** | Cryptographic hash digests for independent integrity verification. | [🛡️ **View Hashes**](https://github.com/nickf-sudomania/mdplusplus/raw/main/releases/SHA256SUMS.txt) | [`releases/SHA256SUMS.txt`](releases/SHA256SUMS.txt) |
 
@@ -77,6 +77,13 @@ Built directly on **.NET 8.0 WPF** using **Direct3D and DirectWrite** hardware-a
 - **Native HTML Tags & Disclosure Widgets:** Renders `<kbd>` (3D tactile keycaps), `<sub>`, `<sup>`, `<u>`, `<mark>`, and interactive collapsible `<details>` / `<summary>` widgets with zero WebView2 baggage.
 - **Modular Runtime Toggling:** Turn LaTeX or HTML rendering on or off on the fly via the **Plugins** menu with immediate re-rendering.
 - **Negligible Overhead:** Adds < 3 ms to cold startup and sub-millisecond document parsing overhead. Documents without math or HTML incur exactly 0 allocations and 0 ms penalty.
+
+### 📊 Multi-Format Text Loading, CSV/TSV Tables & JSON Viewer (v1.09)
+- **Universal Text Support:** Open, read, and edit standard text files alongside Markdown: plain text (`.txt`), logs (`.log`), comma/tab-separated values (`.csv`, `.tsv`), structured data (`.json`), and configuration files (`.ini`, `.cfg`, `.yaml`, `.yml`, `.xml`).
+- **High-Legibility Tabular Layouts:** Auto-detects delimiters and parses RFC 4180 escaped fields to render beautifully formatted tables with semi-bold headers, 1px grid borders, subtle alternating row stripes, and numeric right-alignment.
+- **Structured JSON Pretty-Printing & Syntax Highlighting:** Valid JSON is automatically formatted with 2-space indentation and token-colored (keys, strings, numbers, booleans, null) matching your active theme palette, with graceful fallback on syntax errors.
+- **Windows File Associations & Context Menu:** Optional installer tasks associate `.txt`, `.csv`, `.tsv`, and `.json` files and register a convenient right-click "Open with MDPlus" context menu verb.
+- **Instant Monospace View Mode:** Toggle between rendered formatted view and raw source text using `Ctrl+1` (Rendered) and `Ctrl+3` (Raw).
 
 ### 🔗 In-Reader Markdown Link Navigation & Heading Anchors (v1.08)
 - **Seamless Document Cross-Linking:** Clicking links to other `.md` or `.markdown` files (e.g. `[guide](guide.md)`, `[section](doc.md#heading-anchor)`, or `[path](C:\docs\readme.md)`) directly opens the target document inside MDPlus.
@@ -398,11 +405,11 @@ Inspired by the rigorous security and release standards of **Notepad++**, MDPlus
 ### Official Checksum Manifests
 Every release in [`releases/`](releases/) (and `dist/`) is accompanied by:
 - [`SHA256SUMS.txt`](releases/SHA256SUMS.txt) — Standard GNU coreutils checksum manifest.
-- [`MDPlus.<version>.checksums.sha256`](releases/MDPlus.1.08.checksums.sha256) — Notepad++ compatible checksum manifest.
+- [`MDPlus.<version>.checksums.sha256`](releases/MDPlus.1.09.checksums.sha256) — Notepad++ compatible checksum manifest.
 - `MDPlus-Setup.exe.sha256` — Windows Setup installer SHA-256 digest.
 - `MDPlus.exe.sha256` — Standalone binary SHA-256 digest.
 - `MDPlus-win-x64.zip.sha256` — Portable release zip archive SHA-256 digest.
-- `MDPlus-1.08-src.zip.sha256` — Source distribution archive SHA-256 digest.
+- `MDPlus-1.09-src.zip.sha256` — Source distribution archive SHA-256 digest.
 
 ### Independent Verification Methods
 
@@ -424,7 +431,7 @@ Get-FileHash dist\MDPlus.exe -Algorithm SHA256
 Get-FileHash dist\MDPlus-win-x64.zip -Algorithm SHA256
 
 # Verify source code distribution
-Get-FileHash dist\MDPlus-1.08-src.zip -Algorithm SHA256
+Get-FileHash dist\MDPlus-1.09-src.zip -Algorithm SHA256
 ```
 Compare the resulting 64-character hexadecimal hash with the values recorded in `dist\SHA256SUMS.txt`.
 
@@ -433,7 +440,7 @@ Compare the resulting 64-character hexadecimal hash with the values recorded in 
 certutil -hashfile dist\MDPlus-Setup.exe SHA256
 certutil -hashfile dist\MDPlus.exe SHA256
 certutil -hashfile dist\MDPlus-win-x64.zip SHA256
-certutil -hashfile dist\MDPlus-1.08-src.zip SHA256
+certutil -hashfile dist\MDPlus-1.09-src.zip SHA256
 ```
 
 #### Method 4: Built-in In-App Verification Tool (GUI)
@@ -458,7 +465,7 @@ mdplus/
 │   ├── MDPlus-Setup.exe            # Windows Setup installer (with auto-.NET 8 bootstrapper)
 │   ├── MDPlus.exe                  # Standalone portable zero-install executable
 │   ├── MDPlus-win-x64.zip          # Portable zip distribution archive
-│   ├── MDPlus-1.08-src.zip         # Full source distribution archive
+│   ├── MDPlus-1.09-src.zip         # Full source distribution archive
 │   └── SHA256SUMS.txt              # Cryptographic SHA-256 integrity checksums
 ├── MDPlus.sln                      # Visual Studio Solution
 ├── build.bat                       # Interactive build, test, run, publish & verify menu

@@ -253,19 +253,32 @@ namespace MDPlus
             try
             {
                 string text = File.ReadAllText(fullPath);
-                var doc = _parser.Parse(text);
-
-                string title = !string.IsNullOrEmpty(doc.Title) ? doc.Title : Path.GetFileName(fullPath);
+                var format = DocumentFormatHelper.DetectFromPath(fullPath);
+                string title = Path.GetFileName(fullPath);
 
                 var tab = new DocumentTabItem
                 {
                     FilePath = fullPath,
                     Title = title,
                     RawMarkdown = text,
-                    Document = doc,
-                    Headings = ExtractHeadings(doc),
+                    Format = format,
                     LineEndingName = text.Contains("\r\n") ? "CRLF" : "LF"
                 };
+
+                if (format == DocumentFormat.Markdown)
+                {
+                    var doc = _parser.Parse(text);
+                    tab.Document = doc;
+                    tab.Headings = ExtractHeadings(doc);
+                    if (!string.IsNullOrEmpty(doc.Title))
+                    {
+                        tab.Title = doc.Title;
+                    }
+                }
+                else
+                {
+                    tab.Headings = new List<HeadingItem>();
+                }
 
                 RenderDocumentTab(tab);
 
@@ -350,7 +363,7 @@ namespace MDPlus
             }
             catch (Exception ex)
             {
-                MessageBox.Show($"Failed to open markdown file:\n{ex.Message}", "Open Error", MessageBoxButton.OK, MessageBoxImage.Error);
+                MessageBox.Show($"Failed to open document:\n{ex.Message}", "Open Error", MessageBoxButton.OK, MessageBoxImage.Error);
             }
         }
 
@@ -451,32 +464,48 @@ Plugins can be enabled or disabled instantly via the Plugins menu without restar
 
         private void RenderDocumentTab(DocumentTabItem tab)
         {
-            var converter = new MarkdownToWpfConverter(tab.DirectoryName, ThemeManager.Instance.CurrentPalette, _settings.EnableLatexRendering, _settings.EnableHtmlRendering);
-            converter.AnchorNavigationRequested += (s, anchor) =>
+            if (tab.Format == DocumentFormat.Markdown)
             {
-                MarkdownViewer.ScrollToAnchor(anchor);
-                Dispatcher.BeginInvoke(new Action(() => MarkdownViewer.ScrollToAnchor(anchor)), System.Windows.Threading.DispatcherPriority.Loaded);
-            };
-            converter.FileNavigationRequested += (s, e) =>
-            {
-                bool? forceNewTab = Keyboard.Modifiers.HasFlag(ModifierKeys.Control) ? true : null;
-                string targetPath = e.FilePath;
-                string? targetAnchor = e.Anchor;
-                Dispatcher.BeginInvoke(new Action(() =>
+                var converter = new MarkdownToWpfConverter(tab.DirectoryName, ThemeManager.Instance.CurrentPalette, _settings.EnableLatexRendering, _settings.EnableHtmlRendering);
+                converter.AnchorNavigationRequested += (s, anchor) =>
                 {
-                    OpenDocument(targetPath, targetAnchor, openInNewTab: forceNewTab);
-                }), System.Windows.Threading.DispatcherPriority.Normal);
-            };
-            converter.NavigationFailed += (s, missingPath) =>
-            {
-                Dispatcher.BeginInvoke(new Action(() =>
+                    MarkdownViewer.ScrollToAnchor(anchor);
+                    Dispatcher.BeginInvoke(new Action(() => MarkdownViewer.ScrollToAnchor(anchor)), System.Windows.Threading.DispatcherPriority.Loaded);
+                };
+                converter.FileNavigationRequested += (s, e) =>
                 {
-                    string fileName = missingPath;
-                    try { fileName = Path.GetFileName(missingPath); } catch { }
-                    StatusFileText.Text = $"File not found: {(string.IsNullOrEmpty(fileName) ? missingPath : fileName)}";
-                }), System.Windows.Threading.DispatcherPriority.Normal);
-            };
-            tab.FlowDocument = converter.Convert(tab.Document);
+                    bool? forceNewTab = Keyboard.Modifiers.HasFlag(ModifierKeys.Control) ? true : null;
+                    string targetPath = e.FilePath;
+                    string? targetAnchor = e.Anchor;
+                    Dispatcher.BeginInvoke(new Action(() =>
+                    {
+                        OpenDocument(targetPath, targetAnchor, openInNewTab: forceNewTab);
+                    }), System.Windows.Threading.DispatcherPriority.Normal);
+                };
+                converter.NavigationFailed += (s, missingPath) =>
+                {
+                    Dispatcher.BeginInvoke(new Action(() =>
+                    {
+                        string fileName = missingPath;
+                        try { fileName = Path.GetFileName(missingPath); } catch { }
+                        StatusFileText.Text = $"File not found: {(string.IsNullOrEmpty(fileName) ? missingPath : fileName)}";
+                    }), System.Windows.Threading.DispatcherPriority.Normal);
+                };
+                tab.FlowDocument = converter.Convert(tab.Document);
+            }
+            else if (tab.Format is DocumentFormat.Csv or DocumentFormat.Tsv)
+            {
+                bool isTsv = tab.Format == DocumentFormat.Tsv;
+                tab.FlowDocument = CsvToFlowDocumentConverter.Convert(tab.RawText, ThemeManager.Instance.CurrentPalette, isTsv);
+            }
+            else if (tab.Format == DocumentFormat.Json)
+            {
+                tab.FlowDocument = JsonToFlowDocumentConverter.Convert(tab.RawText, ThemeManager.Instance.CurrentPalette);
+            }
+            else
+            {
+                tab.FlowDocument = PlainTextToFlowDocumentConverter.Convert(tab.RawText, tab.Format, ThemeManager.Instance.CurrentPalette);
+            }
         }
 
         private List<HeadingItem> ExtractHeadings(MarkdownDocument doc)
@@ -580,6 +609,24 @@ Plugins can be enabled or disabled instantly via the Plugins menu without restar
                 };
 
                 var sp = new StackPanel { Orientation = Orientation.Horizontal };
+
+                var badgeBorder = new Border
+                {
+                    Background = GetBadgeBackground(tab.Format, palette),
+                    CornerRadius = new CornerRadius(2),
+                    Padding = new Thickness(3, 1, 3, 1),
+                    Margin = new Thickness(0, 0, 6, 0),
+                    VerticalAlignment = VerticalAlignment.Center
+                };
+                badgeBorder.Child = new TextBlock
+                {
+                    Text = tab.FormatBadge,
+                    FontSize = 9,
+                    FontWeight = FontWeights.Bold,
+                    Foreground = GetBadgeForeground(tab.Format, palette)
+                };
+                sp.Children.Add(badgeBorder);
+
                 var titleBlock = new TextBlock
                 {
                     Text = tab.DisplayTitle,
@@ -652,6 +699,25 @@ Plugins can be enabled or disabled instantly via the Plugins menu without restar
 
             NewTabButton.Foreground = palette.MutedFg;
             TabStripPanel.Children.Add(NewTabButton);
+        }
+
+        private static Brush GetBadgeBackground(DocumentFormat format, ThemePalette palette)
+        {
+            return palette.CodeBg;
+        }
+
+        private static Brush GetBadgeForeground(DocumentFormat format, ThemePalette palette)
+        {
+            return format switch
+            {
+                DocumentFormat.Markdown => palette.Accent,
+                DocumentFormat.Csv or DocumentFormat.Tsv => palette.SyntaxType,
+                DocumentFormat.Json => palette.SyntaxProperty,
+                DocumentFormat.Log => palette.SyntaxKeyword,
+                DocumentFormat.Yaml or DocumentFormat.Xml => palette.SyntaxFunction,
+                DocumentFormat.Ini or DocumentFormat.Cfg => palette.SyntaxNumber,
+                _ => palette.MutedFg
+            };
         }
 
         private bool CloseTab(DocumentTabItem tab)
@@ -755,9 +821,17 @@ Plugins can be enabled or disabled instantly via the Plugins menu without restar
 
                         tab.RawMarkdown = text;
                         tab.LineEndingName = text.Contains("\r\n") ? "CRLF" : "LF";
-                        tab.Document = _parser.Parse(text);
-                        tab.Headings = ExtractHeadings(tab.Document);
-                        tab.Title = !string.IsNullOrEmpty(tab.Document.Title) ? tab.Document.Title : Path.GetFileName(tab.FilePath);
+                        if (tab.Format == DocumentFormat.Markdown)
+                        {
+                            tab.Document = _parser.Parse(text);
+                            tab.Headings = ExtractHeadings(tab.Document);
+                            tab.Title = !string.IsNullOrEmpty(tab.Document.Title) ? tab.Document.Title : Path.GetFileName(tab.FilePath);
+                        }
+                        else
+                        {
+                            tab.Headings = new List<HeadingItem>();
+                            tab.Title = Path.GetFileName(tab.FilePath);
+                        }
                         RenderDocumentTab(tab);
 
                         if (tab == _activeTab)
@@ -893,12 +967,21 @@ Plugins can be enabled or disabled instantly via the Plugins menu without restar
             {
                 if (oldMode != ViewDisplayMode.Raw && _activeTab.FlowDocument != null)
                 {
-                    string serialized = MarkdownSerializer.Serialize(_activeTab.FlowDocument);
-                    _activeTab.RawMarkdown = serialized;
+                    if (_activeTab.Format == DocumentFormat.Markdown)
+                    {
+                        string serialized = MarkdownSerializer.Serialize(_activeTab.FlowDocument);
+                        _activeTab.RawMarkdown = serialized;
+                    }
+                    else if (_activeTab.Format is DocumentFormat.Csv or DocumentFormat.Tsv)
+                    {
+                        char delimiter = _activeTab.Format == DocumentFormat.Tsv ? '\t' : ',';
+                        string serialized = CsvSerializer.Serialize(_activeTab.FlowDocument, delimiter);
+                        _activeTab.RawMarkdown = serialized;
+                    }
                     _suppressDirtyTracking = true;
                     try
                     {
-                        RawMarkdownTextBox.Text = serialized;
+                        RawMarkdownTextBox.Text = _activeTab.RawMarkdown;
                     }
                     finally
                     {
@@ -912,8 +995,11 @@ Plugins can be enabled or disabled instantly via the Plugins menu without restar
                 {
                     string raw = RawMarkdownTextBox.Text;
                     _activeTab.RawMarkdown = raw;
-                    _activeTab.Document = _parser.Parse(raw);
-                    _activeTab.Headings = ExtractHeadings(_activeTab.Document);
+                    if (_activeTab.Format == DocumentFormat.Markdown)
+                    {
+                        _activeTab.Document = _parser.Parse(raw);
+                        _activeTab.Headings = ExtractHeadings(_activeTab.Document);
+                    }
                     RenderDocumentTab(_activeTab);
                     _suppressDirtyTracking = true;
                     try
@@ -934,8 +1020,11 @@ Plugins can be enabled or disabled instantly via the Plugins menu without restar
                 {
                     string raw = RawMarkdownTextBox.Text;
                     _activeTab.RawMarkdown = raw;
-                    _activeTab.Document = _parser.Parse(raw);
-                    _activeTab.Headings = ExtractHeadings(_activeTab.Document);
+                    if (_activeTab.Format == DocumentFormat.Markdown)
+                    {
+                        _activeTab.Document = _parser.Parse(raw);
+                        _activeTab.Headings = ExtractHeadings(_activeTab.Document);
+                    }
                     RenderDocumentTab(_activeTab);
                     _suppressDirtyTracking = true;
                     try
@@ -951,12 +1040,21 @@ Plugins can be enabled or disabled instantly via the Plugins menu without restar
                 }
                 else if (oldMode == ViewDisplayMode.Rendered && _activeTab.FlowDocument != null)
                 {
-                    string serialized = MarkdownSerializer.Serialize(_activeTab.FlowDocument);
-                    _activeTab.RawMarkdown = serialized;
+                    if (_activeTab.Format == DocumentFormat.Markdown)
+                    {
+                        string serialized = MarkdownSerializer.Serialize(_activeTab.FlowDocument);
+                        _activeTab.RawMarkdown = serialized;
+                    }
+                    else if (_activeTab.Format is DocumentFormat.Csv or DocumentFormat.Tsv)
+                    {
+                        char delimiter = _activeTab.Format == DocumentFormat.Tsv ? '\t' : ',';
+                        string serialized = CsvSerializer.Serialize(_activeTab.FlowDocument, delimiter);
+                        _activeTab.RawMarkdown = serialized;
+                    }
                     _suppressDirtyTracking = true;
                     try
                     {
-                        RawMarkdownTextBox.Text = serialized;
+                        RawMarkdownTextBox.Text = _activeTab.RawMarkdown;
                     }
                     finally
                     {
@@ -1203,8 +1301,8 @@ Plugins can be enabled or disabled instantly via the Plugins menu without restar
         {
             var dlg = new OpenFileDialog
             {
-                Title = "Open Markdown Document",
-                Filter = "Markdown Files (*.md;*.markdown;*.mdown;*.mkd)|*.md;*.markdown;*.mdown;*.mkd|Text Files (*.txt)|*.txt|All Files (*.*)|*.*",
+                Title = "Open Document",
+                Filter = DocumentFormatHelper.GetOpenFileDialogFilter(),
                 Multiselect = true
             };
 
@@ -1238,7 +1336,8 @@ Plugins can be enabled or disabled instantly via the Plugins menu without restar
                 Title = $"Untitled {_untitledIndex++}",
                 RawMarkdown = string.Empty,
                 Document = doc,
-                Headings = new List<HeadingItem>()
+                Headings = new List<HeadingItem>(),
+                Format = DocumentFormat.Markdown
             };
             RenderDocumentTab(tab);
             _tabs.Add(tab);
@@ -1280,7 +1379,15 @@ Plugins can be enabled or disabled instantly via the Plugins menu without restar
                 {
                     if (tab.FlowDocument != null)
                     {
-                        tab.RawMarkdown = MarkdownSerializer.Serialize(tab.FlowDocument);
+                        if (tab.Format == DocumentFormat.Markdown)
+                        {
+                            tab.RawMarkdown = MarkdownSerializer.Serialize(tab.FlowDocument);
+                        }
+                        else if (tab.Format is DocumentFormat.Csv or DocumentFormat.Tsv)
+                        {
+                            char delimiter = tab.Format == DocumentFormat.Tsv ? '\t' : ',';
+                            tab.RawMarkdown = CsvSerializer.Serialize(tab.FlowDocument, delimiter);
+                        }
                         if (tab.ViewMode == ViewDisplayMode.Split)
                         {
                             _suppressDirtyTracking = true;
@@ -1300,19 +1407,40 @@ Plugins can be enabled or disabled instantly via the Plugins menu without restar
             {
                 if (tab.FlowDocument != null)
                 {
-                    tab.RawMarkdown = MarkdownSerializer.Serialize(tab.FlowDocument);
+                    if (tab.Format == DocumentFormat.Markdown)
+                    {
+                        tab.RawMarkdown = MarkdownSerializer.Serialize(tab.FlowDocument);
+                    }
+                    else if (tab.Format is DocumentFormat.Csv or DocumentFormat.Tsv)
+                    {
+                        char delimiter = tab.Format == DocumentFormat.Tsv ? '\t' : ',';
+                        tab.RawMarkdown = CsvSerializer.Serialize(tab.FlowDocument, delimiter);
+                    }
                 }
             }
 
             // 2. Handle Untitled or Save As
             if (string.IsNullOrEmpty(tab.FilePath) || forceSaveAs)
             {
+                string defaultExt = DocumentFormatHelper.GetDefaultExtension(tab.Format);
+                string initialFileName;
+                if (!string.IsNullOrEmpty(tab.FilePath))
+                {
+                    initialFileName = Path.GetFileName(tab.FilePath);
+                }
+                else
+                {
+                    initialFileName = tab.FileName.EndsWith(defaultExt, StringComparison.OrdinalIgnoreCase)
+                        ? tab.FileName
+                        : $"{tab.FileName}{defaultExt}";
+                }
+
                 var dlg = new SaveFileDialog
                 {
-                    Title = "Save Markdown File",
-                    Filter = "Markdown Files (*.md)|*.md|All Files (*.*)|*.*",
-                    FileName = !string.IsNullOrEmpty(tab.FilePath) ? Path.GetFileName(tab.FilePath) : (tab.FileName.EndsWith(".md", StringComparison.OrdinalIgnoreCase) ? tab.FileName : $"{tab.FileName}.md"),
-                    DefaultExt = ".md"
+                    Title = $"Save {tab.FormatDisplayName}",
+                    Filter = DocumentFormatHelper.GetSaveFileDialogFilter(tab.Format),
+                    FileName = initialFileName,
+                    DefaultExt = defaultExt
                 };
 
                 if (dlg.ShowDialog(this) != true)
@@ -1326,6 +1454,7 @@ Plugins can be enabled or disabled instantly via the Plugins menu without restar
                 }
 
                 tab.FilePath = dlg.FileName;
+                tab.Format = DocumentFormatHelper.DetectFromPath(tab.FilePath);
                 tab.Title = Path.GetFileName(tab.FilePath);
             }
 

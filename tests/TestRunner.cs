@@ -191,6 +191,23 @@ namespace MDPlus.Tests
             RunTest("MarkdownScrollViewer Hyperlink Hand Cursor & Click Routing", TestMarkdownScrollViewerCursorAndClickHandling);
             RunTest("In-Reader Navigation Missing File Feedback & Sample Docs Fallback", TestNavigationFailedAndSampleDocsFallback);
 
+            // 22. Multi-Format Document Loading & Detection Tests (Milestone M1)
+            RunTest("Multi-Format Document Format Detection", TestDocumentFormatDetection);
+            RunTest("Multi-Format Document Badges & Display Names", TestDocumentFormatBadgesAndDisplayNames);
+            RunTest("Multi-Format File Dialog Filters", TestFileDialogFilters);
+            RunTest("Multi-Format DocumentTabItem Properties & Stats", TestDocumentTabItemMultiFormat);
+
+            // 23. High-Legibility Formatted Document Layouts (Milestone M2)
+            RunTest("CSV & TSV RFC 4180 Parsing Fidelity", TestCsvAndTsvRfc4180Parsing);
+            RunTest("CSV & TSV Table FlowDocument Layout", TestCsvToFlowDocumentTableLayout);
+            RunTest("CSV & TSV Bidirectional Round-Trip Serialization", TestCsvRoundTripSerialization);
+            RunTest("JSON 2-Space Pretty-Printing & Formatting", TestJsonPrettyPrinting);
+            RunTest("JSON Token Syntax Highlighting Across All 8 Themes", TestJsonSyntaxHighlightingAll8Themes);
+            RunTest("JSON Visual Line Cap & Notice Banner", TestJsonVisualLineCapAndNoticeBanner);
+            RunTest("JSON Malformed Resilient Fallback", TestJsonMalformedResilientFallback);
+            RunTest("Plain Text & Log Typography Layout", TestPlainTextAndLogTypography);
+            RunTest("Performance Benchmark: 5,000-Line CSV and JSON < 50ms", TestPerformanceBenchmark5000RowsCsvAndJson);
+
             sw.Stop();
 
             Console.WriteLine("\n==================================================");
@@ -4070,6 +4087,526 @@ SHA-256: 4444444444444444444444444444444444444444444444444444444444444444
                     try { Directory.Delete(tempDir, true); } catch { }
                 }
             }
+        }
+
+        private static void TestDocumentFormatDetection()
+        {
+            AssertEqual(DocumentFormat.Markdown, DocumentFormatHelper.DetectFromPath("doc.md"), "Detect .md");
+            AssertEqual(DocumentFormat.Markdown, DocumentFormatHelper.DetectFromPath("README.MARKDOWN"), "Detect .MARKDOWN");
+            AssertEqual(DocumentFormat.Markdown, DocumentFormatHelper.DetectFromPath("notes.mdown"), "Detect .mdown");
+            AssertEqual(DocumentFormat.Markdown, DocumentFormatHelper.DetectFromPath("file.mkd"), "Detect .mkd");
+            AssertEqual(DocumentFormat.PlainText, DocumentFormatHelper.DetectFromPath("notes.txt"), "Detect .txt");
+            AssertEqual(DocumentFormat.Log, DocumentFormatHelper.DetectFromPath("app.log"), "Detect .log");
+            AssertEqual(DocumentFormat.Csv, DocumentFormatHelper.DetectFromPath("data.csv"), "Detect .csv");
+            AssertEqual(DocumentFormat.Tsv, DocumentFormatHelper.DetectFromPath("data.tsv"), "Detect .tsv");
+            AssertEqual(DocumentFormat.Json, DocumentFormatHelper.DetectFromPath("config.json"), "Detect .json");
+            AssertEqual(DocumentFormat.Ini, DocumentFormatHelper.DetectFromPath("settings.ini"), "Detect .ini");
+            AssertEqual(DocumentFormat.Cfg, DocumentFormatHelper.DetectFromPath("build.cfg"), "Detect .cfg");
+            AssertEqual(DocumentFormat.Yaml, DocumentFormatHelper.DetectFromPath("docker-compose.yaml"), "Detect .yaml");
+            AssertEqual(DocumentFormat.Yaml, DocumentFormatHelper.DetectFromPath("deploy.yml"), "Detect .yml");
+            AssertEqual(DocumentFormat.Xml, DocumentFormatHelper.DetectFromPath("pom.xml"), "Detect .xml");
+            AssertEqual(DocumentFormat.PlainText, DocumentFormatHelper.DetectFromPath("unknown.xyz"), "Detect unknown extension");
+            AssertEqual(DocumentFormat.Markdown, DocumentFormatHelper.DetectFromPath(""), "Detect empty path");
+
+            AssertEqual(DocumentFormat.Csv, DocumentFormatHelper.DetectFromExtension("csv"), "Detect extension without dot");
+            AssertEqual(DocumentFormat.Json, DocumentFormatHelper.DetectFromExtension(".JSON"), "Detect uppercase extension");
+            AssertEqual(DocumentFormat.PlainText, DocumentFormatHelper.DetectFromExtension(""), "Detect empty extension");
+
+            Assert(DocumentFormatHelper.IsTabular(DocumentFormat.Csv), "CSV is tabular");
+            Assert(DocumentFormatHelper.IsTabular(DocumentFormat.Tsv), "TSV is tabular");
+            Assert(!DocumentFormatHelper.IsTabular(DocumentFormat.Markdown), "Markdown is not tabular");
+            Assert(DocumentFormatHelper.IsConfig(DocumentFormat.Ini), "INI is config");
+            Assert(DocumentFormatHelper.IsConfig(DocumentFormat.Cfg), "CFG is config");
+            Assert(DocumentFormatHelper.IsConfig(DocumentFormat.Yaml), "YAML is config");
+            Assert(DocumentFormatHelper.IsConfig(DocumentFormat.Xml), "XML is config");
+        }
+
+        private static void TestDocumentFormatBadgesAndDisplayNames()
+        {
+            AssertEqual("MD", DocumentFormatHelper.GetFormatBadge(DocumentFormat.Markdown), "Badge MD");
+            AssertEqual("TXT", DocumentFormatHelper.GetFormatBadge(DocumentFormat.PlainText), "Badge TXT");
+            AssertEqual("LOG", DocumentFormatHelper.GetFormatBadge(DocumentFormat.Log), "Badge LOG");
+            AssertEqual("CSV", DocumentFormatHelper.GetFormatBadge(DocumentFormat.Csv), "Badge CSV");
+            AssertEqual("TSV", DocumentFormatHelper.GetFormatBadge(DocumentFormat.Tsv), "Badge TSV");
+            AssertEqual("JSON", DocumentFormatHelper.GetFormatBadge(DocumentFormat.Json), "Badge JSON");
+            AssertEqual("INI", DocumentFormatHelper.GetFormatBadge(DocumentFormat.Ini), "Badge INI");
+            AssertEqual("CFG", DocumentFormatHelper.GetFormatBadge(DocumentFormat.Cfg), "Badge CFG");
+            AssertEqual("YAML", DocumentFormatHelper.GetFormatBadge(DocumentFormat.Yaml), "Badge YAML");
+            AssertEqual("XML", DocumentFormatHelper.GetFormatBadge(DocumentFormat.Xml), "Badge XML");
+
+            AssertEqual("Markdown Document", DocumentFormatHelper.GetFormatDisplayName(DocumentFormat.Markdown), "DisplayName MD");
+            AssertEqual("Plain Text", DocumentFormatHelper.GetFormatDisplayName(DocumentFormat.PlainText), "DisplayName TXT");
+            AssertEqual("Log File", DocumentFormatHelper.GetFormatDisplayName(DocumentFormat.Log), "DisplayName LOG");
+            AssertEqual("CSV Document", DocumentFormatHelper.GetFormatDisplayName(DocumentFormat.Csv), "DisplayName CSV");
+            AssertEqual("TSV Document", DocumentFormatHelper.GetFormatDisplayName(DocumentFormat.Tsv), "DisplayName TSV");
+            AssertEqual("JSON Document", DocumentFormatHelper.GetFormatDisplayName(DocumentFormat.Json), "DisplayName JSON");
+            AssertEqual("INI Configuration", DocumentFormatHelper.GetFormatDisplayName(DocumentFormat.Ini), "DisplayName INI");
+            AssertEqual("Configuration File", DocumentFormatHelper.GetFormatDisplayName(DocumentFormat.Cfg), "DisplayName CFG");
+            AssertEqual("YAML Document", DocumentFormatHelper.GetFormatDisplayName(DocumentFormat.Yaml), "DisplayName YAML");
+            AssertEqual("XML Document", DocumentFormatHelper.GetFormatDisplayName(DocumentFormat.Xml), "DisplayName XML");
+
+            AssertEqual(".md", DocumentFormatHelper.GetDefaultExtension(DocumentFormat.Markdown), "DefaultExt MD");
+            AssertEqual(".txt", DocumentFormatHelper.GetDefaultExtension(DocumentFormat.PlainText), "DefaultExt TXT");
+            AssertEqual(".log", DocumentFormatHelper.GetDefaultExtension(DocumentFormat.Log), "DefaultExt LOG");
+            AssertEqual(".csv", DocumentFormatHelper.GetDefaultExtension(DocumentFormat.Csv), "DefaultExt CSV");
+            AssertEqual(".tsv", DocumentFormatHelper.GetDefaultExtension(DocumentFormat.Tsv), "DefaultExt TSV");
+            AssertEqual(".json", DocumentFormatHelper.GetDefaultExtension(DocumentFormat.Json), "DefaultExt JSON");
+            AssertEqual(".ini", DocumentFormatHelper.GetDefaultExtension(DocumentFormat.Ini), "DefaultExt INI");
+            AssertEqual(".cfg", DocumentFormatHelper.GetDefaultExtension(DocumentFormat.Cfg), "DefaultExt CFG");
+            AssertEqual(".yaml", DocumentFormatHelper.GetDefaultExtension(DocumentFormat.Yaml), "DefaultExt YAML");
+            AssertEqual(".xml", DocumentFormatHelper.GetDefaultExtension(DocumentFormat.Xml), "DefaultExt XML");
+        }
+
+        private static void TestFileDialogFilters()
+        {
+            string openFilter = DocumentFormatHelper.GetOpenFileDialogFilter();
+            Assert(openFilter.StartsWith("All Supported Files"), "Open filter must start with All Supported Files");
+            Assert(openFilter.Contains("*.md;*.markdown;*.mdown;*.mkd;*.txt;*.log;*.csv;*.tsv;*.json;*.ini;*.cfg;*.yaml;*.yml;*.xml"), "Open filter must combine all 10 formats in first filter");
+            Assert(openFilter.Contains("Markdown Files"), "Open filter must contain Markdown Files category");
+            Assert(openFilter.Contains("Text & Log Files"), "Open filter must contain Text & Log Files category");
+            Assert(openFilter.Contains("Tabular Data"), "Open filter must contain Tabular Data category");
+            Assert(openFilter.Contains("JSON Files"), "Open filter must contain JSON Files category");
+            Assert(openFilter.Contains("Configuration Files"), "Open filter must contain Configuration Files category");
+
+            string csvFilter = DocumentFormatHelper.GetSaveFileDialogFilter(DocumentFormat.Csv);
+            Assert(csvFilter.StartsWith("CSV Files (*.csv)"), "CSV save filter starts with CSV Files");
+
+            string jsonFilter = DocumentFormatHelper.GetSaveFileDialogFilter(DocumentFormat.Json);
+            Assert(jsonFilter.StartsWith("JSON Files (*.json)"), "JSON save filter starts with JSON Files");
+
+            string mdFilter = DocumentFormatHelper.GetSaveFileDialogFilter(DocumentFormat.Markdown);
+            Assert(mdFilter.StartsWith("Markdown Files (*.md)"), "MD save filter starts with Markdown Files");
+        }
+
+        private static void TestDocumentTabItemMultiFormat()
+        {
+            var tab = new DocumentTabItem();
+            AssertEqual(DocumentFormat.Markdown, tab.Format, "Initial format must be Markdown");
+            AssertEqual("MD", tab.FormatBadge, "Initial badge must be MD");
+
+            var changedProps = new List<string>();
+            tab.PropertyChanged += (s, e) =>
+            {
+                if (!string.IsNullOrEmpty(e.PropertyName)) changedProps.Add(e.PropertyName);
+            };
+
+            tab.RawText = "heading1,heading2\nval1,val2\nval3,val4";
+            AssertEqual("heading1,heading2\nval1,val2\nval3,val4", tab.RawMarkdown, "RawText aliases RawMarkdown");
+            Assert(changedProps.Contains("RawMarkdown"), "Setting RawText raises RawMarkdown PropertyChanged");
+            Assert(changedProps.Contains("StatsText"), "Setting RawText raises StatsText PropertyChanged");
+
+            changedProps.Clear();
+            tab.Format = DocumentFormat.Csv;
+            AssertEqual(DocumentFormat.Csv, tab.Format, "Format set to Csv");
+            AssertEqual("CSV", tab.FormatBadge, "FormatBadge set to CSV");
+            AssertEqual("CSV Document", tab.FormatDisplayName, "FormatDisplayName set to CSV Document");
+            Assert(changedProps.Contains("Format"), "Format change notification");
+            Assert(changedProps.Contains("FormatBadge"), "FormatBadge change notification");
+            Assert(changedProps.Contains("FormatDisplayName"), "FormatDisplayName change notification");
+            Assert(changedProps.Contains("StatsText"), "StatsText change notification on format change");
+
+            string csvStats = tab.StatsText;
+            Assert(csvStats.Contains("3 rows"), "CSV stats contains row count");
+            Assert(csvStats.Contains("CSV"), "CSV stats contains format badge");
+
+            tab.Format = DocumentFormat.Json;
+            string jsonStats = tab.StatsText;
+            Assert(jsonStats.Contains("3 lines"), "JSON stats contains line count");
+            Assert(jsonStats.Contains("JSON Document"), "JSON stats contains display name");
+
+            tab.Format = DocumentFormat.Markdown;
+            tab.Document = new MarkdownDocument { WordCount = 42, CharacterCount = 200 };
+            string mdStats = tab.StatsText;
+            Assert(mdStats.Contains("42 words"), "MD stats contains word count");
+            Assert(mdStats.Contains("200 chars"), "MD stats contains char count");
+        }
+
+        // 23. High-Legibility Formatted Document Layouts (Milestone M2)
+        private static void TestCsvAndTsvRfc4180Parsing()
+        {
+            // 1. Standard CSV
+            string standard = "Name,Age,City\r\nAlice,30,New York\r\nBob,25,San Francisco";
+            var rows = CsvParser.Parse(standard);
+            AssertEqual(3, rows.Count, "Standard CSV row count");
+            AssertEqual(3, rows[0].Count, "Standard CSV col count");
+            AssertEqual("Alice", rows[1][0], "Alice name");
+            AssertEqual("30", rows[1][1], "Alice age");
+            AssertEqual("New York", rows[1][2], "Alice city");
+
+            // 2. Commas in quotes
+            string quotedCommas = "\"Smith, John\",45,\"Senior VP, Engineering\"";
+            var qcRows = CsvParser.Parse(quotedCommas);
+            AssertEqual(1, qcRows.Count, "Quoted commas row count");
+            AssertEqual(3, qcRows[0].Count, "Quoted commas col count");
+            AssertEqual("Smith, John", qcRows[0][0], "Quoted comma field 0");
+            AssertEqual("45", qcRows[0][1], "Quoted comma field 1");
+            AssertEqual("Senior VP, Engineering", qcRows[0][2], "Quoted comma field 2");
+
+            // 3. Escaped double quotes
+            string escapedQuotes = "Title,Quote\r\nBook,\"He said \"\"Greetings!\"\" and smiled\"";
+            var eqRows = CsvParser.Parse(escapedQuotes);
+            AssertEqual(2, eqRows.Count, "Escaped quotes row count");
+            AssertEqual("He said \"Greetings!\" and smiled", eqRows[1][1], "Escaped quote field content");
+
+            // 4. Embedded newlines in quotes
+            string embeddedNewlines = "Header1,Header2\r\n\"Line 1\r\nLine 2\",Value2\r\nSecond,Row";
+            var enRows = CsvParser.Parse(embeddedNewlines);
+            AssertEqual(3, enRows.Count, "Embedded newlines row count");
+            AssertEqual("Line 1\r\nLine 2", enRows[1][0], "Embedded newline field content");
+            AssertEqual("Value2", enRows[1][1], "Embedded newline second field");
+
+            // 5. TSV parsing with tabs
+            string tsv = "ID\tProduct\tPrice\r\n101\tGadget\t$9.99\r\n102\tWidget\t$19.99";
+            var tsvRows = CsvParser.Parse(tsv, '\t');
+            AssertEqual(3, tsvRows.Count, "TSV row count");
+            AssertEqual(3, tsvRows[0].Count, "TSV col count");
+            AssertEqual("Gadget", tsvRows[1][1], "TSV product cell");
+            AssertEqual("$19.99", tsvRows[2][2], "TSV price cell");
+
+            // 6. Jagged row harmonization
+            string jagged = "A,B,C\r\n1,2\r\n1,2,3,4";
+            var jRows = CsvParser.Parse(jagged);
+            AssertEqual(3, jRows.Count, "Jagged rows row count");
+            AssertEqual(4, jRows[0].Count, "Row 0 padded to 4 cols");
+            AssertEqual(4, jRows[1].Count, "Row 1 padded to 4 cols");
+            AssertEqual(string.Empty, jRows[1][2], "Row 1 padded element 2 is empty");
+            AssertEqual(string.Empty, jRows[1][3], "Row 1 padded element 3 is empty");
+
+            // 7. Trailing newline suppression
+            string trailingNl = "A,B\r\n1,2\r\n";
+            var tRows = CsvParser.Parse(trailingNl);
+            AssertEqual(2, tRows.Count, "Trailing newline does not create ghost row");
+
+            // 8. Resilient unclosed quote at EOF
+            string unclosed = "A,B\r\n1,\"unclosed text at end of file";
+            var uRows = CsvParser.Parse(unclosed);
+            AssertEqual(2, uRows.Count, "Unclosed quote row count");
+            AssertEqual("unclosed text at end of file", uRows[1][1], "Unclosed quote content preserved");
+
+            // 9. Mid-field unescaped double quote handling
+            string midField = "Item,Description\r\nPipe,12\" steel pipe\r\na,b\"c,d\r\ne,f,g";
+            var mfRows = CsvParser.Parse(midField);
+            AssertEqual(4, mfRows.Count, "Mid-field quote preserves record count (4 rows)");
+            AssertEqual("12\" steel pipe", mfRows[1][1], "Mid-field quote in pipe preserved as literal");
+            AssertEqual("b\"c", mfRows[2][1], "Mid-field quote in b\"c preserved as literal");
+            AssertEqual("e", mfRows[3][0], "Subsequent row not swallowed by mid-field quote");
+        }
+
+        private static void TestCsvToFlowDocumentTableLayout()
+        {
+            var palette = ThemePalette.GetPalette(ThemePreset.GitHubDark);
+            string csv = "Product,Qty,Price,Margin\r\nKeyboard,150,$79.99,35.5%\r\nMouse,200,$29.99,40.0%\r\nMonitor,50,$299.00,20.0%";
+            var doc = CsvToFlowDocumentConverter.Convert(csv, palette);
+
+            Assert(doc != null, "FlowDocument should not be null");
+            AssertEqual(palette.EditorBg.Color, ((SolidColorBrush)doc!.Background).Color, "Doc background matches theme");
+
+            WpfTable? table = null;
+            foreach (var b in doc.Blocks)
+            {
+                if (b is WpfTable t) { table = t; break; }
+            }
+            Assert(table != null, "FlowDocument must contain a Table");
+            AssertEqual(4, table!.Columns.Count, "Table column count");
+            AssertEqual(2, table.RowGroups.Count, "Table must have Header and Body row groups");
+
+            // Header Row Group
+            var headerGroup = table.RowGroups[0];
+            AssertEqual(1, headerGroup.Rows.Count, "Header group has 1 row");
+            var headerRow = headerGroup.Rows[0];
+            AssertEqual(palette.TableHeaderBg.Color, ((SolidColorBrush)headerRow.Background).Color, "Header row background");
+            AssertEqual(4, headerRow.Cells.Count, "Header cell count");
+
+            // Verify header typography
+            var headerPara = (Paragraph)headerRow.Cells[0].Blocks.FirstBlock!;
+            AssertEqual(FontWeights.SemiBold, headerPara.FontWeight, "Header font weight semi-bold");
+            AssertEqual(palette.HeadingFg.Color, ((SolidColorBrush)headerPara.Foreground).Color, "Header foreground");
+
+            // Body Row Group
+            var bodyGroup = table.RowGroups[1];
+            AssertEqual(3, bodyGroup.Rows.Count, "Body group has 3 rows");
+
+            // Alternating zebra striping: row 0 transparent, row 1 alt row background, row 2 transparent
+            AssertEqual(Brushes.Transparent.Color, ((SolidColorBrush)bodyGroup.Rows[0].Background).Color, "Body row 0 transparent");
+            AssertEqual(palette.TableAltRowBg.Color, ((SolidColorBrush)bodyGroup.Rows[1].Background).Color, "Body row 1 zebra stripe");
+            AssertEqual(Brushes.Transparent.Color, ((SolidColorBrush)bodyGroup.Rows[2].Background).Color, "Body row 2 transparent");
+
+            // Alignment detection
+            var row0P0 = (Paragraph)bodyGroup.Rows[0].Cells[0].Blocks.FirstBlock!;
+            var row0P1 = (Paragraph)bodyGroup.Rows[0].Cells[1].Blocks.FirstBlock!;
+            var row0P2 = (Paragraph)bodyGroup.Rows[0].Cells[2].Blocks.FirstBlock!;
+            var row0P3 = (Paragraph)bodyGroup.Rows[0].Cells[3].Blocks.FirstBlock!;
+
+            AssertEqual(TextAlignment.Left, row0P0.TextAlignment, "Text column left-aligned");
+            AssertEqual(TextAlignment.Right, row0P1.TextAlignment, "Integer quantity right-aligned");
+            AssertEqual(TextAlignment.Right, row0P2.TextAlignment, "Currency price right-aligned");
+            AssertEqual(TextAlignment.Right, row0P3.TextAlignment, "Percentage margin right-aligned");
+        }
+
+        private static void TestCsvRoundTripSerialization()
+        {
+            var palette = ThemePalette.GetPalette(ThemePreset.GitHubLight);
+
+            // 1. CSV round-trip
+            string originalCsv = "Item,Count,Location,Notes\r\n" +
+                                 "\"Widget, Standard\",42,\"Dallas, TX\",\"In stock, verified\"\r\n" +
+                                 "Gadget,10,\"New York, NY\",\"He said \"\"Fast\"\"\"\r\n" +
+                                 "\"Special \"\"Item\"\"\",5,London,\"Multi-line\r\nNote here\"";
+
+            var data = CsvParser.Parse(originalCsv);
+            var doc = CsvToFlowDocumentConverter.Convert(data, palette);
+            string serializedCsv = CsvSerializer.Serialize(doc, ',');
+
+            var reParsed = CsvParser.Parse(serializedCsv);
+            AssertEqual(data.Count, reParsed.Count, "Round-trip CSV row count matches");
+            for (int r = 0; r < data.Count; r++)
+            {
+                AssertEqual(data[r].Count, reParsed[r].Count, $"Row {r} column count matches");
+                for (int c = 0; c < data[r].Count; c++)
+                {
+                    AssertEqual(data[r][c], reParsed[r][c], $"Row {r} Col {c} cell content matches");
+                }
+            }
+
+            // 2. TSV round-trip
+            string originalTsv = "ID\tProduct\tNotes\r\n1\t\"Tab\tInside\"\tNormal note\r\n2\tSimple\t\"Quotes \"\"Here\"\"\"";
+            var tsvData = CsvParser.Parse(originalTsv, '\t');
+            var tsvDoc = CsvToFlowDocumentConverter.Convert(tsvData, palette, isTsv: true);
+            string serializedTsv = CsvSerializer.Serialize(tsvDoc, '\t');
+
+            var reParsedTsv = CsvParser.Parse(serializedTsv, '\t');
+            AssertEqual(tsvData.Count, reParsedTsv.Count, "Round-trip TSV row count matches");
+            for (int r = 0; r < tsvData.Count; r++)
+            {
+                AssertEqual(tsvData[r].Count, reParsedTsv[r].Count, $"TSV Row {r} column count matches");
+                for (int c = 0; c < tsvData[r].Count; c++)
+                {
+                    AssertEqual(tsvData[r][c], reParsedTsv[r][c], $"TSV Row {r} Col {c} cell content matches");
+                }
+            }
+        }
+
+        private static void TestJsonPrettyPrinting()
+        {
+            var palette = ThemePalette.GetPalette(ThemePreset.GitHubDark);
+            string compactJson = "{\"app\":\"MDPlus\",\"version\":1.09,\"features\":[\"markdown\",\"csv\",\"json\"],\"status\":{\"active\":true,\"count\":null}}";
+
+            var doc = JsonToFlowDocumentConverter.Convert(compactJson, palette);
+            Assert(doc != null, "JSON FlowDocument not null");
+
+            // Extract all text from paragraphs
+            var sb = new StringBuilder();
+            foreach (var block in doc!.Blocks)
+            {
+                if (block is Paragraph p)
+                {
+                    foreach (var inline in p.Inlines)
+                    {
+                        if (inline is Run r) sb.Append(r.Text);
+                    }
+                    sb.Append("\n");
+                }
+            }
+            string renderedText = sb.ToString();
+
+            // Assert 2-space indentation
+            Assert(renderedText.Contains("{\n"), "Root object open brace");
+            Assert(renderedText.Contains("  \"app\": \"MDPlus\""), "2-space indentation for app property");
+            Assert(renderedText.Contains("  \"version\": 1.09"), "2-space indentation for version property");
+            Assert(renderedText.Contains("  \"features\": ["), "2-space indentation for features array");
+            Assert(renderedText.Contains("    \"markdown\""), "4-space nested indentation for array item");
+            Assert(renderedText.Contains("  \"status\": {"), "2-space nested object");
+            Assert(renderedText.Contains("    \"active\": true"), "4-space nested boolean");
+            Assert(renderedText.Contains("    \"count\": null"), "4-space nested null");
+        }
+
+        private static void TestJsonSyntaxHighlightingAll8Themes()
+        {
+            var presets = new[]
+            {
+                ThemePreset.GitHubDark,
+                ThemePreset.GitHubLight,
+                ThemePreset.Nord,
+                ThemePreset.OneDark,
+                ThemePreset.Monokai,
+                ThemePreset.OneLight,
+                ThemePreset.SolarizedLight,
+                ThemePreset.QuietLight
+            };
+
+            string jsonSample = "{\n  \"name\": \"MDPlus\",\n  \"version\": 1.09,\n  \"ready\": true,\n  \"missing\": null\n}";
+
+            foreach (var preset in presets)
+            {
+                var palette = ThemePalette.GetPalette(preset);
+                var doc = JsonToFlowDocumentConverter.Convert(jsonSample, palette);
+
+                AssertEqual(palette.EditorBg.Color, ((SolidColorBrush)doc.Background).Color, $"{preset} Doc Background");
+
+                // Find all runs and verify colors
+                Run? nameKeyRun = null;
+                Run? nameValRun = null;
+                Run? numValRun = null;
+                Run? boolValRun = null;
+                Run? nullValRun = null;
+
+                foreach (var b in doc.Blocks)
+                {
+                    if (b is Paragraph p)
+                    {
+                        foreach (var inline in p.Inlines)
+                        {
+                            if (inline is Run r)
+                            {
+                                if (r.Text == "\"name\"") nameKeyRun = r;
+                                else if (r.Text == "\"MDPlus\"") nameValRun = r;
+                                else if (r.Text == "1.09") numValRun = r;
+                                else if (r.Text == "true") boolValRun = r;
+                                else if (r.Text == "null") nullValRun = r;
+                            }
+                        }
+                    }
+                }
+
+                Assert(nameKeyRun != null, $"{preset}: Key run 'name' found");
+                AssertEqual(palette.SyntaxProperty.Color, ((SolidColorBrush)nameKeyRun!.Foreground).Color, $"{preset} Key color matches SyntaxProperty");
+
+                Assert(nameValRun != null, $"{preset}: Value run 'MDPlus' found");
+                AssertEqual(palette.SyntaxString.Color, ((SolidColorBrush)nameValRun!.Foreground).Color, $"{preset} String color matches SyntaxString");
+
+                Assert(numValRun != null, $"{preset}: Number run '1.09' found");
+                AssertEqual(palette.SyntaxNumber.Color, ((SolidColorBrush)numValRun!.Foreground).Color, $"{preset} Number color matches SyntaxNumber");
+
+                Assert(boolValRun != null, $"{preset}: Boolean run 'true' found");
+                AssertEqual(palette.SyntaxKeyword.Color, ((SolidColorBrush)boolValRun!.Foreground).Color, $"{preset} Boolean color matches SyntaxKeyword");
+
+                Assert(nullValRun != null, $"{preset}: Null run 'null' found");
+                AssertEqual(palette.SyntaxKeyword.Color, ((SolidColorBrush)nullValRun!.Foreground).Color, $"{preset} Null color matches SyntaxKeyword");
+            }
+        }
+
+        private static void TestJsonVisualLineCapAndNoticeBanner()
+        {
+            var palette = ThemePalette.GetPalette(ThemePreset.GitHubDark);
+            // Generate a 3,000-line JSON document
+            var sb = new StringBuilder();
+            sb.Append("[\n");
+            for (int i = 1; i <= 2998; i++)
+            {
+                sb.Append($"  {i},\n");
+            }
+            sb.Append("  2999\n]");
+            string largeJson = sb.ToString();
+
+            var doc = JsonToFlowDocumentConverter.Convert(largeJson, palette);
+            Assert(doc != null, "FlowDocument generated for large JSON");
+
+            // Total blocks: 2500 line paragraphs + 1 notice banner = 2501 blocks
+            AssertEqual(2501, doc!.Blocks.Count, "Capped at MaxVisualLines (2500) + 1 notice banner");
+
+            var lastBlock = doc.Blocks.LastBlock as Paragraph;
+            Assert(lastBlock != null, "Last block is notice paragraph");
+            AssertEqual(FontStyles.Italic, lastBlock!.FontStyle, "Notice paragraph is italic");
+            AssertEqual(palette.MutedFg.Color, ((SolidColorBrush)lastBlock.Foreground).Color, "Notice paragraph foreground matches MutedFg");
+
+            var textSb = new StringBuilder();
+            foreach (var inline in lastBlock.Inlines)
+            {
+                if (inline is Run r) textSb.Append(r.Text);
+            }
+            string noticeText = textSb.ToString();
+            Assert(noticeText.Contains("Showing first 2,500 of 3,001 lines"), "Notice mentions first 2,500 lines");
+            Assert(noticeText.Contains("Ctrl+3"), "Notice directs user to Raw view (Ctrl+3)");
+        }
+
+        private static void TestJsonMalformedResilientFallback()
+        {
+            var palette = ThemePalette.GetPalette(ThemePreset.GitHubDark);
+            string brokenJson = "{\n  \"valid\": true,\n  broken line without quotes or colon\n  \"number\": 123";
+
+            // Must not throw an unhandled JsonException
+            var doc = JsonToFlowDocumentConverter.Convert(brokenJson, palette);
+            Assert(doc != null, "FlowDocument generated for broken JSON");
+
+            // First block should be an error notification banner
+            var firstBlock = doc!.Blocks.FirstBlock;
+            Assert(firstBlock is Paragraph, "First block is a Paragraph");
+            var errorPara = (Paragraph)firstBlock!;
+            AssertEqual(palette.CodeBg.Color, ((SolidColorBrush)errorPara.Background).Color, "Error banner background");
+
+            var errorSb = new StringBuilder();
+            foreach (var inline in errorPara.Inlines)
+            {
+                if (inline is Run r) errorSb.Append(r.Text);
+            }
+            string bannerText = errorSb.ToString();
+            Assert(bannerText.Contains("Malformed JSON") || bannerText.Contains("Invalid JSON"), "Banner mentions malformed/invalid JSON");
+
+            // Subsequent blocks must present the raw lines
+            Assert(doc.Blocks.Count > 1, "Document contains subsequent lines for review");
+        }
+
+        private static void TestPlainTextAndLogTypography()
+        {
+            var palette = ThemePalette.GetPalette(ThemePreset.GitHubDark);
+            string logText = "2026-09-11 03:00:00 [INFO] System started\n2026-09-11 03:00:01 [WARN] CPU load high";
+            var logDoc = PlainTextToFlowDocumentConverter.Convert(logText, DocumentFormat.Log, palette);
+
+            AssertEqual(13.0, logDoc.FontSize, "Log font size 13");
+            Assert(logDoc.FontFamily.FamilyNames.Values.Any(f => f.Contains("Cascadia") || f.Contains("Consolas")), "Log font family monospace");
+            AssertEqual(palette.EditorBg.Color, ((SolidColorBrush)logDoc.Background).Color, "Log background matches theme");
+
+            string plainText = "The quick brown fox jumps over the lazy dog.";
+            var txtDoc = PlainTextToFlowDocumentConverter.Convert(plainText, DocumentFormat.PlainText, palette);
+
+            AssertEqual(14.0, txtDoc.FontSize, "Plain text font size 14");
+            Assert(txtDoc.FontFamily.FamilyNames.Values.Any(f => f.Contains("Segoe UI")), "Plain text font family Segoe UI");
+            AssertEqual(palette.EditorBg.Color, ((SolidColorBrush)txtDoc.Background).Color, "Plain text background matches theme");
+        }
+
+        private static void TestPerformanceBenchmark5000RowsCsvAndJson()
+        {
+            // 1. Generate genuine 5,000-row CSV
+            var sbCsv = new StringBuilder(5000 * 60);
+            sbCsv.AppendLine("Id,Name,Role,Salary,Active,Notes");
+            for (int i = 1; i <= 5000; i++)
+            {
+                sbCsv.AppendLine($"{i},\"User {i}\",\"Engineer {i % 5}\",\"${50000 + i * 10:N0}\",{(i % 2 == 0 ? "true" : "false")},\"Notes for user {i} with comma, inside\"");
+            }
+            string csvData = sbCsv.ToString();
+
+            // Benchmark CSV Parsing
+            var swCsv = Stopwatch.StartNew();
+            var parsedCsv = CsvParser.Parse(csvData);
+            swCsv.Stop();
+
+            AssertEqual(5001, parsedCsv.Count, "5,001 rows parsed (1 header + 5,000 data)");
+            Console.Write($" [{parsedCsv.Count:N0} CSV rows parsed in {swCsv.ElapsedMilliseconds}ms] ");
+            Assert(swCsv.ElapsedMilliseconds < 50, $"5,000-row CSV parse must complete in < 50ms (took {swCsv.ElapsedMilliseconds}ms)");
+
+            // 2. Generate genuine 5,000-line JSON
+            var sbJson = new StringBuilder(5000 * 50);
+            sbJson.Append("[\n");
+            for (int i = 1; i <= 1000; i++)
+            {
+                sbJson.Append("  {\n");
+                sbJson.Append($"    \"id\": {i},\n");
+                sbJson.Append($"    \"name\": \"Item {i}\",\n");
+                sbJson.Append($"    \"available\": {(i % 2 == 0 ? "true" : "false")},\n");
+                sbJson.Append($"    \"rating\": 4.5\n");
+                sbJson.Append(i == 1000 ? "  }\n" : "  },\n");
+            }
+            sbJson.Append("]\n");
+            string jsonData = sbJson.ToString();
+            int jsonLineCount = jsonData.Split('\n').Length;
+
+            // Benchmark JSON Parsing & Formatting
+            var swJson = Stopwatch.StartNew();
+            using var jsonDoc = System.Text.Json.JsonDocument.Parse(jsonData);
+            swJson.Stop();
+
+            Console.Write($" [{jsonLineCount:N0} JSON lines parsed in {swJson.ElapsedMilliseconds}ms] ");
+            Assert(swJson.ElapsedMilliseconds < 50, $"5,000-line JSON parse must complete in < 50ms (took {swJson.ElapsedMilliseconds}ms)");
         }
     }
 }
