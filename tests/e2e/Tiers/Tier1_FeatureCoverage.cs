@@ -112,12 +112,12 @@ namespace MDPlus.E2E.Tiers
             RunTest("Tier1", "F12.4: Plain text & log view toggle preserves raw text losslessly", TestF12_PlainTextAndLogViewTogglePreservation);
             RunTest("Tier1", "F12.5: Config files (.ini, .cfg, .yaml, .xml) view toggle serialization safeguard", TestF12_ConfigViewTogglePreservation);
 
-            // Feature 13: Version 1.10 Synchronization & File Associations (v1.10)
-            RunTest("Tier1", "F13.1: Version 1.10 / 1.10.0.0 synchronized across all 8 required files", TestF13_Version11SyncAcross8Files);
+            // Feature 13: Version 1.11 Synchronization & File Associations (v1.11)
+            RunTest("Tier1", "F13.1: Version 1.11 / 1.11.0.0 synchronized across all 8 required files", TestF13_Version11SyncAcross8Files);
             RunTest("Tier1", "F13.2: Inno Setup tasks for .txt, .csv, .tsv, .json file associations", TestF13_InnoSetupFileAssociationTasks);
             RunTest("Tier1", "F13.3: Inno Setup Default Apps capabilities registry directives for multi-format", TestF13_InnoSetupRegistryDirectives);
-            RunTest("Tier1", "F13.4: Release notes RELEASE_NOTES_v1.10.md and RELEASE_NOTES.md present", TestF13_ReleaseNotesDocumentation);
-            RunTest("Tier1", "F13.5: SHA-256 build verification target MDPlus.1.10.checksums.sha256 in build.ps1", TestF13_BuildScriptChecksumManifest);
+            RunTest("Tier1", "F13.4: Release notes RELEASE_NOTES_v1.11.md and RELEASE_NOTES.md present", TestF13_ReleaseNotesDocumentation);
+            RunTest("Tier1", "F13.5: SHA-256 build verification target MDPlus.1.11.checksums.sha256 in build.ps1", TestF13_BuildScriptChecksumManifest);
         }
 
         #region Feature 1: Markdown Parsing & AST
@@ -1449,7 +1449,7 @@ int a = 1;
 
         #endregion
 
-        #region Feature 13: Version 1.10 Synchronization & File Associations (v1.10)
+        #region Feature 13: Version 1.11 Synchronization & File Associations (v1.11)
  
          private static void TestF13_Version11SyncAcross8Files()
          {
@@ -1457,37 +1457,37 @@ int a = 1;
 
              // 1. src/MDPlus.csproj
              string csproj = File.ReadAllText(Path.Combine(repoRoot, "src", "MDPlus.csproj"));
-             AssertContains("<Version>1.10</Version>", csproj, "MDPlus.csproj Version must be 1.10.");
+             AssertContains("<Version>1.11</Version>", csproj, "MDPlus.csproj Version must be 1.11.");
 
              // 2. src/Properties/AssemblyInfo.cs
              string assemblyInfo = File.ReadAllText(Path.Combine(repoRoot, "src", "Properties", "AssemblyInfo.cs"));
-             AssertContains("[assembly: AssemblyVersion(\"1.10.0.0\")]", assemblyInfo, "AssemblyInfo Version must be 1.10.0.0.");
-             AssertContains("[assembly: AssemblyFileVersion(\"1.10.0.0\")]", assemblyInfo, "AssemblyInfo FileVersion must be 1.10.0.0.");
+             AssertContains("[assembly: AssemblyVersion(\"1.11.0.0\")]", assemblyInfo, "AssemblyInfo Version must be 1.11.0.0.");
+             AssertContains("[assembly: AssemblyFileVersion(\"1.11.0.0\")]", assemblyInfo, "AssemblyInfo FileVersion must be 1.11.0.0.");
 
              // 3. src/MainWindow.xaml
              string mainXaml = File.ReadAllText(Path.Combine(repoRoot, "src", "MainWindow.xaml"));
-             AssertContains("Title=\"MDPlus v1.10", mainXaml, "MainWindow.xaml Title must specify v1.10.");
+             AssertContains("Title=\"MDPlus v1.11", mainXaml, "MainWindow.xaml Title must specify v1.11.");
 
              // 4. src/Core/UpdateService.cs
              string updateService = File.ReadAllText(Path.Combine(repoRoot, "src", "Core", "UpdateService.cs"));
-             AssertContains("\"1.10\"", updateService, "UpdateService must specify 1.10 fallback version.");
+             AssertContains("\"1.11\"", updateService, "UpdateService must specify 1.11 fallback version.");
 
              // 5. installer/MDPlus.iss
              string iss = File.ReadAllText(Path.Combine(repoRoot, "installer", "MDPlus.iss"));
-             AssertContains("#define MyAppVersion \"1.10\"", iss, "MDPlus.iss MyAppVersion must be 1.10.");
-             AssertContains("VersionInfoVersion=1.10.0.0", iss, "MDPlus.iss VersionInfoVersion must be 1.10.0.0.");
+             AssertContains("#define MyAppVersion \"1.11\"", iss, "MDPlus.iss MyAppVersion must be 1.11.");
+             AssertContains("VersionInfoVersion=1.11.0.0", iss, "MDPlus.iss VersionInfoVersion must be 1.11.0.0.");
 
              // 6. build.ps1
              string buildScript = File.ReadAllText(Path.Combine(repoRoot, "build.ps1"));
-             AssertContains("1.10", buildScript, "build.ps1 must reference version 1.10.");
+             AssertContains("1.11", buildScript, "build.ps1 must reference version 1.11.");
 
              // 7. sample_docs/welcome.md
              string welcome = File.ReadAllText(Path.Combine(repoRoot, "sample_docs", "welcome.md"));
-             AssertContains("1.10", welcome, "welcome.md must document version 1.10.");
+             AssertContains("1.11", welcome, "welcome.md must document version 1.11.");
 
              // 8. README.md
              string readme = File.ReadAllText(Path.Combine(repoRoot, "README.md"));
-             AssertContains("1.10", readme, "README.md must document version 1.10.");
+             AssertContains("1.11", readme, "README.md must document version 1.11.");
          }
 
          private static void TestF13_InnoSetupFileAssociationTasks()
@@ -1517,21 +1517,21 @@ int a = 1;
          private static void TestF13_ReleaseNotesDocumentation()
          {
              string repoRoot = GetRepositoryRoot();
-             string releaseNotes110 = Path.Combine(repoRoot, "docs", "RELEASE_NOTES_v1.10.md");
-             AssertTrue(File.Exists(releaseNotes110), "docs/RELEASE_NOTES_v1.10.md must exist.");
+             string releaseNotes110 = Path.Combine(repoRoot, "docs", "RELEASE_NOTES_v1.11.md");
+             AssertTrue(File.Exists(releaseNotes110), "docs/RELEASE_NOTES_v1.11.md must exist.");
 
              string content110 = File.ReadAllText(releaseNotes110);
-             AssertContains("MDPlus v1.10 Release Notes", content110);
+             AssertContains("MDPlus v1.11 Release Notes", content110);
 
              string generalNotes = File.ReadAllText(Path.Combine(repoRoot, "RELEASE_NOTES.md"));
-             AssertContains("Version 1.10", generalNotes, "RELEASE_NOTES.md must reference v1.10.");
+             AssertContains("Version 1.11", generalNotes, "RELEASE_NOTES.md must reference v1.11.");
          }
 
          private static void TestF13_BuildScriptChecksumManifest()
          {
              string repoRoot = GetRepositoryRoot();
              string buildScript = File.ReadAllText(Path.Combine(repoRoot, "build.ps1"));
-             AssertContains("MDPlus.1.10.checksums.sha256", buildScript, "build.ps1 must specify MDPlus.1.10.checksums.sha256 target.");
+             AssertContains("MDPlus.1.11.checksums.sha256", buildScript, "build.ps1 must specify MDPlus.1.11.checksums.sha256 target.");
              AssertContains("-Action Verify", buildScript, "build.ps1 must implement -Action Verify.");
          }
 

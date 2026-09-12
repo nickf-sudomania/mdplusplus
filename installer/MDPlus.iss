@@ -4,7 +4,7 @@
 ; =====================================================================
 
 #define MyAppName "MDPlus"
-#define MyAppVersion "1.10"
+#define MyAppVersion "1.11"
 #define MyAppPublisher "MDPlus"
 #define MyAppURL "https://github.com/nickf-sudomania/mdplusplus"
 #define MyAppExeName "MDPlus.exe"
@@ -38,10 +38,10 @@ PrivilegesRequiredOverridesAllowed=dialog commandline
 ArchitecturesAllowed=x64compatible
 ArchitecturesInstallIn64BitMode=x64compatible
 ChangesAssociations=yes
-VersionInfoVersion=1.10.0.0
+VersionInfoVersion=1.11.0.0
 VersionInfoCompany={#MyAppPublisher}
 VersionInfoDescription=MDPlus Setup Installer
-VersionInfoProductVersion=1.10.0.0
+VersionInfoProductVersion=1.11.0.0
 VersionInfoProductName=MDPlus Markdown Viewer
 CloseApplications=yes
 RestartApplications=no

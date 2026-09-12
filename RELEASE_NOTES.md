@@ -1,8 +1,8 @@
 # MDPlus Release Notes
 
-## Version 1.10 (Latest)
+## Version 1.11 (Latest)
 
-See [docs/RELEASE_NOTES_v1.10.md](docs/RELEASE_NOTES_v1.10.md) (and [docs/RELEASE_NOTES_v1.1.md](docs/RELEASE_NOTES_v1.1.md)) for full details.
+See [docs/RELEASE_NOTES_v1.11.md](docs/RELEASE_NOTES_v1.10.md) (and [docs/RELEASE_NOTES_v1.1.md](docs/RELEASE_NOTES_v1.1.md)) for full details.
 
 ### Highlights
 - **Multi-Format Lossless Saving Pipeline:** Fixed critical bug where saving JSON documents (and plain text, log, config documents) in rendered or split view failed to persist edits to disk.
