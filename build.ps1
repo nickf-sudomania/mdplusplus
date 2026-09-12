@@ -138,7 +138,8 @@ function Build-InstallerPackage {
     $exePath = Join-Path $distPath "MDPlus.exe"
     if (-not (Test-Path $exePath)) {
         Write-Host "[INFO] Published binary not found. Building release binary first..." -ForegroundColor Yellow
-        dotnet publish $srcProjectPath -c Release -r win-x64 --self-contained false -p:PublishSingleFile=true -o $distPath
+        dotnet publish $srcProjectPath -c Release -r win-x64 --self-contained false -p:PublishSingleFile=true -o $distPath | Out-Null
+        Sign-File $exePath
     }
 
     $iscc = Get-InnoSetupCompiler
