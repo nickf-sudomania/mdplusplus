@@ -83,6 +83,51 @@ function Get-InnoSetupCompiler {
     return $null
 }
 
+function Get-SignTool {
+    $cmd = Get-Command signtool -ErrorAction SilentlyContinue
+    if ($cmd) { return $cmd.Source }
+
+    $kits = @(
+        (Join-Path ${env:ProgramFiles(x86)} "Windows Kits\10\bin"),
+        (Join-Path $env:ProgramFiles "Windows Kits\10\bin")
+    )
+
+    foreach ($kit in $kits) {
+        if (Test-Path $kit) {
+            $signToolPath = Get-ChildItem -Path $kit -Filter "signtool.exe" -Recurse -ErrorAction SilentlyContinue |
+                            Where-Object { $_.FullName -match "x64" } |
+                            Select-Object -First 1
+            if ($signToolPath) { return $signToolPath.FullName }
+        }
+    }
+    return $null
+}
+
+function Sign-File([string]$filePath) {
+    $signtool = Get-SignTool
+    if (-not $signtool) {
+        Write-Warning "signtool.exe not found. Skipping code signing for '$filePath'."
+        return
+    }
+
+    $pfxPath = Join-Path $PSScriptRoot "MDPlus_CodeSign.pfx"
+    if (-not (Test-Path $pfxPath)) {
+        Write-Warning "Code signing certificate not found at '$pfxPath'. Skipping signing for '$filePath'."
+        return
+    }
+
+    Write-Host "[INFO] Digitally signing '$filePath'..." -ForegroundColor Cyan
+    $pass = "mdplus"
+    $tsUrl = "http://timestamp.digicert.com"
+    
+    $output = & $signtool sign /f $pfxPath /p $pass /fd SHA256 /tr $tsUrl /td SHA256 $filePath 2>&1
+    if ($LASTEXITCODE -ne 0) {
+        Write-Error "Failed to sign '$filePath': $output"
+        exit $LASTEXITCODE
+    }
+    Write-Host "[SUCCESS] Successfully signed '$filePath'" -ForegroundColor Green
+}
+
 function Build-InstallerPackage {
     Write-Host "`n[INFO] Compiling Windows Setup Installer (MDPlus-Setup.exe)..." -ForegroundColor Yellow
     if (-not (Test-Path $installerScriptPath)) {
@@ -115,6 +160,8 @@ function Build-InstallerPackage {
         Write-Error "Setup installer executable not found at '$setupPath'."
         exit 1
     }
+
+    Sign-File $setupPath
 
     Write-Host "[SUCCESS] Windows Setup Installer generated: $setupPath" -ForegroundColor Green
     return $setupPath
@@ -225,6 +272,8 @@ switch ($Action) {
             exit 1
         }
 
+        Sign-File $exePath
+
         # 2. Package portable zip archive (Notepad++ release style)
         Write-Host "`n[INFO] Creating portable release archive (MDPlus-win-x64.zip)..." -ForegroundColor Yellow
         $zipPath = Join-Path $distPath "MDPlus-win-x64.zip"
@@ -281,6 +330,7 @@ switch ($Action) {
             & $innoCompiler $issScript /O"$distPath" /F"MDPlus-Setup" | Out-Null
             $setupPath = Join-Path $distPath "MDPlus-Setup.exe"
             if (Test-Path $setupPath) {
+                Sign-File $setupPath
                 Write-Host "[SUCCESS] Windows Setup Installer generated: $setupPath" -ForegroundColor Green
             } else {
                 Write-Warning "Inno Setup compilation finished but '$setupPath' was not found."

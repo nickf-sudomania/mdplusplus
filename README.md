@@ -38,6 +38,17 @@ Looking to install or try MDPlus? Download pre-built binaries and installers dir
 > - **Ready-to-run binaries & setup installer:** Located in the [`releases/`](releases/) directory (`releases/MDPlus-Setup.exe`, `releases/MDPlus.exe`, `releases/MDPlus-win-x64.zip`).
 > - **Installer packaging source script:** Located in [`installer/MDPlus.iss`](installer/MDPlus.iss). You can compile your own setup installer anytime using Inno Setup 6 or running `.\build.ps1 -Action Installer`.
 
+### 🛡️ Local Testing & Code Signing
+To prevent Windows Defender SmartScreen from blocking the local test builds, a self-signed code signing certificate is used.
+To trust the compiled binaries on your local machine:
+1. Double click `MDPlus_CodeSign.pfx` in the repository root.
+2. Select **Current User** and click Next.
+3. The file path is already filled. Click Next.
+4. Enter the password `mdplus` and click Next.
+5. Select **Place all certificates in the following store** and click **Browse**.
+6. Select **Trusted Root Certification Authorities** and click OK, then Next, then Finish.
+7. Accept the Windows Security warning to install the certificate.
+
 ---
 
 ## ⚡ Overview & Core Philosophy
