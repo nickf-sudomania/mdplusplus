@@ -4757,7 +4757,7 @@ MDPlus v1.09 expands the hyper-fast native Windows reader with universal text su
                     minUiMs = swUi.ElapsedMilliseconds;
             }
             Console.Write($" [UI generated in {minUiMs}ms] ");
-            Assert(minUiMs < 100, $"5,000-row CSV UI generation must complete in < 100ms (took {minUiMs}ms)");
+            Assert(minUiMs < 50, $"5,000-row CSV UI generation must complete in < 50ms (took {minUiMs}ms)");
 
             // Verify that the document actually contains the virtualized UI listview
             var container = csvDoc!.Blocks.FirstBlock as BlockUIContainer;
