@@ -61,9 +61,12 @@ namespace MDPlus.Models
             IsDirty = true;
         }
 
+        public bool IsVisualCapped => FlowDocument?.Tag as string == "VisualCapped";
+
         /// <summary>
         /// Saves the document to disk at FilePath or an explicitly specified target path.
         /// Synchronizes modified FlowDocument content for non-raw view modes before saving.
+        /// When IsVisualCapped is true, avoids serializing the truncated FlowDocument back into RawMarkdown.
         /// </summary>
         public bool Save(string? targetPath = null)
         {
@@ -75,7 +78,7 @@ namespace MDPlus.Models
 
             Format = DocumentFormatHelper.DetectFromPath(path);
 
-            if (FlowDocument != null && ViewMode != ViewDisplayMode.Raw && IsDirty)
+            if (FlowDocument != null && ViewMode != ViewDisplayMode.Raw && IsDirty && !IsVisualCapped)
             {
                 RawMarkdown = DocumentFormatHelper.SerializeFlowDocument(FlowDocument, Format, LineEndingName);
             }
@@ -295,12 +298,23 @@ namespace MDPlus.Models
                 }
                 if (Format == DocumentFormat.Csv || Format == DocumentFormat.Tsv)
                 {
-                    int lineCount = string.IsNullOrEmpty(RawText) ? 0 : RawText.Split('\n').Length;
+                    int lineCount = CountLines(RawText);
                     return $"{lineCount:N0} rows • {FormatBadge} • {RawText.Length:N0} chars";
                 }
-                int lines = string.IsNullOrEmpty(RawText) ? 0 : RawText.Split('\n').Length;
+                int lines = CountLines(RawText);
                 return $"{lines:N0} lines • {FormatDisplayName} • {RawText.Length:N0} chars";
             }
+        }
+
+        private static int CountLines(string? text)
+        {
+            if (string.IsNullOrEmpty(text)) return 0;
+            int count = 1;
+            for (int i = 0; i < text.Length; i++)
+            {
+                if (text[i] == '\n') count++;
+            }
+            return count;
         }
 
         public event PropertyChangedEventHandler? PropertyChanged;

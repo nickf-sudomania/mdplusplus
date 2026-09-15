@@ -576,6 +576,7 @@ Plugins can be enabled or disabled instantly via the Plugins menu without restar
             try
             {
                 MarkdownViewer.Document = tab.FlowDocument;
+                MarkdownViewer.IsReadOnly = tab.IsVisualCapped;
                 MarkdownViewer.Zoom = tab.Zoom;
                 RawMarkdownTextBox.FontSize = 13.0 * (tab.Zoom / 100.0);
                 RawMarkdownTextBox.Text = tab.RawMarkdown;
@@ -855,20 +856,31 @@ Plugins can be enabled or disabled instantly via the Plugins menu without restar
                         }
                         RenderDocumentTab(tab);
 
+                        tab.MarkClean();
+
                         if (tab == _activeTab)
                         {
-                            MarkdownViewer.Document = tab.FlowDocument;
-                            RawMarkdownTextBox.Text = tab.RawMarkdown;
-                            TocListBox.ItemsSource = tab.Headings;
-                            StatusStatsText.Text = tab.StatsText;
-                            StatusEncodingText.Text = $"{tab.EncodingName} • {tab.LineEndingName}";
-                            Title = $"{tab.FileName} - MDPlus";
-
-                            MarkdownViewer.ScrollToVerticalOffset(scrollOffset);
-                            RawMarkdownTextBox.ScrollToVerticalOffset(rawScroll);
-                            if (rawCaret >= 0 && rawCaret <= tab.RawMarkdown.Length)
+                            _suppressDirtyTracking = true;
+                            try
                             {
-                                RawMarkdownTextBox.CaretIndex = rawCaret;
+                                MarkdownViewer.Document = tab.FlowDocument;
+                                MarkdownViewer.IsReadOnly = tab.IsVisualCapped;
+                                RawMarkdownTextBox.Text = tab.RawMarkdown;
+                                TocListBox.ItemsSource = tab.Headings;
+                                StatusStatsText.Text = tab.StatsText;
+                                StatusEncodingText.Text = $"{tab.EncodingName} • {tab.LineEndingName}";
+                                Title = $"{tab.FileName} - MDPlus";
+
+                                MarkdownViewer.ScrollToVerticalOffset(scrollOffset);
+                                RawMarkdownTextBox.ScrollToVerticalOffset(rawScroll);
+                                if (rawCaret >= 0 && rawCaret <= tab.RawMarkdown.Length)
+                                {
+                                    RawMarkdownTextBox.CaretIndex = rawCaret;
+                                }
+                            }
+                            finally
+                            {
+                                _suppressDirtyTracking = false;
                             }
                         }
 
@@ -1007,6 +1019,7 @@ Plugins can be enabled or disabled instantly via the Plugins menu without restar
                     try
                     {
                         MarkdownViewer.Document = _activeTab.FlowDocument;
+                        MarkdownViewer.IsReadOnly = _activeTab.IsVisualCapped;
                     }
                     finally
                     {
@@ -1022,6 +1035,7 @@ Plugins can be enabled or disabled instantly via the Plugins menu without restar
                     try
                     {
                         MarkdownViewer.Document = _activeTab.FlowDocument;
+                        MarkdownViewer.IsReadOnly = _activeTab.IsVisualCapped;
                         RawMarkdownTextBox.Text = _activeTab.RawMarkdown;
                     }
                     finally
@@ -1513,7 +1527,7 @@ Plugins can be enabled or disabled instantly via the Plugins menu without restar
                 }
                 else
                 {
-                    if (tab.FlowDocument != null && (tab.IsDirty || _lastEditSource == EditSource.RenderedViewer))
+                    if (tab.FlowDocument != null && (tab.IsDirty || _lastEditSource == EditSource.RenderedViewer) && !tab.IsVisualCapped)
                     {
                         string serialized = DocumentFormatHelper.SerializeFlowDocument(tab.FlowDocument, tab.Format, tab.LineEndingName);
                         tab.RawMarkdown = serialized;
@@ -1535,7 +1549,7 @@ Plugins can be enabled or disabled instantly via the Plugins menu without restar
             }
             else
             {
-                if (tab.FlowDocument != null && tab.ViewMode != ViewDisplayMode.Raw && tab.IsDirty)
+                if (tab.FlowDocument != null && tab.ViewMode != ViewDisplayMode.Raw && tab.IsDirty && !tab.IsVisualCapped)
                 {
                     tab.RawMarkdown = DocumentFormatHelper.SerializeFlowDocument(tab.FlowDocument, tab.Format, tab.LineEndingName);
                 }

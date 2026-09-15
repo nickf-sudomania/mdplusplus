@@ -16,9 +16,13 @@ MDPlus v1.12 delivers performance hardening, memory leak mitigations, and robust
 - **Search & In-Place Editing Fidelity:** Ensured all tabular data remains fully searchable via `FindBar` (`Ctrl+F`), selectable, and editable in-place without losing document formatting.
 - **Hoisted Layout Resources:** Hoisted theme brushes, border thicknesses, and margins during table generation to eliminate allocations and GC pressure.
 
-### 2. Memory Leak Mitigations & Stability
-- **Window Event Lifecycles:** Guaranteed that modal and tool dialogs (`UpdateDialog`, `VerifyIntegrityWindow`) cleanly unhook global event subscriptions (`ThemeManager.Instance.ThemeChanged`) upon closing.
-- **Debounced CSV/JSON Benchmarks:** Maintained sub-50ms parsing benchmarks for 5,000-line CSV and JSON documents while preserving memory footprint under 35 MB idle.
+### 2. Large File Data-Loss Safeguard & Memory Hardening
+- **Lossless Stream Retention:** Added `IsVisualCapped` protection across `DocumentTabItem.Save()` and `MainWindow.SyncTabFromControls()`. Visual preview caps (3,000 CSV rows or 2,500 JSON lines) can never overwrite the underlying raw text buffer, guaranteeing 100% data retention when saving large datasets.
+- **Read-Only Capped Previews:** FlowDocument views exceeding visual caps are set to read-only while preserving full text selection, copying, and searchability (`Ctrl+F`), directing users to Raw view (`Ctrl+3`) for editing large datasets.
+- **External Reload State Cleanliness:** Fixed external file watcher reload in `MainWindow` so programmatic updates suppress dirty tracking and mark tabs clean, preventing spurious dirty flags upon background file modifications.
+- **RFC 4180 / TSV Delimiter Parsing:** Fixed edge-case in `CsvParser` where delimiter-only whitespace (e.g. single tab `\t`) was incorrectly dropped, ensuring single-tab TSV files parse cleanly into two empty columns.
+- **Zero-Allocation Line Counting:** Optimized `StatsText` across text and tabular documents using allocation-free line scanning instead of array allocations.
+- **Window Event Lifecycles:** Guaranteed that modal and tool dialogs cleanly unhook global event subscriptions (`ThemeManager.Instance.ThemeChanged`) upon closing.
 
 ### 3. Version 1.12 Synchronization
 - Synchronized version 1.12 across `MDPlus.csproj`, `AssemblyInfo.cs` (1.12.0.0), `MainWindow.xaml`, `UpdateService.cs`, Inno Setup installer script (`MDPlus.iss`), `build.ps1`, `welcome.md`, and `README.md`.

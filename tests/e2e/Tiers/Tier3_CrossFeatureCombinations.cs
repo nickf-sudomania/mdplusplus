@@ -385,6 +385,10 @@ namespace MDPlus.E2E.Tiers
             }
             AssertNotNull(logReloadedFlow);
             AssertEqual(13.0, logReloadedFlow!.FontSize, "Reloading LOG preserves monospace font size 13.");
+
+            // 4. Tab clean state preservation
+            csvTab.MarkClean();
+            AssertFalse(csvTab.IsDirty, "Reloaded tab must remain clean after external update.");
         }
 
         #endregion

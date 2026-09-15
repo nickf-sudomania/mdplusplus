@@ -219,6 +219,10 @@ namespace MDPlus.Tests
             RunTest("DocumentTabItem.Save Format Switching and Directory Creation", TestDocumentTabItemSaveAsFormatSwitching);
             RunTest("Section Block Container Recursive Serialization", TestSectionBlockContainerRecursiveSerialization);
             RunTest("CSV & TSV Line Ending Preservation (LF and CRLF)", TestCsvAndTsvLineEndingPreservation);
+            RunTest("Visual Cap Data Loss Safeguard (CSV & JSON 5,000+ items)", TestVisualCapDataLossSafeguard);
+            RunTest("TSV Tab Delimiter-Only Whitespace Preservation", TestTsvWhitespaceDelimiterParsing);
+            RunTest("Empty Zero-Column CSV FlowDocument Placeholder", TestEmptyZeroColCsvFlowDocument);
+            RunTest("StatsText Zero-Allocation Line Counting Fidelity", TestStatsTextLineCountingFidelity);
 
             sw.Stop();
 
@@ -5145,6 +5149,137 @@ MDPlus v1.09 expands the hyper-fast native Windows reader with universal text su
             // Test CRLF line ending preservation
             string crlfResult = CsvSerializer.Serialize(doc, ',', lineEnding: "CRLF");
             Assert(crlfResult.Contains("\r\n"), "CSV serialized with CRLF must contain CRLF.");
+        }
+
+        private static void TestVisualCapDataLossSafeguard()
+        {
+            var palette = ThemeManager.Instance.CurrentPalette;
+            string tempDir = Path.Combine(Path.GetTempPath(), "MDPlus_CapTest_" + Guid.NewGuid().ToString("N"));
+            Directory.CreateDirectory(tempDir);
+
+            try
+            {
+                // 1. CSV test: 5,000 rows exceeding MaxVisualRows (3,000)
+                var sbCsv = new StringBuilder(5000 * 40);
+                sbCsv.AppendLine("Id,Name,Score");
+                for (int i = 1; i <= 5000; i++)
+                {
+                    sbCsv.AppendLine($"{i},Item_{i},{i * 10}");
+                }
+                string originalCsv = sbCsv.ToString();
+
+                var csvTab = new DocumentTabItem
+                {
+                    Title = "large.csv",
+                    Format = DocumentFormat.Csv,
+                    RawMarkdown = originalCsv,
+                    ViewMode = ViewDisplayMode.Rendered,
+                    FlowDocument = CsvToFlowDocumentConverter.Convert(originalCsv, palette, isTsv: false),
+                    IsDirty = true
+                };
+
+                Assert(csvTab.IsVisualCapped, "csvTab.IsVisualCapped must be true for 5,000-row CSV");
+                AssertEqual("VisualCapped", csvTab.FlowDocument?.Tag as string, "CSV FlowDocument Tag must be VisualCapped");
+
+                string targetCsvPath = Path.Combine(tempDir, "saved_large.csv");
+                bool savedCsv = csvTab.Save(targetCsvPath);
+                Assert(savedCsv, "csvTab.Save must succeed");
+                Assert(File.Exists(targetCsvPath), "Saved CSV file must exist on disk");
+
+                string diskCsv = File.ReadAllText(targetCsvPath);
+                var diskCsvRows = CsvParser.Parse(diskCsv);
+                AssertEqual(5001, diskCsvRows.Count, "Saved CSV on disk must retain all 5,001 rows without visual cap truncation");
+
+                // 2. JSON test: 3,500 lines exceeding MaxVisualLines (2,500)
+                var sbJson = new StringBuilder();
+                sbJson.Append("[\n");
+                for (int i = 1; i <= 3498; i++)
+                {
+                    sbJson.Append($"  {i},\n");
+                }
+                sbJson.Append("  3499\n]");
+                string originalJson = sbJson.ToString();
+
+                var jsonTab = new DocumentTabItem
+                {
+                    Title = "large.json",
+                    Format = DocumentFormat.Json,
+                    RawMarkdown = originalJson,
+                    ViewMode = ViewDisplayMode.Rendered,
+                    FlowDocument = JsonToFlowDocumentConverter.Convert(originalJson, palette),
+                    IsDirty = true
+                };
+
+                Assert(jsonTab.IsVisualCapped, "jsonTab.IsVisualCapped must be true for 3,500-line JSON");
+                AssertEqual("VisualCapped", jsonTab.FlowDocument?.Tag as string, "JSON FlowDocument Tag must be VisualCapped");
+
+                string targetJsonPath = Path.Combine(tempDir, "saved_large.json");
+                bool savedJson = jsonTab.Save(targetJsonPath);
+                Assert(savedJson, "jsonTab.Save must succeed");
+                Assert(File.Exists(targetJsonPath), "Saved JSON file must exist on disk");
+
+                string diskJson = File.ReadAllText(targetJsonPath);
+                AssertEqual(originalJson, diskJson, "Saved JSON on disk must match original 3,500-line JSON with 100% fidelity");
+            }
+            finally
+            {
+                try
+                {
+                    if (Directory.Exists(tempDir))
+                    {
+                        Directory.Delete(tempDir, recursive: true);
+                    }
+                }
+                catch { }
+            }
+        }
+
+        private static void TestTsvWhitespaceDelimiterParsing()
+        {
+            // A single tab character is a 1-row, 2-column TSV document
+            string tsvSingleTab = "\t";
+            var rows = CsvParser.Parse(tsvSingleTab, delimiter: '\t');
+            AssertEqual(1, rows.Count, "TSV with a single tab must parse into 1 row");
+            AssertEqual(2, rows[0].Count, "TSV with a single tab must have 2 columns");
+            AssertEqual(string.Empty, rows[0][0], "First column must be empty string");
+            AssertEqual(string.Empty, rows[0][1], "Second column must be empty string");
+
+            // TSV with tab and newline
+            string tsvWithNewline = "A\tB\r\n\t\r\n";
+            var rows2 = CsvParser.Parse(tsvWithNewline, delimiter: '\t');
+            AssertEqual(2, rows2.Count, "TSV with two rows must parse into 2 rows");
+            AssertEqual("A", rows2[0][0], "First row col 1");
+            AssertEqual("B", rows2[0][1], "First row col 2");
+            AssertEqual("", rows2[1][0], "Second row col 1");
+            AssertEqual("", rows2[1][1], "Second row col 2");
+        }
+
+        private static void TestEmptyZeroColCsvFlowDocument()
+        {
+            var palette = ThemeManager.Instance.CurrentPalette;
+            // Empty string or whitespace-only producing 0 columns
+            var doc = CsvToFlowDocumentConverter.Convert("", palette, isTsv: false);
+            Assert(doc != null, "FlowDocument must not be null");
+            Assert(doc.Blocks.Count > 0, "FlowDocument must contain at least 1 block placeholder");
+            var para = doc.Blocks.FirstBlock as Paragraph;
+            Assert(para != null, "First block must be Paragraph");
+            AssertEqual("EmptyPlaceholder", para!.Tag as string, "Placeholder must have EmptyPlaceholder tag");
+        }
+
+        private static void TestStatsTextLineCountingFidelity()
+        {
+            var tab = new DocumentTabItem
+            {
+                Format = DocumentFormat.PlainText,
+                RawMarkdown = "Line 1\nLine 2\nLine 3\nLine 4"
+            };
+            Assert(tab.StatsText.StartsWith("4 lines"), $"StatsText must report 4 lines, actual: {tab.StatsText}");
+
+            tab.RawMarkdown = "Single line";
+            Assert(tab.StatsText.StartsWith("1 lines"), $"StatsText must report 1 lines for single line, actual: {tab.StatsText}");
+
+            tab.RawMarkdown = "";
+            Assert(tab.StatsText.StartsWith("0 lines"), $"StatsText must report 0 lines for empty string, actual: {tab.StatsText}");
         }
     }
 }

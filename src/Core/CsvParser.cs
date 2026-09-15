@@ -15,7 +15,7 @@ namespace MDPlus.Core
         public static List<List<string>> Parse(string? text, char delimiter = ',', int maxRows = 0)
         {
             var rows = new List<List<string>>();
-            if (string.IsNullOrWhiteSpace(text))
+            if (string.IsNullOrEmpty(text) || (string.IsNullOrWhiteSpace(text) && text.IndexOf(delimiter) < 0))
                 return rows;
 
             int len = text.Length;
@@ -101,7 +101,7 @@ namespace MDPlus.Core
             }
 
             // Flush remaining field/row
-            if (currentField.Length > 0 || currentRow.Count > 0)
+            if ((maxRows <= 0 || rows.Count < maxRows) && (currentField.Length > 0 || currentRow.Count > 0))
             {
                 currentRow.Add(currentField.ToString());
                 if (currentRow.Count == 1 && string.IsNullOrEmpty(currentRow[0]) && rows.Count > 0)

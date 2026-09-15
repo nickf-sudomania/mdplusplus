@@ -61,6 +61,14 @@ namespace MDPlus.Core
 
             if (colCount == 0)
             {
+                var emptyParagraph = new Paragraph(new Run(isTsv ? "Empty TSV document" : "Empty CSV document"))
+                {
+                    FontStyle = FontStyles.Italic,
+                    Foreground = palette.MutedFg,
+                    Margin = new Thickness(0),
+                    Tag = "EmptyPlaceholder"
+                };
+                doc.Blocks.Add(emptyParagraph);
                 return doc;
             }
 
@@ -161,11 +169,13 @@ namespace MDPlus.Core
 
             if (data.Count > MaxVisualRows + 1)
             {
+                doc.Tag = "VisualCapped";
                 var noticePara = new Paragraph(new Run($"Showing first {MaxVisualRows:N0} of {data.Count - 1:N0} records. Switch to Raw view (Ctrl+3) to view or edit full stream."))
                 {
                     FontStyle = FontStyles.Italic,
                     Foreground = palette.MutedFg,
-                    Margin = new Thickness(0, 8, 0, 0)
+                    Margin = new Thickness(0, 8, 0, 0),
+                    Tag = "VisualCapNotice"
                 };
                 doc.Blocks.Add(noticePara);
             }
@@ -220,6 +230,7 @@ namespace MDPlus.Core
 
             // Strip common currency symbols and percent signs
             string clean = value.Trim('$', '€', '£', '¥', '%', ' ', '\t');
+            if (string.IsNullOrEmpty(clean)) return false;
 
             // Handle accounting parentheses: (123.45)
             if (clean.StartsWith("(") && clean.EndsWith(")"))

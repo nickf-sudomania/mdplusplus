@@ -134,6 +134,7 @@ namespace MDPlus.Core
 
             if (lines.Length > MaxVisualLines)
             {
+                doc.Tag = "VisualCapped";
                 var noticePara = new Paragraph(new Run($"Showing first {MaxVisualLines:N0} of {lines.Length:N0} lines. Switch to Raw view (Ctrl+3) to view or edit full stream."))
                 {
                     FontStyle = FontStyles.Italic,

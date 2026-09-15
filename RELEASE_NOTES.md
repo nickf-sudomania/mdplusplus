@@ -6,8 +6,10 @@ See [docs/RELEASE_NOTES_v1.12.md](docs/RELEASE_NOTES_v1.12.md) for full details.
 
 ### Highlights
 - **Tabular Data FlowDocument Stabilization:** Restored clean WPF FlowDocument Table architecture for CSV and TSV files with 3,000-row capping (`MaxVisualRows`) and interactive notice banners, preserving in-place editing, theme adaptive styling, and `FindBar` search accessibility.
-- **Memory Leak Mitigations:** Enforced event unhooking on modal dialog closure (`ThemeManager.Instance.ThemeChanged`) preventing retained visual tree leaks.
-- **Hoisted Rendering Performance:** Optimized layout resource resolution during tabular FlowDocument generation, maintaining instant launch (< 150 ms) and idle footprint (< 35 MB).
+- **Large Dataset Data-Loss Safeguard:** Added `IsVisualCapped` protection to prevent truncated FlowDocuments from ever overwriting full raw text buffers during save or tab synchronization.
+- **External Reload State Cleanliness:** Fixed external file watcher reload to suppress dirty tracking and mark tabs clean, eliminating spurious dirty flags upon background file modifications.
+- **RFC 4180 / TSV Delimiter Parsing:** Fixed edge-case in `CsvParser` where delimiter-only whitespace (e.g. single tab `\t`) was dropped.
+- **Memory & Allocation Optimizations:** Enforced event unhooking on modal dialog closure (`ThemeManager.Instance.ThemeChanged`) and zero-allocation line counting in `StatsText`.
 - **Synchronized Version 1.12:** Unified version numbers across all binaries, installers, documentation, and release checksum manifests.
 
 ## Version 1.11

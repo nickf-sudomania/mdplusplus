@@ -24,15 +24,6 @@ namespace MDPlus.Core
 
             string eol = lineEnding == "LF" ? "\n" : "\r\n";
 
-            // Support large dataset virtualization fallback (BlockUIContainer -> ListView -> GridView)
-            foreach (var block in document.Blocks)
-            {
-                if (block is BlockUIContainer uiContainer && uiContainer.Child is System.Windows.Controls.ListView listView)
-                {
-                    return SerializeListView(listView, delimiter, eol);
-                }
-            }
-
             WpfTable? table = FindTable(document);
             if (table == null)
             {
@@ -177,38 +168,6 @@ namespace MDPlus.Core
                     ExtractPlainTextFromBlocks(s.Blocks, sb, eol);
                 }
             }
-        }
-
-        private static string SerializeListView(System.Windows.Controls.ListView listView, char delimiter, string eol)
-        {
-            var sb = new StringBuilder();
-            
-            if (listView.View is System.Windows.Controls.GridView gridView)
-            {
-                // Serialize Headers
-                for (int i = 0; i < gridView.Columns.Count; i++)
-                {
-                    if (i > 0) sb.Append(delimiter);
-                    string headerText = gridView.Columns[i].Header?.ToString() ?? string.Empty;
-                    sb.Append(EscapeField(headerText, delimiter));
-                }
-                sb.Append(eol);
-            }
-
-            if (listView.ItemsSource is IEnumerable<string[]> items)
-            {
-                foreach (var row in items)
-                {
-                    for (int i = 0; i < row.Length; i++)
-                    {
-                        if (i > 0) sb.Append(delimiter);
-                        sb.Append(EscapeField(row[i] ?? string.Empty, delimiter));
-                    }
-                    sb.Append(eol);
-                }
-            }
-
-            return sb.ToString();
         }
     }
 }
