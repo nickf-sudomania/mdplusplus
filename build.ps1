@@ -218,6 +218,8 @@ switch ($Action) {
             if (-not $found) { $newLines += "$setupHash  MDPlus-Setup.exe" }
             $newContent = ($newLines -join "`n") + "`n"
             Set-Content -Path $sumsFile -Value $newContent
+            $nppChecksum114 = Join-Path $distPath "MDPlus.1.14.checksums.sha256"
+            Set-Content -Path $nppChecksum114 -Value $newContent
             $nppChecksum113 = Join-Path $distPath "MDPlus.1.13.checksums.sha256"
             Set-Content -Path $nppChecksum113 -Value $newContent
             $nppChecksum112 = Join-Path $distPath "MDPlus.1.12.checksums.sha256"
@@ -301,7 +303,7 @@ switch ($Action) {
         Remove-Item $stagingDir -Recurse -Force
 
         # 3. Package source code archive (Notepad++ source release style)
-        $appVersion = "1.13"
+        $appVersion = "1.14"
         Write-Host "`n[INFO] Creating source code release archive (MDPlus-$appVersion-src.zip)..." -ForegroundColor Yellow
         $srcZipPath = Join-Path $distPath "MDPlus-$appVersion-src.zip"
         if (Test-Path $srcZipPath) {
@@ -359,6 +361,7 @@ switch ($Action) {
         Set-Content -Path (Join-Path $distPath "MDPlus.exe.sha256") -Value "$exeHash  MDPlus.exe"
         Set-Content -Path (Join-Path $distPath "MDPlus-win-x64.zip.sha256") -Value "$zipHash  MDPlus-win-x64.zip"
         Set-Content -Path (Join-Path $distPath "MDPlus-$appVersion-src.zip.sha256") -Value "$srcHash  MDPlus-$appVersion-src.zip"
+        Set-Content -Path (Join-Path $distPath "MDPlus-1.14-src.zip.sha256") -Value "$srcHash  MDPlus-1.14-src.zip"
         Set-Content -Path (Join-Path $distPath "MDPlus-1.13-src.zip.sha256") -Value "$srcHash  MDPlus-1.13-src.zip"
         Set-Content -Path (Join-Path $distPath "MDPlus-1.12-src.zip.sha256") -Value "$srcHash  MDPlus-1.12-src.zip"
         Set-Content -Path (Join-Path $distPath "MDPlus-1.11-src.zip.sha256") -Value "$srcHash  MDPlus-1.11-src.zip"
@@ -383,6 +386,7 @@ $setupHash  MDPlus-Setup.exe
 "@
         Set-Content -Path (Join-Path $distPath "SHA256SUMS.txt") -Value $checksumContent
         Set-Content -Path (Join-Path $distPath "MDPlus.$appVersion.checksums.sha256") -Value $checksumContent
+        Set-Content -Path (Join-Path $distPath "MDPlus.1.14.checksums.sha256") -Value $checksumContent
         Set-Content -Path (Join-Path $distPath "MDPlus.1.13.checksums.sha256") -Value $checksumContent
         Set-Content -Path (Join-Path $distPath "MDPlus.1.12.checksums.sha256") -Value $checksumContent
         Set-Content -Path (Join-Path $distPath "MDPlus.1.11.checksums.sha256") -Value $checksumContent

@@ -1,6 +1,17 @@
 # MDPlus Release Notes
 
-## Version 1.13 (Latest)
+## Version 1.14 (Latest)
+
+See [docs/RELEASE_NOTES_v1.14.md](docs/RELEASE_NOTES_v1.14.md) for full details.
+
+### Highlights
+- **Polished Cell Formatting:** Restored generous 12px horizontal and 4px vertical cell padding, eliminating cramped layouts and keeping text elegantly spaced away from grid lines.
+- **Automatic Numeric & Currency Right-Alignment:** Inspects column data to detect numbers, currency amounts (`$`, `€`, `£`, `¥`), percentages (`%`), and accounting formats `(123.45)`, automatically right-aligning both data cells and column headers.
+- **Crisp Header Styling & Dividers:** Semi-bold typography, matching alignments, 12px padding, and a distinct 2px bottom border dividing headers from data rows.
+- **Comfortable 36px Row Height:** Increased default row height to 36px with smooth zoom scaling (`Ctrl + Scroll`).
+- **Clean In-Cell Editors:** Themed text editor with matching padding, alignment, and no dotted focus rectangles (`FocusVisualStyle = null`).
+
+## Version 1.13
 
 See [docs/RELEASE_NOTES_v1.13.md](docs/RELEASE_NOTES_v1.13.md) for full details.
 

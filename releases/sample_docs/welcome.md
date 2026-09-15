@@ -2,7 +2,7 @@
 title: "Welcome to MDPlus"
 author: "Nick"
 date: "2026-09-11"
-version: "1.13"
+version: "1.14"
 category: "Documentation"
 ---
 
@@ -84,9 +84,9 @@ FlowDocument flowDoc = converter.Convert(document);
 
 ---
 
-## 📊 High-Performance Tabular & Multi-Format Support (v1.13)
+## 📊 High-Performance Tabular & Multi-Format Support (v1.14)
 
-MDPlus v1.13 introduces a dedicated hardware-accelerated, UI-virtualized tabular engine alongside universal format viewing:
+MDPlus v1.14 features polished cell formatting, generous padding, and automatic numeric right-alignment on top of its hardware-accelerated, UI-virtualized tabular engine:
 - **Virtualized Tabular Data (.csv, .tsv)**: Loads large multi-thousand-row spreadsheets in milliseconds with silky smooth 60 FPS pixel-based scrolling, inline cell editing, automatic column auto-sizing, sorting, and full bidirectional lossless synchronization.
 - **Structured Data (.json)**: Automatically formats and pretty-prints valid JSON with 2-space indentation and token syntax highlighting (keys, strings, numbers, booleans, null) matching your active theme.
 - **Plain Text & Logs (.txt, .log)**: High-speed reading with clean typography, smooth font zoom (`Ctrl + Plus/Minus/0`), line wrapping, and instant in-page find (`Ctrl+F`).
