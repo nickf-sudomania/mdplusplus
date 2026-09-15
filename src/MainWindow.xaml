@@ -400,7 +400,7 @@
                           HeadersVisibility="Column"
                           FontFamily="Segoe UI Variable Text, Segoe UI, -apple-system, sans-serif"
                           FontSize="14"
-                          RowHeight="32"
+                          RowHeight="36"
                           IsReadOnly="False"
                           CellEditEnding="CsvDataGrid_CellEditEnding"
                           PreviewMouseWheel="MarkdownViewer_PreviewMouseWheel"/>

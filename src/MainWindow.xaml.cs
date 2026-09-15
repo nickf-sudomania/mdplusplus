@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
+using System.Globalization;
 using System.IO;
 using System.Linq;
 using System.Text;
@@ -607,7 +608,7 @@ Plugins can be enabled or disabled instantly via the Plugins menu without restar
                 MarkdownViewer.Zoom = tab.Zoom;
                 RawMarkdownTextBox.FontSize = 13.0 * (tab.Zoom / 100.0);
                 CsvDataGrid.FontSize = 14.0 * (tab.Zoom / 100.0);
-                CsvDataGrid.RowHeight = 32.0 * (tab.Zoom / 100.0);
+                CsvDataGrid.RowHeight = 36.0 * (tab.Zoom / 100.0);
                 RawMarkdownTextBox.Text = tab.RawMarkdown;
             }
             finally
@@ -1954,7 +1955,7 @@ Plugins can be enabled or disabled instantly via the Plugins menu without restar
                 MarkdownViewer.Zoom = _activeTab.Zoom;
                 RawMarkdownTextBox.FontSize = 13.0 * (_activeTab.Zoom / 100.0);
                 CsvDataGrid.FontSize = 14.0 * (_activeTab.Zoom / 100.0);
-                CsvDataGrid.RowHeight = 32.0 * (_activeTab.Zoom / 100.0);
+                CsvDataGrid.RowHeight = 36.0 * (_activeTab.Zoom / 100.0);
                 StatusZoomText.Text = _activeTab.ZoomText;
             }
         }
@@ -2827,34 +2828,84 @@ Plugins can be enabled or disabled instantly via the Plugins menu without restar
             ApplyThemeToCsvGrid(ThemeManager.Instance.CurrentPalette);
         }
 
+        private static bool IsColumnNumeric(DataTable? dt, string columnName)
+        {
+            if (dt == null || string.IsNullOrEmpty(columnName) || !dt.Columns.Contains(columnName)) return false;
+            int colIndex = dt.Columns.IndexOf(columnName);
+            int numericCount = 0;
+            int totalNonEmpty = 0;
+            int sampleLimit = Math.Min(dt.Rows.Count, 100);
+
+            for (int r = 0; r < sampleLimit; r++)
+            {
+                var val = dt.Rows[r][colIndex]?.ToString()?.Trim();
+                if (!string.IsNullOrEmpty(val))
+                {
+                    totalNonEmpty++;
+                    if (IsNumericString(val)) numericCount++;
+                }
+            }
+            return totalNonEmpty > 0 && ((double)numericCount / totalNonEmpty) >= 0.75;
+        }
+
+        private static bool IsNumericString(string value)
+        {
+            if (string.IsNullOrEmpty(value)) return false;
+            string clean = value.Trim('$', '€', '£', '¥', '%', ' ', '\t');
+            if (string.IsNullOrEmpty(clean)) return false;
+            if (clean.StartsWith("(") && clean.EndsWith(")"))
+                clean = "-" + clean.Substring(1, clean.Length - 2);
+            return double.TryParse(clean, NumberStyles.Any, CultureInfo.InvariantCulture, out _)
+                || double.TryParse(clean, NumberStyles.Any, CultureInfo.CurrentCulture, out _);
+        }
+
         private void CsvDataGrid_AutoGeneratingColumn(object? sender, DataGridAutoGeneratingColumnEventArgs e)
         {
             e.Column.Width = new DataGridLength(1, DataGridLengthUnitType.Star);
-            e.Column.MinWidth = 80;
+            e.Column.MinWidth = 85;
 
             if (e.Column is DataGridBoundColumn boundCol)
             {
                 boundCol.Binding = new Binding($"[{e.PropertyName}]");
             }
 
+            bool isNumeric = IsColumnNumeric(_activeTab?.TabularData, e.PropertyName);
+
             if (e.Column is DataGridTextColumn textCol)
             {
                 var palette = ThemeManager.Instance.CurrentPalette;
 
+                // Generous 12px horizontal padding, vertical centering, and automatic numeric right-alignment
                 var elementStyle = new Style(typeof(TextBlock));
                 elementStyle.Setters.Add(new Setter(TextBlock.TextTrimmingProperty, TextTrimming.CharacterEllipsis));
                 elementStyle.Setters.Add(new Setter(TextBlock.VerticalAlignmentProperty, VerticalAlignment.Center));
+                elementStyle.Setters.Add(new Setter(TextBlock.MarginProperty, new Thickness(12, 4, 12, 4)));
+                if (isNumeric)
+                {
+                    elementStyle.Setters.Add(new Setter(TextBlock.TextAlignmentProperty, TextAlignment.Right));
+                }
                 textCol.ElementStyle = elementStyle;
 
+                // In-cell editor styled to match theme, comfortable padding, and alignment
                 var editingStyle = new Style(typeof(TextBox));
                 editingStyle.Setters.Add(new Setter(TextBox.BackgroundProperty, palette.EditorBg));
                 editingStyle.Setters.Add(new Setter(TextBox.ForegroundProperty, palette.EditorFg));
                 editingStyle.Setters.Add(new Setter(TextBox.CaretBrushProperty, palette.EditorFg));
                 editingStyle.Setters.Add(new Setter(TextBox.BorderBrushProperty, palette.SelectionBg));
                 editingStyle.Setters.Add(new Setter(TextBox.BorderThicknessProperty, new Thickness(1)));
-                editingStyle.Setters.Add(new Setter(TextBox.PaddingProperty, new Thickness(4, 1, 4, 1)));
+                editingStyle.Setters.Add(new Setter(TextBox.PaddingProperty, new Thickness(10, 2, 10, 2)));
                 editingStyle.Setters.Add(new Setter(TextBox.VerticalAlignmentProperty, VerticalAlignment.Center));
+                if (isNumeric)
+                {
+                    editingStyle.Setters.Add(new Setter(TextBox.TextAlignmentProperty, TextAlignment.Right));
+                }
                 textCol.EditingElementStyle = editingStyle;
+
+                // Column Header Style matching numeric alignment
+                var colHeaderStyle = new Style(typeof(DataGridColumnHeader), CsvDataGrid.ColumnHeaderStyle);
+                colHeaderStyle.Setters.Add(new Setter(DataGridColumnHeader.HorizontalContentAlignmentProperty,
+                    isNumeric ? HorizontalAlignment.Right : HorizontalAlignment.Left));
+                textCol.HeaderStyle = colHeaderStyle;
             }
         }
 
@@ -2900,22 +2951,22 @@ Plugins can be enabled or disabled instantly via the Plugins menu without restar
             CsvDataGrid.AlternatingRowBackground = palette.TableAltRowBg;
             CsvDataGrid.HorizontalGridLinesBrush = palette.TableBorder;
             CsvDataGrid.VerticalGridLinesBrush = palette.TableBorder;
-            CsvDataGrid.BorderBrush = palette.Border;
+            CsvDataGrid.BorderBrush = palette.TableBorder;
 
             var headerStyle = new Style(typeof(DataGridColumnHeader));
             headerStyle.Setters.Add(new Setter(DataGridColumnHeader.BackgroundProperty, palette.TableHeaderBg));
             headerStyle.Setters.Add(new Setter(DataGridColumnHeader.ForegroundProperty, palette.HeadingFg));
             headerStyle.Setters.Add(new Setter(DataGridColumnHeader.BorderBrushProperty, palette.TableBorder));
-            headerStyle.Setters.Add(new Setter(DataGridColumnHeader.BorderThicknessProperty, new Thickness(0, 0, 1, 1)));
-            headerStyle.Setters.Add(new Setter(DataGridColumnHeader.PaddingProperty, new Thickness(8, 6, 8, 6)));
+            headerStyle.Setters.Add(new Setter(DataGridColumnHeader.BorderThicknessProperty, new Thickness(0, 0, 1, 2)));
+            headerStyle.Setters.Add(new Setter(DataGridColumnHeader.PaddingProperty, new Thickness(12, 10, 12, 10)));
             headerStyle.Setters.Add(new Setter(DataGridColumnHeader.FontWeightProperty, FontWeights.SemiBold));
             CsvDataGrid.ColumnHeaderStyle = headerStyle;
 
             var cellStyle = new Style(typeof(DataGridCell));
             cellStyle.Setters.Add(new Setter(DataGridCell.BorderThicknessProperty, new Thickness(0)));
-            cellStyle.Setters.Add(new Setter(DataGridCell.PaddingProperty, new Thickness(6, 2, 6, 2)));
             cellStyle.Setters.Add(new Setter(DataGridCell.BackgroundProperty, Brushes.Transparent));
             cellStyle.Setters.Add(new Setter(DataGridCell.ForegroundProperty, palette.EditorFg));
+            cellStyle.Setters.Add(new Setter(DataGridCell.FocusVisualStyleProperty, null));
             var cellSelectedTrigger = new Trigger { Property = DataGridCell.IsSelectedProperty, Value = true };
             cellSelectedTrigger.Setters.Add(new Setter(DataGridCell.BackgroundProperty, palette.SelectionBg));
             cellSelectedTrigger.Setters.Add(new Setter(DataGridCell.ForegroundProperty, palette.EditorFg));
@@ -2934,14 +2985,25 @@ Plugins can be enabled or disabled instantly via the Plugins menu without restar
             {
                 if (col is DataGridTextColumn textCol)
                 {
+                    bool isNumeric = IsColumnNumeric(_activeTab?.TabularData, textCol.Header?.ToString() ?? string.Empty);
+
+                    var colHeaderStyle = new Style(typeof(DataGridColumnHeader), headerStyle);
+                    colHeaderStyle.Setters.Add(new Setter(DataGridColumnHeader.HorizontalContentAlignmentProperty,
+                        isNumeric ? HorizontalAlignment.Right : HorizontalAlignment.Left));
+                    textCol.HeaderStyle = colHeaderStyle;
+
                     var editingStyle = new Style(typeof(TextBox));
                     editingStyle.Setters.Add(new Setter(TextBox.BackgroundProperty, palette.EditorBg));
                     editingStyle.Setters.Add(new Setter(TextBox.ForegroundProperty, palette.EditorFg));
                     editingStyle.Setters.Add(new Setter(TextBox.CaretBrushProperty, palette.EditorFg));
                     editingStyle.Setters.Add(new Setter(TextBox.BorderBrushProperty, palette.SelectionBg));
                     editingStyle.Setters.Add(new Setter(TextBox.BorderThicknessProperty, new Thickness(1)));
-                    editingStyle.Setters.Add(new Setter(TextBox.PaddingProperty, new Thickness(4, 1, 4, 1)));
+                    editingStyle.Setters.Add(new Setter(TextBox.PaddingProperty, new Thickness(10, 2, 10, 2)));
                     editingStyle.Setters.Add(new Setter(TextBox.VerticalAlignmentProperty, VerticalAlignment.Center));
+                    if (isNumeric)
+                    {
+                        editingStyle.Setters.Add(new Setter(TextBox.TextAlignmentProperty, TextAlignment.Right));
+                    }
                     textCol.EditingElementStyle = editingStyle;
                 }
             }
