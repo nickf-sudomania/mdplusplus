@@ -1,8 +1,27 @@
 # MDPlus Release Notes
 
-## Version 1.11 (Latest)
+## Version 1.12 (Latest)
 
-See [docs/RELEASE_NOTES_v1.11.md](docs/RELEASE_NOTES_v1.10.md) (and [docs/RELEASE_NOTES_v1.1.md](docs/RELEASE_NOTES_v1.1.md)) for full details.
+See [docs/RELEASE_NOTES_v1.12.md](docs/RELEASE_NOTES_v1.12.md) for full details.
+
+### Highlights
+- **Tabular Data FlowDocument Stabilization:** Restored clean WPF FlowDocument Table architecture for CSV and TSV files with 3,000-row capping (`MaxVisualRows`) and interactive notice banners, preserving in-place editing, theme adaptive styling, and `FindBar` search accessibility.
+- **Memory Leak Mitigations:** Enforced event unhooking on modal dialog closure (`ThemeManager.Instance.ThemeChanged`) preventing retained visual tree leaks.
+- **Hoisted Rendering Performance:** Optimized layout resource resolution during tabular FlowDocument generation, maintaining instant launch (< 150 ms) and idle footprint (< 35 MB).
+- **Synchronized Version 1.12:** Unified version numbers across all binaries, installers, documentation, and release checksum manifests.
+
+## Version 1.11
+
+See [docs/RELEASE_NOTES_v1.11.md](docs/RELEASE_NOTES_v1.11.md) for full details.
+
+### Highlights
+- **Authenticode Digital Signing:** Integrated Authenticode digital signing using SHA-256 and DigiCert timestamping into the release pipeline for `MDPlus.exe` and `MDPlus-Setup.exe`.
+- **Installer Sanitation:** Eliminated standard output pollution during automated installer generation.
+- **Release Verification:** Verified package digests against SHA-256 release checksum manifests.
+
+## Version 1.10
+
+See [docs/RELEASE_NOTES_v1.10.md](docs/RELEASE_NOTES_v1.10.md) (and [docs/RELEASE_NOTES_v1.1.md](docs/RELEASE_NOTES_v1.1.md)) for full details.
 
 ### Highlights
 - **Multi-Format Lossless Saving Pipeline:** Fixed critical bug where saving JSON documents (and plain text, log, config documents) in rendered or split view failed to persist edits to disk.

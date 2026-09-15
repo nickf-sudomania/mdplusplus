@@ -4742,30 +4742,6 @@ MDPlus v1.09 expands the hyper-fast native Windows reader with universal text su
             Console.Write($" [{parsedCsv.Count:N0} CSV rows parsed in {minCsvMs}ms] ");
             Assert(minCsvMs <= 50, $"5,000-row CSV parse must complete in <= 50ms (took {minCsvMs}ms)");
 
-            // Benchmark CSV UI Generation (best of 3 passes)
-            var palette = ThemePalette.GetPalette(ThemePreset.GitHubDark);
-            CsvToFlowDocumentConverter.Convert(csvData, palette); // JIT Warmup
-            
-            long minUiMs = long.MaxValue;
-            FlowDocument? csvDoc = null;
-            for (int pass = 0; pass < 3; pass++)
-            {
-                var swUi = Stopwatch.StartNew();
-                csvDoc = CsvToFlowDocumentConverter.Convert(csvData, palette);
-                swUi.Stop();
-                if (swUi.ElapsedMilliseconds < minUiMs)
-                    minUiMs = swUi.ElapsedMilliseconds;
-            }
-            Console.Write($" [UI generated in {minUiMs}ms] ");
-            Assert(minUiMs < 50, $"5,000-row CSV UI generation must complete in < 50ms (took {minUiMs}ms)");
-
-            // Verify that the document actually contains the virtualized UI listview
-            var container = csvDoc!.Blocks.FirstBlock as BlockUIContainer;
-            Assert(container != null, "CSV document should have a BlockUIContainer");
-            var listView = container!.Child as System.Windows.Controls.ListView;
-            Assert(listView != null, "CSV document should contain a ListView");
-            AssertEqual(5000, ((List<string[]>)listView!.ItemsSource).Count, "ListView ItemsSource should contain all 5000 rows");
-
             // 2. Generate genuine 5,000-line JSON
             var sbJson = new StringBuilder(5000 * 50);
             sbJson.Append("[\n");

@@ -19,23 +19,15 @@ namespace MDPlus.Core
     /// </summary>
     public static class CsvToFlowDocumentConverter
     {
-        public static FlowDocument Convert(string text, ThemePalette palette, bool isTsv = false, int totalRecords = -1)
+        private const int MaxVisualRows = 3000;
+
+        public static FlowDocument Convert(string text, ThemePalette palette, bool isTsv = false)
         {
-            var data = CsvParser.Parse(text, isTsv ? '\t' : ',', 0);
-            int totalLines = totalRecords >= 0 ? totalRecords : CountLines(text);
-            return Convert(data, palette, isTsv, totalLines);
+            var data = CsvParser.Parse(text, isTsv ? '\t' : ',');
+            return Convert(data, palette, isTsv);
         }
 
-        private static int CountLines(string text)
-        {
-            if (string.IsNullOrEmpty(text)) return 0;
-            int count = 1;
-            for (int i = 0; i < text.Length; i++)
-                if (text[i] == '\n') count++;
-            return count;
-        }
-
-        public static FlowDocument Convert(List<List<string>>? data, ThemePalette palette, bool isTsv = false, int totalRecords = -1)
+        public static FlowDocument Convert(List<List<string>>? data, ThemePalette palette, bool isTsv = false)
         {
             var doc = new FlowDocument
             {
@@ -75,81 +67,107 @@ namespace MDPlus.Core
             // Determine column alignments
             var alignments = DetermineColumnAlignments(data, colCount);
 
-            if (data.Count <= 100)
+            var table = new WpfTable
             {
-                var table = new WpfTable
-                {
-                    CellSpacing = 0,
-                    Margin = new Thickness(0, 8, 0, 18),
-                    BorderBrush = palette.TableBorder,
-                    BorderThickness = new Thickness(1)
-                };
-                for (int i = 0; i < colCount; i++) table.Columns.Add(new TableColumn());
+                CellSpacing = 0,
+                Margin = new Thickness(0, 8, 0, 18),
+                BorderBrush = palette.TableBorder,
+                BorderThickness = new Thickness(1)
+            };
 
-                var headerGroup = new WpfTableRowGroup();
-                var headerRow = new WpfTableRow { Background = palette.TableHeaderBg };
-                var firstRow = data[0];
-                for (int i = 0; i < colCount; i++)
-                {
-                    string headerText = i < firstRow.Count ? firstRow[i] : string.Empty;
-                    var p = new Paragraph(new Run(headerText)) { FontWeight = FontWeights.SemiBold, Foreground = palette.HeadingFg, TextAlignment = alignments[i], Margin = new Thickness(0) };
-                    headerRow.Cells.Add(new WpfTableCell(p) { Padding = new Thickness(12, 10, 12, 10), BorderBrush = palette.TableBorder, BorderThickness = new Thickness(0, 0, i == colCount - 1 ? 0 : 1, 2) });
-                }
-                headerGroup.Rows.Add(headerRow);
-                table.RowGroups.Add(headerGroup);
-
-                if (data.Count > 1)
-                {
-                    var bodyGroup = new WpfTableRowGroup();
-                    for (int r = 1; r < data.Count; r++)
-                    {
-                        var dataRow = data[r];
-                        var wpfRow = new WpfTableRow { Background = ((r - 1) % 2 == 1) ? palette.TableAltRowBg : Brushes.Transparent };
-                        for (int i = 0; i < colCount; i++)
-                        {
-                            string cellText = i < dataRow.Count ? dataRow[i] : string.Empty;
-                            var p = new Paragraph(new Run(cellText)) { Foreground = palette.EditorFg, TextAlignment = alignments[i], Margin = new Thickness(0) };
-                            wpfRow.Cells.Add(new WpfTableCell(p) { Padding = new Thickness(12, 8, 12, 8), BorderBrush = palette.TableBorder, BorderThickness = new Thickness(0, 0, i == colCount - 1 ? 0 : 1, 1) });
-                        }
-                        bodyGroup.Rows.Add(wpfRow);
-                    }
-                    table.RowGroups.Add(bodyGroup);
-                }
-                doc.Blocks.Add(table);
+            for (int i = 0; i < colCount; i++)
+            {
+                table.Columns.Add(new TableColumn());
             }
-            else
+
+            // 1. Header Row Group
+            var headerGroup = new WpfTableRowGroup();
+            var headerRow = new WpfTableRow
             {
-                var gridView = new System.Windows.Controls.GridView();
-                var firstRow = data[0];
-                for (int i = 0; i < colCount; i++)
-                {
-                    string headerText = i < firstRow.Count ? firstRow[i] : string.Empty;
-                    gridView.Columns.Add(new System.Windows.Controls.GridViewColumn { Header = headerText, DisplayMemberBinding = new System.Windows.Data.Binding($"[{i}]") });
-                }
+                Background = palette.TableHeaderBg
+            };
 
-                var items = new List<string[]>();
-                for (int r = 1; r < data.Count; r++)
+            var firstRow = data[0];
+            for (int i = 0; i < colCount; i++)
+            {
+                string headerText = i < firstRow.Count ? firstRow[i] : string.Empty;
+                var p = new Paragraph(new Run(headerText))
                 {
-                    var row = data[r];
-                    var arr = new string[colCount];
-                    for (int i = 0; i < colCount; i++) arr[i] = i < row.Count ? row[i] : string.Empty;
-                    items.Add(arr);
-                }
-
-                var listView = new System.Windows.Controls.ListView
-                {
-                    View = gridView,
-                    ItemsSource = items,
-                    Background = palette.EditorBg,
-                    Foreground = palette.EditorFg,
-                    BorderThickness = new Thickness(1),
-                    BorderBrush = palette.TableBorder,
-                    MaxHeight = 600, // Important so it virtualizes within the FlowDocument
+                    FontWeight = FontWeights.SemiBold,
+                    Foreground = palette.HeadingFg,
+                    TextAlignment = alignments[i],
+                    Margin = new Thickness(0)
                 };
-                System.Windows.Controls.VirtualizingPanel.SetIsVirtualizing(listView, true);
-                System.Windows.Controls.VirtualizingPanel.SetVirtualizationMode(listView, System.Windows.Controls.VirtualizationMode.Recycling);
-                
-                doc.Blocks.Add(new BlockUIContainer(listView));
+
+                var cell = new WpfTableCell(p)
+                {
+                    Padding = new Thickness(12, 10, 12, 10),
+                    BorderBrush = palette.TableBorder,
+                    BorderThickness = new Thickness(0, 0, i == colCount - 1 ? 0 : 1, 2)
+                };
+                headerRow.Cells.Add(cell);
+            }
+
+            headerGroup.Rows.Add(headerRow);
+            table.RowGroups.Add(headerGroup);
+
+            // 2. Data Rows Group
+            int rowLimit = Math.Min(data.Count, MaxVisualRows + 1); // +1 for header
+            if (data.Count > 1)
+            {
+                var bodyGroup = new WpfTableRowGroup();
+                var cellPadding = new Thickness(12, 8, 12, 8);
+                var zeroMargin = new Thickness(0);
+                var normalBorder = new Thickness(0, 0, 1, 1);
+                var lastBorder = new Thickness(0, 0, 0, 1);
+                var tableBorder = palette.TableBorder;
+                var editorFg = palette.EditorFg;
+                var altRowBg = palette.TableAltRowBg;
+                var transparent = Brushes.Transparent;
+
+                for (int r = 1; r < rowLimit; r++)
+                {
+                    var dataRow = data[r];
+                    var wpfRow = new WpfTableRow
+                    {
+                        Background = ((r - 1) % 2 == 1) ? altRowBg : transparent
+                    };
+
+                    for (int i = 0; i < colCount; i++)
+                    {
+                        string cellText = i < dataRow.Count ? dataRow[i] : string.Empty;
+                        var p = new Paragraph(new Run(cellText))
+                        {
+                            Foreground = editorFg,
+                            TextAlignment = alignments[i],
+                            Margin = zeroMargin
+                        };
+
+                        var cell = new WpfTableCell(p)
+                        {
+                            Padding = cellPadding,
+                            BorderBrush = tableBorder,
+                            BorderThickness = (i == colCount - 1) ? lastBorder : normalBorder
+                        };
+                        wpfRow.Cells.Add(cell);
+                    }
+
+                    bodyGroup.Rows.Add(wpfRow);
+                }
+                table.RowGroups.Add(bodyGroup);
+            }
+
+            doc.Blocks.Add(table);
+
+            if (data.Count > MaxVisualRows + 1)
+            {
+                var noticePara = new Paragraph(new Run($"Showing first {MaxVisualRows:N0} of {data.Count - 1:N0} records. Switch to Raw view (Ctrl+3) to view or edit full stream."))
+                {
+                    FontStyle = FontStyles.Italic,
+                    Foreground = palette.MutedFg,
+                    Margin = new Thickness(0, 8, 0, 0)
+                };
+                doc.Blocks.Add(noticePara);
             }
 
             return doc;
