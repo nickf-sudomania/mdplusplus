@@ -2859,10 +2859,52 @@ Plugins can be enabled or disabled instantly via the Plugins menu without restar
                 || double.TryParse(clean, NumberStyles.Any, CultureInfo.CurrentCulture, out _);
         }
 
+        private static double EstimateColumnWidth(DataTable? dt, string columnName)
+        {
+            if (dt == null || string.IsNullOrEmpty(columnName) || !dt.Columns.Contains(columnName))
+                return 120;
+
+            int colIndex = dt.Columns.IndexOf(columnName);
+            double maxTextWidth = MeasureTextWidth(columnName) + 32; // header text + sort arrow buffer
+
+            int sampleLimit = Math.Min(dt.Rows.Count, 250);
+            for (int r = 0; r < sampleLimit; r++)
+            {
+                string? val = dt.Rows[r][colIndex]?.ToString();
+                if (!string.IsNullOrEmpty(val))
+                {
+                    double w = MeasureTextWidth(val);
+                    if (w > maxTextWidth) maxTextWidth = w;
+                }
+            }
+
+            // Add 28px cell padding (12px left + 12px right + 4px margin)
+            double desiredWidth = maxTextWidth + 28;
+
+            // Clamp between 85px and 700px
+            return Math.Max(85, Math.Min(700, Math.Ceiling(desiredWidth)));
+        }
+
+        private static double MeasureTextWidth(string text)
+        {
+            if (string.IsNullOrEmpty(text)) return 0;
+            double width = 0;
+            foreach (char ch in text)
+            {
+                if (ch > 127) width += 15.5; // CJK (Chinese, Japanese, Korean) fullwidth characters
+                else if (char.IsUpper(ch) || ch == '@' || ch == '%' || ch == '#' || ch == '&') width += 10.0;
+                else if (ch == ' ' || ch == '.' || ch == ',' || ch == ':' || ch == ';' || ch == '!' || ch == '|' || ch == '/' || ch == '\\') width += 5.0;
+                else width += 8.2; // standard ASCII characters
+            }
+            return width;
+        }
+
         private void CsvDataGrid_AutoGeneratingColumn(object? sender, DataGridAutoGeneratingColumnEventArgs e)
         {
-            e.Column.Width = new DataGridLength(1, DataGridLengthUnitType.Star);
-            e.Column.MinWidth = 85;
+            double colWidth = EstimateColumnWidth(_activeTab?.TabularData, e.PropertyName);
+            e.Column.Width = new DataGridLength(colWidth, DataGridLengthUnitType.Pixel);
+            e.Column.MinWidth = Math.Min(85, colWidth);
+            e.Column.MaxWidth = 700;
 
             if (e.Column is DataGridBoundColumn boundCol)
             {
@@ -2875,11 +2917,13 @@ Plugins can be enabled or disabled instantly via the Plugins menu without restar
             {
                 var palette = ThemeManager.Instance.CurrentPalette;
 
-                // Generous 12px horizontal padding, vertical centering, and automatic numeric right-alignment
+                // Generous 12px horizontal padding, vertical centering, full-text tooltip, and automatic numeric right-alignment
                 var elementStyle = new Style(typeof(TextBlock));
                 elementStyle.Setters.Add(new Setter(TextBlock.TextTrimmingProperty, TextTrimming.CharacterEllipsis));
                 elementStyle.Setters.Add(new Setter(TextBlock.VerticalAlignmentProperty, VerticalAlignment.Center));
                 elementStyle.Setters.Add(new Setter(TextBlock.MarginProperty, new Thickness(12, 4, 12, 4)));
+                elementStyle.Setters.Add(new Setter(ToolTipService.ToolTipProperty, new Binding($"[{e.PropertyName}]")));
+                elementStyle.Setters.Add(new Setter(ToolTipService.ShowDurationProperty, 15000));
                 if (isNumeric)
                 {
                     elementStyle.Setters.Add(new Setter(TextBlock.TextAlignmentProperty, TextAlignment.Right));
