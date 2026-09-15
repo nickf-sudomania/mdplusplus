@@ -21,6 +21,6 @@ using System.Windows;
     ResourceDictionaryLocation.SourceAssembly
 )]
 
-[assembly: AssemblyVersion("1.14.1.0")]
-[assembly: AssemblyFileVersion("1.14.1.0")]
-[assembly: AssemblyInformationalVersion("1.14.1")]
+[assembly: AssemblyVersion("1.14.2.0")]
+[assembly: AssemblyFileVersion("1.14.2.0")]
+[assembly: AssemblyInformationalVersion("1.14.2")]

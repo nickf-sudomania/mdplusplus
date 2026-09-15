@@ -1,6 +1,16 @@
 # MDPlus Release Notes
 
-## Version 1.14.1 (Latest)
+## Version 1.14.2 (Latest)
+
+See [docs/RELEASE_NOTES_v1.14.2.md](docs/RELEASE_NOTES_v1.14.2.md) for full details.
+
+### Highlights
+- **Equal-Width Star Columns:** All columns evenly divide the viewport width — no horizontal scrollbar. Every column is always visible.
+- **Text Wrapping:** Long cell text wraps within its column instead of being truncated with ellipsis. Row heights auto-expand to fit wrapped content.
+- **Dynamic Row Heights:** Removed fixed 36px row height; rows auto-size while maintaining a comfortable 32px minimum that scales with zoom.
+- **Dead Code Removal:** Cleaned up 39 lines of unused `EstimateColumnWidth` and `MeasureTextWidth` methods.
+
+## Version 1.14.1
 
 See [docs/RELEASE_NOTES_v1.14.1.md](docs/RELEASE_NOTES_v1.14.1.md) for full details.
 
