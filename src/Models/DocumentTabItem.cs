@@ -22,6 +22,7 @@ namespace MDPlus.Models
         private string _rawMarkdown = string.Empty;
         private MarkdownDocument _document = new MarkdownDocument();
         private FlowDocument? _flowDocument;
+        private System.Data.DataTable? _tabularData;
         private List<HeadingItem> _headings = new List<HeadingItem>();
         private ViewDisplayMode _viewMode = ViewDisplayMode.Rendered;
         private double _zoom = 100.0;
@@ -61,7 +62,7 @@ namespace MDPlus.Models
             IsDirty = true;
         }
 
-        public bool IsVisualCapped => FlowDocument?.Tag as string == "VisualCapped";
+        public bool IsVisualCapped => _flowDocument?.Tag as string == "VisualCapped";
 
         /// <summary>
         /// Saves the document to disk at FilePath or an explicitly specified target path.
@@ -78,9 +79,13 @@ namespace MDPlus.Models
 
             Format = DocumentFormatHelper.DetectFromPath(path);
 
-            if (FlowDocument != null && ViewMode != ViewDisplayMode.Raw && IsDirty && !IsVisualCapped)
+            if (TabularData != null && ViewMode != ViewDisplayMode.Raw && IsDirty)
             {
-                RawMarkdown = DocumentFormatHelper.SerializeFlowDocument(FlowDocument, Format, LineEndingName);
+                RawMarkdown = CsvSerializer.SerializeDataTable(TabularData, Format == DocumentFormat.Tsv ? '\t' : ',', LineEndingName);
+            }
+            else if (_flowDocument != null && ViewMode != ViewDisplayMode.Raw && IsDirty && !IsVisualCapped)
+            {
+                RawMarkdown = DocumentFormatHelper.SerializeFlowDocument(_flowDocument, Format, LineEndingName);
             }
 
             try
@@ -201,9 +206,29 @@ namespace MDPlus.Models
             }
         }
 
+        public System.Data.DataTable? TabularData
+        {
+            get => _tabularData;
+            set
+            {
+                if (_tabularData != value)
+                {
+                    _tabularData = value;
+                    OnPropertyChanged();
+                }
+            }
+        }
+
         public FlowDocument? FlowDocument
         {
-            get => _flowDocument;
+            get
+            {
+                if (_flowDocument == null && (Format == DocumentFormat.Csv || Format == DocumentFormat.Tsv) && !string.IsNullOrEmpty(RawMarkdown))
+                {
+                    _flowDocument = CsvToFlowDocumentConverter.Convert(RawMarkdown, ThemeManager.Instance.CurrentPalette, Format == DocumentFormat.Tsv);
+                }
+                return _flowDocument;
+            }
             set
             {
                 if (_flowDocument != value)

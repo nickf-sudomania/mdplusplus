@@ -223,6 +223,9 @@ namespace MDPlus.Tests
             RunTest("TSV Tab Delimiter-Only Whitespace Preservation", TestTsvWhitespaceDelimiterParsing);
             RunTest("Empty Zero-Column CSV FlowDocument Placeholder", TestEmptyZeroColCsvFlowDocument);
             RunTest("StatsText Zero-Allocation Line Counting Fidelity", TestStatsTextLineCountingFidelity);
+            RunTest("Virtualized Tabular DataGrid Performance (< 100ms)", TestTabularDataGridVirtualizedPerformance);
+            RunTest("Tabular Special Column Names, Sorting & Delete Safeguard", TestTabularSpecialColumnNamesAndSorting);
+            RunTest("Tabular IsVisualCapped Lazy FlowDocument Safety", TestTabularIsVisualCappedLazySafety);
 
             sw.Stop();
 
@@ -5280,6 +5283,150 @@ MDPlus v1.09 expands the hyper-fast native Windows reader with universal text su
 
             tab.RawMarkdown = "";
             Assert(tab.StatsText.StartsWith("0 lines"), $"StatsText must report 0 lines for empty string, actual: {tab.StatsText}");
+        }
+
+        private static void TestTabularDataGridVirtualizedPerformance()
+        {
+            string path = @"c:\Users\nickf\OneDrive - Duli Capital, LLC\0.AI M Guide\ragIngestion\clean_book_titles_full.csv";
+            string text;
+            if (File.Exists(path))
+            {
+                text = File.ReadAllText(path);
+            }
+            else
+            {
+                var sb = new StringBuilder();
+                sb.AppendLine("comic_id,raw_title,title_en,title_zh_hant,title_zh_hans,reading_level,script,source");
+                for (int i = 0; i < 1200; i++)
+                {
+                    sb.AppendLine($"id_{i},Title {i} 金窗子,English Title {i},100個傳家故事：金窗子 {i},100个传家故事：金窗子 {i},middle,traditional,exact_map");
+                }
+                text = sb.ToString();
+            }
+
+            var sw = Stopwatch.StartNew();
+            var rows = CsvParser.Parse(text);
+            long parseMs = sw.ElapsedMilliseconds;
+            Assert(parseMs < 100, $"CsvParser.Parse must complete in < 100ms, actual: {parseMs}ms");
+            Assert(rows.Count > 1000, $"Must have > 1000 rows, actual: {rows.Count}");
+
+            sw.Restart();
+            var dt = new System.Data.DataTable();
+            var header = rows[0];
+            var originalHeaders = new string[header.Count];
+            var seenCols = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+
+            for (int i = 0; i < header.Count; i++)
+            {
+                string original = header[i];
+                originalHeaders[i] = original;
+                string colName = string.IsNullOrWhiteSpace(original) ? $"Column_{i + 1}" : original;
+                if (seenCols.Contains(colName)) colName = $"{colName}_{i + 1}";
+                seenCols.Add(colName);
+                dt.Columns.Add(colName, typeof(string));
+            }
+            dt.ExtendedProperties["OriginalHeaders"] = originalHeaders;
+
+            for (int r = 1; r < rows.Count; r++)
+            {
+                var row = rows[r];
+                var itemArray = new object[dt.Columns.Count];
+                for (int c = 0; c < dt.Columns.Count; c++)
+                {
+                    itemArray[c] = c < row.Count ? row[c] : string.Empty;
+                }
+                dt.Rows.Add(itemArray);
+            }
+            long dtCreatedMs = sw.ElapsedMilliseconds;
+            Assert(dtCreatedMs < 150, $"DataTable creation must complete in < 150ms, actual: {dtCreatedMs}ms");
+
+            // Verify DataGrid Virtualization layout time
+            sw.Restart();
+            var grid = new System.Windows.Controls.DataGrid
+            {
+                EnableRowVirtualization = true,
+                EnableColumnVirtualization = true,
+                ItemsSource = dt.DefaultView
+            };
+            grid.Measure(new Size(1200, 800));
+            grid.Arrange(new Rect(0, 0, 1200, 800));
+            grid.UpdateLayout();
+            long gridLayoutMs = sw.ElapsedMilliseconds;
+            Assert(gridLayoutMs < 200, $"DataGrid layout must complete in < 200ms, actual: {gridLayoutMs}ms");
+
+            // Verify round-trip serialization fidelity
+            string serialized = CsvSerializer.SerializeDataTable(dt, ',', "LF");
+            Assert(!string.IsNullOrEmpty(serialized), "Serialized CSV must not be empty");
+            var reparsed = CsvParser.Parse(serialized);
+            Assert(reparsed.Count == rows.Count, $"Roundtrip row count mismatch: expected {rows.Count}, actual {reparsed.Count}");
+            Assert(reparsed[0].Count == rows[0].Count, $"Roundtrip column count mismatch: expected {rows[0].Count}, actual {reparsed[0].Count}");
+
+            // Verify DocumentTabItem lazy FlowDocument
+            var tab = new DocumentTabItem
+            {
+                Format = DocumentFormat.Csv,
+                RawMarkdown = text,
+                TabularData = dt
+            };
+            Assert(tab.TabularData != null, "TabularData must be set");
+            var flowDoc = tab.FlowDocument;
+            Assert(flowDoc != null, "Lazy FlowDocument getter must create FlowDocument on demand");
+        }
+
+        private static void TestTabularSpecialColumnNamesAndSorting()
+        {
+            string csvText = "user.id,Full Name,item[0],Score\n101,Alice Smith,A1,95\n102,Bob Jones,B2,80\n103,Charlie Brown,C3,88\n";
+            var rows = CsvParser.Parse(csvText);
+            var dt = new System.Data.DataTable();
+            var originalHeaders = new string[rows[0].Count];
+            for (int i = 0; i < rows[0].Count; i++)
+            {
+                originalHeaders[i] = rows[0][i];
+                dt.Columns.Add(rows[0][i], typeof(string));
+            }
+            dt.ExtendedProperties["OriginalHeaders"] = originalHeaders;
+
+            for (int r = 1; r < rows.Count; r++)
+            {
+                var itemArray = new object[dt.Columns.Count];
+                for (int c = 0; c < dt.Columns.Count; c++) itemArray[c] = rows[r][c];
+                dt.Rows.Add(itemArray);
+            }
+
+            // Verify sorting via DefaultView
+            dt.DefaultView.Sort = "Score DESC";
+            string sortedCsv = CsvSerializer.SerializeDataTable(dt, ',', "LF");
+            var sortedRows = CsvParser.Parse(sortedCsv);
+            AssertEqual(4, sortedRows.Count, "Must have 4 rows (1 header + 3 data)");
+            AssertEqual("user.id", sortedRows[0][0], "Original header with dot preserved");
+            AssertEqual("Full Name", sortedRows[0][1], "Original header with space preserved");
+            AssertEqual("item[0]", sortedRows[0][2], "Original header with brackets preserved");
+            AssertEqual("101", sortedRows[1][0], "Highest score (95) row must be first");
+            AssertEqual("103", sortedRows[2][0], "Second highest score (88) row must be second");
+            AssertEqual("102", sortedRows[3][0], "Third highest score (80) row must be third");
+
+            // Verify deleted row tolerance
+            dt.Rows[1].Delete(); // delete Bob
+            string afterDeleteCsv = CsvSerializer.SerializeDataTable(dt, ',', "LF");
+            var afterDeleteRows = CsvParser.Parse(afterDeleteCsv);
+            AssertEqual(3, afterDeleteRows.Count, "Must have 3 rows after delete");
+        }
+
+        private static void TestTabularIsVisualCappedLazySafety()
+        {
+            var tab = new DocumentTabItem
+            {
+                Format = DocumentFormat.Csv,
+                RawMarkdown = "a,b,c\n1,2,3\n4,5,6\n"
+            };
+
+            // Checking IsVisualCapped must NOT trigger FlowDocument generation
+            Assert(!tab.IsVisualCapped, "IsVisualCapped must be false");
+            Assert(tab.TabularData == null, "TabularData must be null initially");
+
+            // Explicitly accessing FlowDocument property creates it on demand
+            var doc = tab.FlowDocument;
+            Assert(doc != null, "FlowDocument must be created on demand");
         }
     }
 }

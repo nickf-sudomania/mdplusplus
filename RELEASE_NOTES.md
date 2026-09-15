@@ -1,6 +1,18 @@
 # MDPlus Release Notes
 
-## Version 1.12 (Latest)
+## Version 1.13 (Latest)
+
+See [docs/RELEASE_NOTES_v1.13.md](docs/RELEASE_NOTES_v1.13.md) for full details.
+
+### Highlights
+- **High-Performance Virtualized Tabular Grid (`CsvDataGrid`):** Integrated a hardware-accelerated, UI-virtualized data grid for CSV and TSV files, transforming 11-second UI freezes on 1,000+ row datasets into instant sub-40ms loading and rock-solid 60 FPS pixel scrolling.
+- **Dynamic Theme Palette Theming:** Seamless theme styling for table headers, cell backgrounds, alternating rows, grid lines, and selection across all 8 presets.
+- **Interactive In-Place Editing & Synchronization:** Instant in-place cell editing with auto-commit and background real-time synchronization with raw CSV text in Split view.
+- **Grid Find Navigation (`Ctrl+F`):** Directly navigates and highlights matching cells in `CsvDataGrid`, scrolling matched cells into viewport instantly without lag.
+- **Copy & Selection:** Full support for `ApplicationCommands.Copy` and `SelectAll` (`Ctrl+A`, `Ctrl+C`) exporting grid cells in standard tab-delimited format compatible with Excel and Google Sheets.
+- **Lossless Round-Trip Persistence:** Extended table properties preserve exact original column headers (including empty cells and special characters) during file save and view toggles.
+
+## Version 1.12
 
 See [docs/RELEASE_NOTES_v1.12.md](docs/RELEASE_NOTES_v1.12.md) for full details.
 

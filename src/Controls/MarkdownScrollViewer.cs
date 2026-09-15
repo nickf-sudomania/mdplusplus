@@ -45,7 +45,16 @@ namespace MDPlus.Controls
             get => base.Document;
             set
             {
-                base.Document = value ?? new FlowDocument();
+                bool wasUndo = IsUndoEnabled;
+                try
+                {
+                    IsUndoEnabled = false;
+                    base.Document = value ?? new FlowDocument();
+                }
+                finally
+                {
+                    IsUndoEnabled = wasUndo;
+                }
                 ClearHighlights();
             }
         }
@@ -58,7 +67,7 @@ namespace MDPlus.Controls
             AcceptsReturn = true;
             AcceptsTab = true;
             VerticalScrollBarVisibility = ScrollBarVisibility.Auto;
-            HorizontalScrollBarVisibility = ScrollBarVisibility.Disabled;
+            HorizontalScrollBarVisibility = ScrollBarVisibility.Auto;
             SpellCheck.IsEnabled = false;
         }
 

@@ -65,6 +65,60 @@ namespace MDPlus.Core
             return sb.ToString();
         }
 
+        public static string SerializeDataTable(System.Data.DataTable? dt, char delimiter = ',', string? lineEnding = null)
+        {
+            if (dt == null || dt.Columns.Count == 0)
+                return string.Empty;
+
+            string eol = lineEnding == "LF" ? "\n" : "\r\n";
+            var sb = new StringBuilder();
+            string[]? originalHeaders = dt.ExtendedProperties["OriginalHeaders"] as string[];
+
+            // Headers
+            for (int i = 0; i < dt.Columns.Count; i++)
+            {
+                if (i > 0) sb.Append(delimiter);
+                string colHeader = (originalHeaders != null && i < originalHeaders.Length)
+                    ? originalHeaders[i]
+                    : dt.Columns[i].ColumnName;
+                sb.Append(EscapeField(colHeader, delimiter));
+            }
+            sb.Append(eol);
+
+            // Data rows - use DefaultView if present to respect user column sorting
+            var view = dt.DefaultView;
+            if (view != null && view.Count > 0)
+            {
+                for (int r = 0; r < view.Count; r++)
+                {
+                    var rowView = view[r];
+                    if (rowView.Row.RowState == System.Data.DataRowState.Deleted) continue;
+                    for (int i = 0; i < dt.Columns.Count; i++)
+                    {
+                        if (i > 0) sb.Append(delimiter);
+                        sb.Append(EscapeField(rowView[i]?.ToString() ?? string.Empty, delimiter));
+                    }
+                    sb.Append(eol);
+                }
+            }
+            else
+            {
+                for (int r = 0; r < dt.Rows.Count; r++)
+                {
+                    var row = dt.Rows[r];
+                    if (row.RowState == System.Data.DataRowState.Deleted) continue;
+                    for (int i = 0; i < dt.Columns.Count; i++)
+                    {
+                        if (i > 0) sb.Append(delimiter);
+                        sb.Append(EscapeField(row[i]?.ToString() ?? string.Empty, delimiter));
+                    }
+                    sb.Append(eol);
+                }
+            }
+
+            return sb.ToString();
+        }
+
         public static string EscapeField(string text, char delimiter)
         {
             if (string.IsNullOrEmpty(text))

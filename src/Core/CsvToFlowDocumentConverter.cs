@@ -85,7 +85,7 @@ namespace MDPlus.Core
 
             for (int i = 0; i < colCount; i++)
             {
-                table.Columns.Add(new TableColumn());
+                table.Columns.Add(new TableColumn { Width = new GridLength(1, GridUnitType.Star) });
             }
 
             // 1. Header Row Group

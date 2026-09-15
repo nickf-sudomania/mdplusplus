@@ -11,6 +11,9 @@ using System.Windows.Documents;
 using System.Windows.Input;
 using System.Windows.Media;
 using System.Windows.Threading;
+using System.Data;
+using System.Windows.Data;
+using System.Windows.Controls.Primitives;
 using Microsoft.Win32;
 using MDPlus.Controls;
 using MDPlus.Core;
@@ -34,12 +37,14 @@ namespace MDPlus
         private bool _altKeyCandidate = false;
         private DateTime _lastHamburgerClosedTime = DateTime.MinValue;
         private readonly UpdateService _updateService = new UpdateService();
+        private ScrollViewer? _csvScrollViewer;
 
         private enum EditSource
         {
             None,
             RenderedViewer,
-            RawTextBox
+            RawTextBox,
+            CsvGrid
         }
 
         private EditSource _lastEditSource = EditSource.None;
@@ -60,14 +65,21 @@ namespace MDPlus
             _fileWatcher.FileChanged += OnExternalFileChanged;
 
             DocumentFindBar.FindRequested += OnFindRequested;
-            DocumentFindBar.Closed += (s, e) => MarkdownViewer.ClearHighlights();
+            DocumentFindBar.Closed += (s, e) =>
+            {
+                MarkdownViewer.ClearHighlights();
+                _lastCsvSearchRow = -1;
+                _lastCsvSearchCol = -1;
+                CsvDataGrid.SelectedCells.Clear();
+            };
 
             MarkdownViewer.AddHandler(ScrollViewer.ScrollChangedEvent, new ScrollChangedEventHandler(MarkdownViewer_ScrollChanged));
             RawMarkdownTextBox.AddHandler(ScrollViewer.ScrollChangedEvent, new ScrollChangedEventHandler(RawTextBox_ScrollChanged));
+            CsvDataGrid.AddHandler(ScrollViewer.ScrollChangedEvent, new ScrollChangedEventHandler(CsvDataGrid_ScrollChanged));
 
             MarkdownViewer.TextChanged += MarkdownViewer_TextChanged;
             RawMarkdownTextBox.TextChanged += RawMarkdownTextBox_TextChanged;
-            MarkdownViewer.AddHandler(System.Windows.Controls.Primitives.ButtonBase.ClickEvent, new RoutedEventHandler(MarkdownViewer_ButtonClick));
+            MarkdownViewer.AddHandler(ButtonBase.ClickEvent, new RoutedEventHandler(MarkdownViewer_ButtonClick));
 
             CommandBindings.Add(new CommandBinding(ApplicationCommands.Save, (s, e) => SaveActiveTab()));
             CommandBindings.Add(new CommandBinding(ApplicationCommands.SaveAs, (s, e) => SaveDocumentAs(_activeTab)));
@@ -510,8 +522,10 @@ Plugins can be enabled or disabled instantly via the Plugins menu without restar
             }
             else if (tab.Format is DocumentFormat.Csv or DocumentFormat.Tsv)
             {
-                bool isTsv = tab.Format == DocumentFormat.Tsv;
-                tab.FlowDocument = CsvToFlowDocumentConverter.Convert(tab.RawText, ThemeManager.Instance.CurrentPalette, isTsv);
+                // Tabular documents are rendered in high-performance virtualized CsvDataGrid.
+                // FlowDocument is deferred and created lazily on demand if accessed, preserving instantaneous load times.
+                tab.TabularData = null;
+                tab.FlowDocument = null;
             }
             else if (tab.Format == DocumentFormat.Json)
             {
@@ -556,6 +570,8 @@ Plugins can be enabled or disabled instantly via the Plugins menu without restar
             {
                 WelcomeScreen.Visibility = Visibility.Visible;
                 MarkdownViewer.Document = null;
+                CsvDataGrid.ItemsSource = null;
+                CsvDataGrid.Visibility = Visibility.Collapsed;
                 RawMarkdownTextBox.Text = string.Empty;
                 TocListBox.ItemsSource = null;
                 Title = $"MDPlus v{UpdateService.GetCurrentVersion().TrimStart('v', 'V')}";
@@ -567,7 +583,11 @@ Plugins can be enabled or disabled instantly via the Plugins menu without restar
             WelcomeScreen.Visibility = Visibility.Collapsed;
 
             // Render if not yet rendered
-            if (tab.FlowDocument == null)
+            if (tab.Format is DocumentFormat.Csv or DocumentFormat.Tsv)
+            {
+                PopulateCsvGrid(tab);
+            }
+            else if (tab.FlowDocument == null)
             {
                 RenderDocumentTab(tab);
             }
@@ -575,10 +595,19 @@ Plugins can be enabled or disabled instantly via the Plugins menu without restar
             _suppressDirtyTracking = true;
             try
             {
-                MarkdownViewer.Document = tab.FlowDocument;
-                MarkdownViewer.IsReadOnly = tab.IsVisualCapped;
+                if (tab.Format is DocumentFormat.Csv or DocumentFormat.Tsv)
+                {
+                    MarkdownViewer.Document = null;
+                }
+                else
+                {
+                    MarkdownViewer.Document = tab.FlowDocument;
+                    MarkdownViewer.IsReadOnly = tab.IsVisualCapped;
+                }
                 MarkdownViewer.Zoom = tab.Zoom;
                 RawMarkdownTextBox.FontSize = 13.0 * (tab.Zoom / 100.0);
+                CsvDataGrid.FontSize = 14.0 * (tab.Zoom / 100.0);
+                CsvDataGrid.RowHeight = 32.0 * (tab.Zoom / 100.0);
                 RawMarkdownTextBox.Text = tab.RawMarkdown;
             }
             finally
@@ -746,6 +775,11 @@ Plugins can be enabled or disabled instantly via the Plugins menu without restar
         {
             if (tab == null) return true;
 
+            if (tab == _activeTab && (tab.Format is DocumentFormat.Csv or DocumentFormat.Tsv))
+            {
+                CsvDataGrid.CommitEdit(DataGridEditingUnit.Row, true);
+            }
+
             if (tab.IsDirty)
             {
                 string name = !string.IsNullOrEmpty(tab.Title) ? tab.Title : tab.FileName;
@@ -863,15 +897,22 @@ Plugins can be enabled or disabled instantly via the Plugins menu without restar
                             _suppressDirtyTracking = true;
                             try
                             {
-                                MarkdownViewer.Document = tab.FlowDocument;
-                                MarkdownViewer.IsReadOnly = tab.IsVisualCapped;
+                                if (tab.Format is DocumentFormat.Csv or DocumentFormat.Tsv)
+                                {
+                                    MarkdownViewer.Document = null;
+                                    PopulateCsvGrid(tab);
+                                }
+                                else
+                                {
+                                    MarkdownViewer.Document = tab.FlowDocument;
+                                    MarkdownViewer.IsReadOnly = tab.IsVisualCapped;
+                                    MarkdownViewer.ScrollToVerticalOffset(scrollOffset);
+                                }
                                 RawMarkdownTextBox.Text = tab.RawMarkdown;
                                 TocListBox.ItemsSource = tab.Headings;
                                 StatusStatsText.Text = tab.StatsText;
                                 StatusEncodingText.Text = $"{tab.EncodingName} • {tab.LineEndingName}";
                                 Title = $"{tab.FileName} - MDPlus";
-
-                                MarkdownViewer.ScrollToVerticalOffset(scrollOffset);
                                 RawMarkdownTextBox.ScrollToVerticalOffset(rawScroll);
                                 if (rawCaret >= 0 && rawCaret <= tab.RawMarkdown.Length)
                                 {
@@ -899,6 +940,15 @@ Plugins can be enabled or disabled instantly via the Plugins menu without restar
             if (_activeTab?.ViewMode == ViewDisplayMode.Raw)
             {
                 var (current, total) = SearchRawTextBox(e.SearchText, e.MatchCase, e.Forward);
+                DocumentFindBar.SetMatchCount(current, total);
+            }
+            else if (_activeTab?.Format is DocumentFormat.Csv or DocumentFormat.Tsv)
+            {
+                var (current, total) = SearchCsvGrid(e.SearchText, e.MatchCase, e.Forward);
+                if (_activeTab?.ViewMode == ViewDisplayMode.Split)
+                {
+                    SearchRawTextBox(e.SearchText, e.MatchCase, e.Forward);
+                }
                 DocumentFindBar.SetMatchCount(current, total);
             }
             else
@@ -1014,12 +1064,26 @@ Plugins can be enabled or disabled instantly via the Plugins menu without restar
                 }
                 else if (mode == ViewDisplayMode.Rendered)
                 {
-                    RenderDocumentTab(_activeTab);
+                    if (_activeTab.Format is DocumentFormat.Csv or DocumentFormat.Tsv)
+                    {
+                        PopulateCsvGrid(_activeTab);
+                    }
+                    else
+                    {
+                        RenderDocumentTab(_activeTab);
+                    }
                     _suppressDirtyTracking = true;
                     try
                     {
-                        MarkdownViewer.Document = _activeTab.FlowDocument;
-                        MarkdownViewer.IsReadOnly = _activeTab.IsVisualCapped;
+                        if (_activeTab.Format is DocumentFormat.Csv or DocumentFormat.Tsv)
+                        {
+                            MarkdownViewer.Document = null;
+                        }
+                        else
+                        {
+                            MarkdownViewer.Document = _activeTab.FlowDocument;
+                            MarkdownViewer.IsReadOnly = _activeTab.IsVisualCapped;
+                        }
                     }
                     finally
                     {
@@ -1030,12 +1094,26 @@ Plugins can be enabled or disabled instantly via the Plugins menu without restar
                 }
                 else if (mode == ViewDisplayMode.Split)
                 {
-                    RenderDocumentTab(_activeTab);
+                    if (_activeTab.Format is DocumentFormat.Csv or DocumentFormat.Tsv)
+                    {
+                        PopulateCsvGrid(_activeTab);
+                    }
+                    else
+                    {
+                        RenderDocumentTab(_activeTab);
+                    }
                     _suppressDirtyTracking = true;
                     try
                     {
-                        MarkdownViewer.Document = _activeTab.FlowDocument;
-                        MarkdownViewer.IsReadOnly = _activeTab.IsVisualCapped;
+                        if (_activeTab.Format is DocumentFormat.Csv or DocumentFormat.Tsv)
+                        {
+                            MarkdownViewer.Document = null;
+                        }
+                        else
+                        {
+                            MarkdownViewer.Document = _activeTab.FlowDocument;
+                            MarkdownViewer.IsReadOnly = _activeTab.IsVisualCapped;
+                        }
                         RawMarkdownTextBox.Text = _activeTab.RawMarkdown;
                     }
                     finally
@@ -1047,6 +1125,8 @@ Plugins can be enabled or disabled instantly via the Plugins menu without restar
                 }
             }
 
+            bool isTabular = _activeTab?.Format is DocumentFormat.Csv or DocumentFormat.Tsv;
+
             switch (mode)
             {
                 case ViewDisplayMode.Rendered:
@@ -1054,7 +1134,26 @@ Plugins can be enabled or disabled instantly via the Plugins menu without restar
                     RawColumn.Width = new GridLength(0);
                     ContentSplitterColumn.Width = new GridLength(0);
                     ContentSplitter.Visibility = Visibility.Collapsed;
-                    MarkdownViewer.Visibility = Visibility.Visible;
+                    if (isTabular)
+                    {
+                        bool hasData = _activeTab?.TabularData != null && _activeTab.TabularData.Columns.Count > 0;
+                        if (hasData)
+                        {
+                            MarkdownViewer.Visibility = Visibility.Collapsed;
+                            CsvDataGrid.Visibility = Visibility.Visible;
+                        }
+                        else
+                        {
+                            MarkdownViewer.Document = _activeTab?.FlowDocument;
+                            MarkdownViewer.Visibility = Visibility.Visible;
+                            CsvDataGrid.Visibility = Visibility.Collapsed;
+                        }
+                    }
+                    else
+                    {
+                        MarkdownViewer.Visibility = Visibility.Visible;
+                        CsvDataGrid.Visibility = Visibility.Collapsed;
+                    }
                     RawMarkdownTextBox.Visibility = Visibility.Collapsed;
                     ViewRenderedItem.IsChecked = true;
                     ViewSplitItem.IsChecked = false;
@@ -1069,7 +1168,26 @@ Plugins can be enabled or disabled instantly via the Plugins menu without restar
                     RawColumn.Width = new GridLength(1, GridUnitType.Star);
                     ContentSplitterColumn.Width = new GridLength(5);
                     ContentSplitter.Visibility = Visibility.Visible;
-                    MarkdownViewer.Visibility = Visibility.Visible;
+                    if (isTabular)
+                    {
+                        bool hasData = _activeTab?.TabularData != null && _activeTab.TabularData.Columns.Count > 0;
+                        if (hasData)
+                        {
+                            MarkdownViewer.Visibility = Visibility.Collapsed;
+                            CsvDataGrid.Visibility = Visibility.Visible;
+                        }
+                        else
+                        {
+                            MarkdownViewer.Document = _activeTab?.FlowDocument;
+                            MarkdownViewer.Visibility = Visibility.Visible;
+                            CsvDataGrid.Visibility = Visibility.Collapsed;
+                        }
+                    }
+                    else
+                    {
+                        MarkdownViewer.Visibility = Visibility.Visible;
+                        CsvDataGrid.Visibility = Visibility.Collapsed;
+                    }
                     RawMarkdownTextBox.Visibility = Visibility.Visible;
                     ViewRenderedItem.IsChecked = false;
                     ViewSplitItem.IsChecked = true;
@@ -1085,6 +1203,7 @@ Plugins can be enabled or disabled instantly via the Plugins menu without restar
                     ContentSplitterColumn.Width = new GridLength(0);
                     ContentSplitter.Visibility = Visibility.Collapsed;
                     MarkdownViewer.Visibility = Visibility.Collapsed;
+                    CsvDataGrid.Visibility = Visibility.Collapsed;
                     RawMarkdownTextBox.Visibility = Visibility.Visible;
                     ViewRenderedItem.IsChecked = false;
                     ViewSplitItem.IsChecked = false;
@@ -1167,6 +1286,7 @@ Plugins can be enabled or disabled instantly via the Plugins menu without restar
             AppStatusBar.Background = palette.StatusBg;
             AppStatusBar.Foreground = palette.StatusFg;
 
+            ApplyThemeToCsvGrid(palette);
             DocumentFindBar.ApplyTheme(isDark);
             UpdateThemeMenuChecks();
 
@@ -1185,7 +1305,14 @@ Plugins can be enabled or disabled instantly via the Plugins menu without restar
 
             if (_activeTab != null)
             {
-                MarkdownViewer.Document = _activeTab.FlowDocument;
+                if (_activeTab.Format is DocumentFormat.Csv or DocumentFormat.Tsv)
+                {
+                    PopulateCsvGrid(_activeTab);
+                }
+                else
+                {
+                    MarkdownViewer.Document = _activeTab.FlowDocument;
+                }
             }
         }
 
@@ -1419,7 +1546,12 @@ Plugins can be enabled or disabled instantly via the Plugins menu without restar
                         _suppressDirtyTracking = true;
                         try
                         {
-                            if (tab.FlowDocument != null)
+                            if (tab.Format is DocumentFormat.Csv or DocumentFormat.Tsv)
+                            {
+                                MarkdownViewer.Document = null;
+                                PopulateCsvGrid(tab);
+                            }
+                            else if (tab.FlowDocument != null)
                             {
                                 MarkdownViewer.Document = tab.FlowDocument;
                             }
@@ -1429,6 +1561,7 @@ Plugins can be enabled or disabled instantly via the Plugins menu without restar
                         {
                             _suppressDirtyTracking = false;
                         }
+                        UpdateViewDisplayMode(tab.ViewMode);
                     }
                 }
             }
@@ -1480,6 +1613,11 @@ Plugins can be enabled or disabled instantly via the Plugins menu without restar
 
             if (tab == _activeTab)
             {
+                if (tab.Format is DocumentFormat.Csv or DocumentFormat.Tsv)
+                {
+                    CsvDataGrid.CommitEdit(DataGridEditingUnit.Row, true);
+                }
+
                 bool fromRaw;
                 if (tab.ViewMode == ViewDisplayMode.Raw)
                 {
@@ -1492,7 +1630,7 @@ Plugins can be enabled or disabled instantly via the Plugins menu without restar
                 else // ViewDisplayMode.Split
                 {
                     if (_lastEditSource == EditSource.RawTextBox ||
-                        (RawMarkdownTextBox.IsKeyboardFocusWithin && _lastEditSource != EditSource.RenderedViewer))
+                        (RawMarkdownTextBox.IsKeyboardFocusWithin && _lastEditSource != EditSource.RenderedViewer && _lastEditSource != EditSource.CsvGrid))
                     {
                         fromRaw = true;
                     }
@@ -1511,23 +1649,54 @@ Plugins can be enabled or disabled instantly via the Plugins menu without restar
                         tab.Document = _parser.Parse(tab.RawMarkdown);
                         tab.Headings = ExtractHeadings(tab.Document);
                     }
-                    RenderDocumentTab(tab);
-                    if (tab.ViewMode == ViewDisplayMode.Split && tab.FlowDocument != null)
+                    else if (tab.Format is DocumentFormat.Csv or DocumentFormat.Tsv)
                     {
-                        _suppressDirtyTracking = true;
-                        try
+                        tab.TabularData = null;
+                        if (tab.ViewMode == ViewDisplayMode.Split)
                         {
-                            MarkdownViewer.Document = tab.FlowDocument;
+                            PopulateCsvGrid(tab);
                         }
-                        finally
+                    }
+
+                    if (tab.Format != DocumentFormat.Csv && tab.Format != DocumentFormat.Tsv)
+                    {
+                        RenderDocumentTab(tab);
+                        if (tab.ViewMode == ViewDisplayMode.Split && tab.FlowDocument != null)
                         {
-                            _suppressDirtyTracking = false;
+                            _suppressDirtyTracking = true;
+                            try
+                            {
+                                MarkdownViewer.Document = tab.FlowDocument;
+                            }
+                            finally
+                            {
+                                _suppressDirtyTracking = false;
+                            }
                         }
                     }
                 }
                 else
                 {
-                    if (tab.FlowDocument != null && (tab.IsDirty || _lastEditSource == EditSource.RenderedViewer) && !tab.IsVisualCapped)
+                    if (tab.Format is DocumentFormat.Csv or DocumentFormat.Tsv)
+                    {
+                        if (tab.TabularData != null && (tab.IsDirty || _lastEditSource == EditSource.CsvGrid))
+                        {
+                            tab.RawMarkdown = CsvSerializer.SerializeDataTable(tab.TabularData, tab.Format == DocumentFormat.Tsv ? '\t' : ',', tab.LineEndingName);
+                            if (tab.ViewMode == ViewDisplayMode.Split)
+                            {
+                                _suppressDirtyTracking = true;
+                                try
+                                {
+                                    RawMarkdownTextBox.Text = tab.RawMarkdown;
+                                }
+                                finally
+                                {
+                                    _suppressDirtyTracking = false;
+                                }
+                            }
+                        }
+                    }
+                    else if (tab.FlowDocument != null && (tab.IsDirty || _lastEditSource == EditSource.RenderedViewer) && !tab.IsVisualCapped)
                     {
                         string serialized = DocumentFormatHelper.SerializeFlowDocument(tab.FlowDocument, tab.Format, tab.LineEndingName);
                         tab.RawMarkdown = serialized;
@@ -1549,7 +1718,14 @@ Plugins can be enabled or disabled instantly via the Plugins menu without restar
             }
             else
             {
-                if (tab.FlowDocument != null && tab.ViewMode != ViewDisplayMode.Raw && tab.IsDirty && !tab.IsVisualCapped)
+                if (tab.Format is DocumentFormat.Csv or DocumentFormat.Tsv)
+                {
+                    if (tab.TabularData != null && tab.ViewMode != ViewDisplayMode.Raw && tab.IsDirty)
+                    {
+                        tab.RawMarkdown = CsvSerializer.SerializeDataTable(tab.TabularData, tab.Format == DocumentFormat.Tsv ? '\t' : ',', tab.LineEndingName);
+                    }
+                }
+                else if (tab.FlowDocument != null && tab.ViewMode != ViewDisplayMode.Raw && tab.IsDirty && !tab.IsVisualCapped)
                 {
                     tab.RawMarkdown = DocumentFormatHelper.SerializeFlowDocument(tab.FlowDocument, tab.Format, tab.LineEndingName);
                 }
@@ -1683,12 +1859,22 @@ Plugins can be enabled or disabled instantly via the Plugins menu without restar
 
         private void Print_Click(object sender, RoutedEventArgs e)
         {
-            if (MarkdownViewer.Document == null) return;
+            FlowDocument? doc = null;
+            if (_activeTab?.Format is DocumentFormat.Csv or DocumentFormat.Tsv)
+            {
+                doc = _activeTab.FlowDocument;
+            }
+            else
+            {
+                doc = MarkdownViewer.Document;
+            }
+
+            if (doc == null) return;
 
             var printDlg = new PrintDialog();
             if (printDlg.ShowDialog() == true)
             {
-                IDocumentPaginatorSource idp = MarkdownViewer.Document;
+                IDocumentPaginatorSource idp = doc;
                 printDlg.PrintDocument(idp.DocumentPaginator, _activeTab?.Title ?? "Markdown Document");
             }
         }
@@ -1704,6 +1890,10 @@ Plugins can be enabled or disabled instantly via the Plugins menu without restar
             {
                 RawMarkdownTextBox.Copy();
             }
+            else if (_activeTab?.Format is DocumentFormat.Csv or DocumentFormat.Tsv)
+            {
+                ApplicationCommands.Copy.Execute(null, CsvDataGrid);
+            }
             else
             {
                 ApplicationCommands.Copy.Execute(null, MarkdownViewer);
@@ -1715,6 +1905,10 @@ Plugins can be enabled or disabled instantly via the Plugins menu without restar
             if (_activeTab?.ViewMode == ViewDisplayMode.Raw)
             {
                 RawMarkdownTextBox.SelectAll();
+            }
+            else if (_activeTab?.Format is DocumentFormat.Csv or DocumentFormat.Tsv)
+            {
+                CsvDataGrid.SelectAll();
             }
             else
             {
@@ -1759,6 +1953,8 @@ Plugins can be enabled or disabled instantly via the Plugins menu without restar
                 _activeTab.Zoom = newZoom;
                 MarkdownViewer.Zoom = _activeTab.Zoom;
                 RawMarkdownTextBox.FontSize = 13.0 * (_activeTab.Zoom / 100.0);
+                CsvDataGrid.FontSize = 14.0 * (_activeTab.Zoom / 100.0);
+                CsvDataGrid.RowHeight = 32.0 * (_activeTab.Zoom / 100.0);
                 StatusZoomText.Text = _activeTab.ZoomText;
             }
         }
@@ -2513,7 +2709,16 @@ Plugins can be enabled or disabled instantly via the Plugins menu without restar
             {
                 _isSyncingScroll = true;
                 double ratio = e.VerticalOffset / (e.ExtentHeight - e.ViewportHeight);
-                if (MarkdownViewer.ExtentHeight > MarkdownViewer.ViewportHeight)
+                if (_activeTab?.Format is DocumentFormat.Csv or DocumentFormat.Tsv)
+                {
+                    _csvScrollViewer ??= FindVisualChild<ScrollViewer>(CsvDataGrid);
+                    if (_csvScrollViewer != null && _csvScrollViewer.ExtentHeight > _csvScrollViewer.ViewportHeight)
+                    {
+                        double targetOffset = ratio * (_csvScrollViewer.ExtentHeight - _csvScrollViewer.ViewportHeight);
+                        _csvScrollViewer.ScrollToVerticalOffset(targetOffset);
+                    }
+                }
+                else if (MarkdownViewer.ExtentHeight > MarkdownViewer.ViewportHeight)
                 {
                     double targetOffset = ratio * (MarkdownViewer.ExtentHeight - MarkdownViewer.ViewportHeight);
                     MarkdownViewer.ScrollToVerticalOffset(targetOffset);
@@ -2523,6 +2728,306 @@ Plugins can be enabled or disabled instantly via the Plugins menu without restar
             {
                 _isSyncingScroll = false;
             }
+        }
+
+        private void CsvDataGrid_ScrollChanged(object sender, ScrollChangedEventArgs e)
+        {
+            if (_isSyncingScroll || _activeTab?.ViewMode != ViewDisplayMode.Split) return;
+            if (e.ExtentHeight <= e.ViewportHeight) return;
+
+            try
+            {
+                _isSyncingScroll = true;
+                double ratio = e.VerticalOffset / (e.ExtentHeight - e.ViewportHeight);
+                double targetOffset = ratio * (RawMarkdownTextBox.ExtentHeight - RawMarkdownTextBox.ViewportHeight);
+                RawMarkdownTextBox.ScrollToVerticalOffset(targetOffset);
+            }
+            finally
+            {
+                _isSyncingScroll = false;
+            }
+        }
+
+        private void PopulateCsvGrid(DocumentTabItem tab)
+        {
+            if (tab.TabularData == null)
+            {
+                char delimiter = tab.Format == DocumentFormat.Tsv ? '\t' : ',';
+                var rows = CsvParser.Parse(tab.RawMarkdown, delimiter);
+                var dt = new DataTable();
+                if (rows.Count > 0)
+                {
+                    int maxCols = 0;
+                    for (int i = 0; i < rows.Count; i++)
+                    {
+                        if (rows[i].Count > maxCols) maxCols = rows[i].Count;
+                    }
+
+                    var header = rows[0];
+                    var originalHeaders = new string[maxCols];
+                    var seenCols = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+
+                    for (int i = 0; i < maxCols; i++)
+                    {
+                        string original = i < header.Count ? header[i] : string.Empty;
+                        originalHeaders[i] = original;
+
+                        string colName = string.IsNullOrWhiteSpace(original) ? $"Column_{i + 1}" : original;
+                        if (seenCols.Contains(colName))
+                        {
+                            colName = $"{colName}_{i + 1}";
+                            while (seenCols.Contains(colName))
+                            {
+                                colName += "_1";
+                            }
+                        }
+                        seenCols.Add(colName);
+                        dt.Columns.Add(colName, typeof(string));
+                    }
+
+                    dt.ExtendedProperties["OriginalHeaders"] = originalHeaders;
+
+                    for (int r = 1; r < rows.Count; r++)
+                    {
+                        var row = rows[r];
+                        var itemArray = new object[dt.Columns.Count];
+                        for (int c = 0; c < dt.Columns.Count; c++)
+                        {
+                            itemArray[c] = c < row.Count ? row[c] : string.Empty;
+                        }
+                        dt.Rows.Add(itemArray);
+                    }
+                }
+                tab.TabularData = dt;
+            }
+
+            if (tab.TabularData.Columns.Count > 0)
+            {
+                if (CsvDataGrid.ItemsSource != tab.TabularData.DefaultView)
+                {
+                    CsvDataGrid.ItemsSource = tab.TabularData.DefaultView;
+                }
+                if (_activeTab == tab && _activeTab.ViewMode != ViewDisplayMode.Raw)
+                {
+                    CsvDataGrid.Visibility = Visibility.Visible;
+                    MarkdownViewer.Visibility = Visibility.Collapsed;
+                }
+            }
+            else
+            {
+                CsvDataGrid.ItemsSource = null;
+                if (_activeTab == tab && _activeTab.ViewMode != ViewDisplayMode.Raw)
+                {
+                    CsvDataGrid.Visibility = Visibility.Collapsed;
+                    MarkdownViewer.Document = tab.FlowDocument;
+                    MarkdownViewer.Visibility = Visibility.Visible;
+                }
+            }
+
+            ApplyThemeToCsvGrid(ThemeManager.Instance.CurrentPalette);
+        }
+
+        private void CsvDataGrid_AutoGeneratingColumn(object? sender, DataGridAutoGeneratingColumnEventArgs e)
+        {
+            e.Column.Width = new DataGridLength(1, DataGridLengthUnitType.Star);
+            e.Column.MinWidth = 80;
+
+            if (e.Column is DataGridBoundColumn boundCol)
+            {
+                boundCol.Binding = new Binding($"[{e.PropertyName}]");
+            }
+
+            if (e.Column is DataGridTextColumn textCol)
+            {
+                var palette = ThemeManager.Instance.CurrentPalette;
+
+                var elementStyle = new Style(typeof(TextBlock));
+                elementStyle.Setters.Add(new Setter(TextBlock.TextTrimmingProperty, TextTrimming.CharacterEllipsis));
+                elementStyle.Setters.Add(new Setter(TextBlock.VerticalAlignmentProperty, VerticalAlignment.Center));
+                textCol.ElementStyle = elementStyle;
+
+                var editingStyle = new Style(typeof(TextBox));
+                editingStyle.Setters.Add(new Setter(TextBox.BackgroundProperty, palette.EditorBg));
+                editingStyle.Setters.Add(new Setter(TextBox.ForegroundProperty, palette.EditorFg));
+                editingStyle.Setters.Add(new Setter(TextBox.CaretBrushProperty, palette.EditorFg));
+                editingStyle.Setters.Add(new Setter(TextBox.BorderBrushProperty, palette.SelectionBg));
+                editingStyle.Setters.Add(new Setter(TextBox.BorderThicknessProperty, new Thickness(1)));
+                editingStyle.Setters.Add(new Setter(TextBox.PaddingProperty, new Thickness(4, 1, 4, 1)));
+                editingStyle.Setters.Add(new Setter(TextBox.VerticalAlignmentProperty, VerticalAlignment.Center));
+                textCol.EditingElementStyle = editingStyle;
+            }
+        }
+
+        private void CsvDataGrid_CellEditEnding(object? sender, DataGridCellEditEndingEventArgs e)
+        {
+            if (e.EditAction == DataGridEditAction.Cancel) return;
+            if (_suppressDirtyTracking || _activeTab == null) return;
+            _lastEditSource = EditSource.CsvGrid;
+            if (!_activeTab.IsDirty)
+            {
+                _activeTab.MarkDirty();
+                RebuildTabStrip();
+                Title = $"{_activeTab.DisplayTitle} - MDPlus";
+                UpdateStatusBar();
+            }
+
+            if (_activeTab.ViewMode == ViewDisplayMode.Split)
+            {
+                Dispatcher.BeginInvoke(new Action(() =>
+                {
+                    if (_activeTab != null && _activeTab.TabularData != null)
+                    {
+                        _suppressDirtyTracking = true;
+                        try
+                        {
+                            _activeTab.RawMarkdown = CsvSerializer.SerializeDataTable(_activeTab.TabularData, _activeTab.Format == DocumentFormat.Tsv ? '\t' : ',', _activeTab.LineEndingName);
+                            RawMarkdownTextBox.Text = _activeTab.RawMarkdown;
+                        }
+                        finally
+                        {
+                            _suppressDirtyTracking = false;
+                        }
+                    }
+                }), DispatcherPriority.Background);
+            }
+        }
+
+        private void ApplyThemeToCsvGrid(ThemePalette palette)
+        {
+            CsvDataGrid.Background = palette.EditorBg;
+            CsvDataGrid.Foreground = palette.EditorFg;
+            CsvDataGrid.RowBackground = palette.EditorBg;
+            CsvDataGrid.AlternatingRowBackground = palette.TableAltRowBg;
+            CsvDataGrid.HorizontalGridLinesBrush = palette.TableBorder;
+            CsvDataGrid.VerticalGridLinesBrush = palette.TableBorder;
+            CsvDataGrid.BorderBrush = palette.Border;
+
+            var headerStyle = new Style(typeof(DataGridColumnHeader));
+            headerStyle.Setters.Add(new Setter(DataGridColumnHeader.BackgroundProperty, palette.TableHeaderBg));
+            headerStyle.Setters.Add(new Setter(DataGridColumnHeader.ForegroundProperty, palette.HeadingFg));
+            headerStyle.Setters.Add(new Setter(DataGridColumnHeader.BorderBrushProperty, palette.TableBorder));
+            headerStyle.Setters.Add(new Setter(DataGridColumnHeader.BorderThicknessProperty, new Thickness(0, 0, 1, 1)));
+            headerStyle.Setters.Add(new Setter(DataGridColumnHeader.PaddingProperty, new Thickness(8, 6, 8, 6)));
+            headerStyle.Setters.Add(new Setter(DataGridColumnHeader.FontWeightProperty, FontWeights.SemiBold));
+            CsvDataGrid.ColumnHeaderStyle = headerStyle;
+
+            var cellStyle = new Style(typeof(DataGridCell));
+            cellStyle.Setters.Add(new Setter(DataGridCell.BorderThicknessProperty, new Thickness(0)));
+            cellStyle.Setters.Add(new Setter(DataGridCell.PaddingProperty, new Thickness(6, 2, 6, 2)));
+            cellStyle.Setters.Add(new Setter(DataGridCell.BackgroundProperty, Brushes.Transparent));
+            cellStyle.Setters.Add(new Setter(DataGridCell.ForegroundProperty, palette.EditorFg));
+            var cellSelectedTrigger = new Trigger { Property = DataGridCell.IsSelectedProperty, Value = true };
+            cellSelectedTrigger.Setters.Add(new Setter(DataGridCell.BackgroundProperty, palette.SelectionBg));
+            cellSelectedTrigger.Setters.Add(new Setter(DataGridCell.ForegroundProperty, palette.EditorFg));
+            cellStyle.Triggers.Add(cellSelectedTrigger);
+            CsvDataGrid.CellStyle = cellStyle;
+
+            var rowStyle = new Style(typeof(DataGridRow));
+            rowStyle.Setters.Add(new Setter(DataGridRow.BorderThicknessProperty, new Thickness(0)));
+            var rowSelectedTrigger = new Trigger { Property = DataGridRow.IsSelectedProperty, Value = true };
+            rowSelectedTrigger.Setters.Add(new Setter(DataGridRow.BackgroundProperty, palette.SelectionBg));
+            rowSelectedTrigger.Setters.Add(new Setter(DataGridRow.ForegroundProperty, palette.EditorFg));
+            rowStyle.Triggers.Add(rowSelectedTrigger);
+            CsvDataGrid.RowStyle = rowStyle;
+
+            foreach (var col in CsvDataGrid.Columns)
+            {
+                if (col is DataGridTextColumn textCol)
+                {
+                    var editingStyle = new Style(typeof(TextBox));
+                    editingStyle.Setters.Add(new Setter(TextBox.BackgroundProperty, palette.EditorBg));
+                    editingStyle.Setters.Add(new Setter(TextBox.ForegroundProperty, palette.EditorFg));
+                    editingStyle.Setters.Add(new Setter(TextBox.CaretBrushProperty, palette.EditorFg));
+                    editingStyle.Setters.Add(new Setter(TextBox.BorderBrushProperty, palette.SelectionBg));
+                    editingStyle.Setters.Add(new Setter(TextBox.BorderThicknessProperty, new Thickness(1)));
+                    editingStyle.Setters.Add(new Setter(TextBox.PaddingProperty, new Thickness(4, 1, 4, 1)));
+                    editingStyle.Setters.Add(new Setter(TextBox.VerticalAlignmentProperty, VerticalAlignment.Center));
+                    textCol.EditingElementStyle = editingStyle;
+                }
+            }
+        }
+
+        private int _lastCsvSearchRow = -1;
+        private int _lastCsvSearchCol = -1;
+        private string _lastCsvSearchText = string.Empty;
+
+        private (int current, int total) SearchCsvGrid(string searchText, bool matchCase, bool forward)
+        {
+            if (_activeTab?.TabularData == null || string.IsNullOrEmpty(searchText))
+            {
+                _lastCsvSearchRow = -1;
+                _lastCsvSearchCol = -1;
+                _lastCsvSearchText = string.Empty;
+                return (0, 0);
+            }
+
+            if (!string.Equals(_lastCsvSearchText, searchText, matchCase ? StringComparison.Ordinal : StringComparison.OrdinalIgnoreCase))
+            {
+                _lastCsvSearchRow = -1;
+                _lastCsvSearchCol = -1;
+                _lastCsvSearchText = searchText;
+            }
+
+            var dt = _activeTab.TabularData;
+            var view = dt.DefaultView;
+            var comparison = matchCase ? StringComparison.Ordinal : StringComparison.OrdinalIgnoreCase;
+            var matches = new List<(int row, int col)>();
+
+            for (int r = 0; r < view.Count; r++)
+            {
+                var row = view[r];
+                for (int c = 0; c < dt.Columns.Count; c++)
+                {
+                    string val = row[c]?.ToString() ?? "";
+                    if (val.IndexOf(searchText, comparison) >= 0)
+                    {
+                        matches.Add((r, c));
+                    }
+                }
+            }
+
+            if (matches.Count == 0)
+            {
+                _lastCsvSearchRow = -1;
+                _lastCsvSearchCol = -1;
+                return (0, 0);
+            }
+
+            int targetIdx = 0;
+            if (_lastCsvSearchRow >= 0 && _lastCsvSearchCol >= 0)
+            {
+                int currentMatch = matches.FindIndex(m => m.row == _lastCsvSearchRow && m.col == _lastCsvSearchCol);
+                if (currentMatch >= 0)
+                {
+                    targetIdx = forward ? (currentMatch + 1) % matches.Count : (currentMatch - 1 + matches.Count) % matches.Count;
+                }
+                else
+                {
+                    targetIdx = forward ? 0 : matches.Count - 1;
+                }
+            }
+            else
+            {
+                targetIdx = forward ? 0 : matches.Count - 1;
+            }
+
+            var (selRow, selCol) = matches[targetIdx];
+            _lastCsvSearchRow = selRow;
+            _lastCsvSearchCol = selCol;
+
+            // Scroll into view and select
+            if (selRow >= 0 && selRow < view.Count && selCol >= 0 && selCol < CsvDataGrid.Columns.Count)
+            {
+                CsvDataGrid.SelectedCells.Clear();
+                var rowItem = view[selRow];
+                var colItem = CsvDataGrid.Columns[selCol];
+                CsvDataGrid.ScrollIntoView(rowItem, colItem);
+                var cellInfo = new DataGridCellInfo(rowItem, colItem);
+                CsvDataGrid.SelectedCells.Add(cellInfo);
+                CsvDataGrid.CurrentCell = cellInfo;
+            }
+
+            return (targetIdx + 1, matches.Count);
         }
 
         private static T? FindVisualChild<T>(DependencyObject parent) where T : DependencyObject
@@ -2541,6 +3046,11 @@ Plugins can be enabled or disabled instantly via the Plugins menu without restar
 
         private void Window_Closing(object sender, System.ComponentModel.CancelEventArgs e)
         {
+            if (_activeTab != null && (_activeTab.Format is DocumentFormat.Csv or DocumentFormat.Tsv))
+            {
+                CsvDataGrid.CommitEdit(DataGridEditingUnit.Row, true);
+            }
+
             foreach (var tab in _tabs.ToList())
             {
                 if (tab.IsDirty)
