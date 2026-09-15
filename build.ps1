@@ -295,7 +295,7 @@ switch ($Action) {
         Remove-Item $stagingDir -Recurse -Force
 
         # 3. Package source code archive (Notepad++ source release style)
-        $appVersion = "1.10"
+        $appVersion = "1.11"
         Write-Host "`n[INFO] Creating source code release archive (MDPlus-$appVersion-src.zip)..." -ForegroundColor Yellow
         $srcZipPath = Join-Path $distPath "MDPlus-$appVersion-src.zip"
         if (Test-Path $srcZipPath) {

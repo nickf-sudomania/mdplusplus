@@ -12,7 +12,7 @@ namespace MDPlus.Core
     /// </summary>
     public static class CsvParser
     {
-        public static List<List<string>> Parse(string? text, char delimiter = ',')
+        public static List<List<string>> Parse(string? text, char delimiter = ',', int maxRows = 0)
         {
             var rows = new List<List<string>>();
             if (string.IsNullOrWhiteSpace(text))
@@ -76,6 +76,7 @@ namespace MDPlus.Core
                         rows.Add(currentRow);
                         if (currentRow.Count > maxCols) maxCols = currentRow.Count;
                         currentRow = new List<string>();
+                        if (maxRows > 0 && rows.Count >= maxRows) break;
                     }
                     else if (c == '\n')
                     {
@@ -84,6 +85,7 @@ namespace MDPlus.Core
                         rows.Add(currentRow);
                         if (currentRow.Count > maxCols) maxCols = currentRow.Count;
                         currentRow = new List<string>();
+                        if (maxRows > 0 && rows.Count >= maxRows) break;
                     }
                     else
                     {
