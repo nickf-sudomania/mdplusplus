@@ -1,6 +1,15 @@
 # MDPlus Release Notes
 
-## Version 1.14 (Latest)
+## Version 1.14.1 (Latest)
+
+See [docs/RELEASE_NOTES_v1.14.1.md](docs/RELEASE_NOTES_v1.14.1.md) for full details.
+
+### Highlights
+- **Content-Aware Column Width Sizing:** Dynamically measures column text using font metrics (accounting for wide CJK characters, uppercase letters, and punctuation) to size columns appropriately, eliminating text truncation and ellipsis cutting on long titles.
+- **Full-Text Hover Tooltips:** Cells provide full-text tooltips with an extended 15-second display timer so users can comfortably read any ultra-long fields.
+- **Smooth Horizontal Scrolling:** Explicit pixel sizing enables natural horizontal scrolling for datasets wider than the window without sacrificing 60 FPS virtualization.
+
+## Version 1.14
 
 See [docs/RELEASE_NOTES_v1.14.md](docs/RELEASE_NOTES_v1.14.md) for full details.
 
