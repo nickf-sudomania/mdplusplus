@@ -79,7 +79,7 @@ namespace MDPlus.Core
                 return infoVer;
             }
             var ver = assembly.GetName().Version;
-            if (ver == null) return "1.14.2";
+            if (ver == null) return "1.14.3";
             if (ver.Build > 0) return $"{ver.Major}.{ver.Minor}.{ver.Build}";
             return $"{ver.Major}.{ver.Minor}";
         }

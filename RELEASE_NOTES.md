@@ -1,6 +1,15 @@
 # MDPlus Release Notes
 
-## Version 1.14.2 (Latest)
+## Version 1.14.3 (Latest)
+
+See [docs/RELEASE_NOTES_v1.14.3.md](docs/RELEASE_NOTES_v1.14.3.md) for full details.
+
+### Highlights
+- **Horizontal Overflow Scrolling for Math:** Display formulas are wrapped in an automated `MathScrollViewer`, allowing wide equations and fractions with long multi-term denominators to scroll smoothly without truncation.
+- **Card Styling & Compact Integrity:** Card containers stay within document margins; compact formulas remain centered with neat auto-sizing.
+- **Seamless Mouse Wheel Navigation:** Vertical wheel events bubble naturally to the document viewer without pausing or getting swallowed, while Shift + Wheel scrolls the formula horizontally.
+
+## Version 1.14.2
 
 See [docs/RELEASE_NOTES_v1.14.2.md](docs/RELEASE_NOTES_v1.14.2.md) for full details.
 

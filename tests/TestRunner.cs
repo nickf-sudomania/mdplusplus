@@ -3707,6 +3707,30 @@ MDPlus v1.09 expands the hyper-fast native Windows reader with universal text su
             Assert(!fullRendered.Contains(@"\text"), $"Full equation must not contain verbatim '\\text', got: '{fullRendered}'");
             Assert(!fullRendered.Contains(@"\$"), $"Full equation must not contain verbatim '\\$', got: '{fullRendered}'");
             Assert(!fullRendered.Contains("overlineBeat"), $"Full equation must not contain 'overlineBeat', got: '{fullRendered}'");
+
+            // 6. Test long display math formula with verbose fraction from user screenshot
+            string verboseFractionFormula = @"\text{Adjusted Current Ratio}^{\text{Sell-Side}} = \frac{\text{Current Assets}}{\text{Current Liabilities} - \text{Current Operating Lease Liabilities} - (\text{Deferred Revenue}\times(1 - \text{COGS}\%)) - \text{Customer Advances}}";
+            var verboseVisual = LatexMathRenderer.RenderMath(verboseFractionFormula, ThemePalette.GitHubDark, 16, isDisplay: true);
+            Assert(verboseVisual is Border, "Display math must be wrapped in a Border card");
+            var verboseBorder = (Border)verboseVisual;
+            Assert(verboseBorder.Child is MathScrollViewer, "Display math card child must be a MathScrollViewer for horizontal overflow");
+            var mathSv = (MathScrollViewer)verboseBorder.Child;
+            Assert(mathSv.HorizontalScrollBarVisibility == ScrollBarVisibility.Auto, "MathScrollViewer must have HorizontalScrollBarVisibility.Auto");
+            Assert(mathSv.VerticalScrollBarVisibility == ScrollBarVisibility.Disabled, "MathScrollViewer must have VerticalScrollBarVisibility.Disabled");
+
+            string verboseText = ExtractTextFromVisual(verboseVisual);
+            Assert(verboseText.Contains("Adjusted Current Ratio"), "Must extract 'Adjusted Current Ratio'");
+            Assert(verboseText.Contains("Current Assets"), "Must extract numerator 'Current Assets'");
+            Assert(verboseText.Contains("Current Liabilities"), "Must extract 'Current Liabilities'");
+            Assert(verboseText.Contains("Current Operating Lease Liabilities"), "Must extract 'Current Operating Lease Liabilities'");
+            Assert(verboseText.Contains("Deferred Revenue"), "Must extract 'Deferred Revenue'");
+            Assert(verboseText.Contains("Customer Advances"), "Must extract end of denominator 'Customer Advances'");
+
+            // Verify layout measurement with narrow constraint
+            verboseBorder.Measure(new Size(500, 1000));
+            verboseBorder.Arrange(new Rect(0, 0, 500, verboseBorder.DesiredSize.Height));
+            Assert(verboseBorder.ActualWidth <= 500, "Border must stay within the constrained viewport width");
+            Assert(mathSv.ActualWidth <= 500, "MathScrollViewer must stay within the constrained viewport width");
         }
 
         private static void TestHtmlTableRendering()
@@ -3817,6 +3841,10 @@ MDPlus v1.09 expands the hyper-fast native Windows reader with universal text su
             {
                 ExtractTextRecursive(border.Child, sb);
             }
+            else if (element is ContentControl cc && cc.Content is UIElement contentChild)
+            {
+                ExtractTextRecursive(contentChild, sb);
+            }
         }
 
         private static bool HasFontWeightBold(UIElement? element)
@@ -3836,6 +3864,10 @@ MDPlus v1.09 expands the hyper-fast native Windows reader with universal text su
             if (element is Border border && border.Child != null)
             {
                 if (HasFontWeightBold(border.Child)) return true;
+            }
+            if (element is ContentControl cc && cc.Content is UIElement contentChild)
+            {
+                if (HasFontWeightBold(contentChild)) return true;
             }
             return false;
         }

@@ -5,6 +5,7 @@ using System.Text;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Documents;
+using System.Windows.Input;
 using System.Windows.Media;
 using System.Windows.Shapes;
 
@@ -14,6 +15,41 @@ namespace MDPlus.Core
     {
         public string Expression { get; set; } = string.Empty;
         public bool IsDisplay { get; set; } = false;
+    }
+
+    /// <summary>
+    /// Lightweight horizontal scroll viewer for LaTeX display math formulas.
+    /// Enables horizontal scrolling when math formulas exceed viewport width,
+    /// while allowing vertical mouse wheel events to bubble seamlessly to the document viewer.
+    /// </summary>
+    public class MathScrollViewer : ScrollViewer
+    {
+        public MathScrollViewer()
+        {
+            HorizontalScrollBarVisibility = ScrollBarVisibility.Auto;
+            VerticalScrollBarVisibility = ScrollBarVisibility.Disabled;
+            Focusable = false;
+            BorderThickness = new Thickness(0);
+            Background = Brushes.Transparent;
+            Padding = new Thickness(0);
+        }
+
+        protected override void OnMouseWheel(MouseWheelEventArgs e)
+        {
+            if (Keyboard.IsKeyDown(Key.LeftShift) || Keyboard.IsKeyDown(Key.RightShift))
+            {
+                double step = Math.Max(30.0, Math.Abs(e.Delta) * 0.4);
+                if (e.Delta < 0)
+                    ScrollToHorizontalOffset(HorizontalOffset + step);
+                else if (e.Delta > 0)
+                    ScrollToHorizontalOffset(HorizontalOffset - step);
+                e.Handled = true;
+                return;
+            }
+            // Intentionally bypass base.OnMouseWheel(e) when Shift is not pressed.
+            // This leaves e.Handled = false so the vertical mouse wheel event bubbles up
+            // to the parent RichTextBox / MarkdownScrollViewer for uninterrupted document scrolling.
+        }
     }
 
     /// <summary>
@@ -132,6 +168,11 @@ namespace MDPlus.Core
 
             if (isDisplay)
             {
+                var scrollViewer = new MathScrollViewer
+                {
+                    Content = mathContent
+                };
+
                 var border = new Border
                 {
                     Background = palette != null && palette.IsDark
@@ -144,7 +185,7 @@ namespace MDPlus.Core
                     Margin = new Thickness(0, 10, 0, 10),
                     HorizontalAlignment = HorizontalAlignment.Center,
                     ToolTip = "$$\n" + latex + "\n$$",
-                    Child = mathContent
+                    Child = scrollViewer
                 };
                 return border;
             }
