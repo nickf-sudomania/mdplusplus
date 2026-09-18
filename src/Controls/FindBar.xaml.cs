@@ -55,6 +55,7 @@ namespace MDPlus.Controls
                 OuterBorder.BorderBrush = new SolidColorBrush(Color.FromRgb(60, 60, 60));
                 FindTextBox.Background = new SolidColorBrush(Color.FromRgb(30, 30, 30));
                 FindTextBox.Foreground = new SolidColorBrush(Color.FromRgb(220, 220, 220));
+                FindTextBox.CaretBrush = FindTextBox.Foreground;
                 FindTextBox.BorderBrush = new SolidColorBrush(Color.FromRgb(80, 80, 80));
                 PreviousButton.Background = new SolidColorBrush(Color.FromRgb(50, 50, 52));
                 PreviousButton.Foreground = new SolidColorBrush(Color.FromRgb(200, 200, 200));
@@ -71,6 +72,7 @@ namespace MDPlus.Controls
                 OuterBorder.BorderBrush = new SolidColorBrush(Color.FromRgb(220, 220, 220));
                 FindTextBox.Background = Brushes.White;
                 FindTextBox.Foreground = new SolidColorBrush(Color.FromRgb(30, 30, 30));
+                FindTextBox.CaretBrush = FindTextBox.Foreground;
                 FindTextBox.BorderBrush = new SolidColorBrush(Color.FromRgb(180, 180, 180));
                 PreviousButton.Background = new SolidColorBrush(Color.FromRgb(235, 235, 235));
                 PreviousButton.Foreground = new SolidColorBrush(Color.FromRgb(50, 50, 50));

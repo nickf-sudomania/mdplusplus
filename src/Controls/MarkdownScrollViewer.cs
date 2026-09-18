@@ -69,6 +69,7 @@ namespace MDPlus.Controls
             VerticalScrollBarVisibility = ScrollBarVisibility.Auto;
             HorizontalScrollBarVisibility = ScrollBarVisibility.Auto;
             SpellCheck.IsEnabled = false;
+            SetResourceReference(CaretBrushProperty, "ForegroundBrush");
         }
 
         private ScrollViewer? _internalScrollViewer;

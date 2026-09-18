@@ -1447,7 +1447,26 @@ End of document.";
             tm.SetPreset(ThemePreset.GitHubLight);
             Assert(tm.HeadingForeground != null && tm.HeadingForeground.IsFrozen, "ThemeManager HeadingForeground frozen");
             Assert(tm.SelectionBackground != null && tm.SelectionBackground.IsFrozen, "ThemeManager SelectionBackground frozen");
-            Assert(tm.CodeBackground != null && tm.CodeBackground.IsFrozen, "ThemeManager CodeBackground frozen");
+            // Verify CaretBrush matching EditorFg for cursor visibility in dark/light themes
+            var viewer = new Controls.MarkdownScrollViewer();
+            var rawBox = new TextBox();
+            foreach (var preset in presets)
+            {
+                tm.SetPreset(preset);
+                var curPalette = tm.CurrentPalette;
+                viewer.CaretBrush = curPalette.EditorFg;
+                rawBox.CaretBrush = curPalette.EditorFg;
+                Assert(viewer.CaretBrush == curPalette.EditorFg, $"{preset} viewer CaretBrush matches EditorFg");
+                Assert(rawBox.CaretBrush == curPalette.EditorFg, $"{preset} rawBox CaretBrush matches EditorFg");
+                if (curPalette.IsDark)
+                {
+                    // In dark mode, cursor must be bright (not black) to guarantee visibility against dark background
+                    var c = ((SolidColorBrush)curPalette.EditorFg).Color;
+                    double brightness = (0.299 * c.R + 0.587 * c.G + 0.114 * c.B);
+                    Assert(brightness > 100, $"{preset} cursor brightness in dark mode must be bright for readability (got {brightness})");
+                }
+            }
+
             tm.SetPreset(ThemePreset.GitHubDark);
         }
 

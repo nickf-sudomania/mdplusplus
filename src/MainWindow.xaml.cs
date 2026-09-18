@@ -1282,8 +1282,12 @@ Plugins can be enabled or disabled instantly via the Plugins menu without restar
             ContentGrid.Background = palette.EditorBg;
             WelcomeScreen.Background = palette.EditorBg;
 
+            MarkdownViewer.Foreground = palette.EditorFg;
+            MarkdownViewer.CaretBrush = palette.EditorFg;
+
             RawMarkdownTextBox.Background = palette.EditorBg;
             RawMarkdownTextBox.Foreground = palette.EditorFg;
+            RawMarkdownTextBox.CaretBrush = palette.EditorFg;
 
             AppStatusBar.Background = palette.StatusBg;
             AppStatusBar.Foreground = palette.StatusFg;

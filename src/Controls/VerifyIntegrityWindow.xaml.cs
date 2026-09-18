@@ -56,6 +56,7 @@ namespace MDPlus.Controls
             TargetFileLabel.Foreground = palette.MutedFg;
             FilePathTextBox.Background = palette.CodeBg;
             FilePathTextBox.Foreground = palette.EditorFg;
+            FilePathTextBox.CaretBrush = palette.EditorFg;
             FilePathTextBox.BorderBrush = palette.Border;
 
             ComputedHashLabel.Foreground = palette.MutedFg;
@@ -65,6 +66,7 @@ namespace MDPlus.Controls
             ExpectedHashLabel.Foreground = palette.MutedFg;
             ExpectedHashTextBox.Background = palette.CodeBg;
             ExpectedHashTextBox.Foreground = palette.EditorFg;
+            ExpectedHashTextBox.CaretBrush = palette.EditorFg;
             ExpectedHashTextBox.BorderBrush = palette.Border;
 
             StatusBanner.Background = palette.SidebarBg;

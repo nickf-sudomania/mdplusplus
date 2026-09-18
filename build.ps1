@@ -218,6 +218,8 @@ switch ($Action) {
             if (-not $found) { $newLines += "$setupHash  MDPlus-Setup.exe" }
             $newContent = ($newLines -join "`n") + "`n"
             Set-Content -Path $sumsFile -Value $newContent
+            $nppChecksum1144 = Join-Path $distPath "MDPlus.1.14.4.checksums.sha256"
+            Set-Content -Path $nppChecksum1144 -Value $newContent
             $nppChecksum1143 = Join-Path $distPath "MDPlus.1.14.3.checksums.sha256"
             Set-Content -Path $nppChecksum1143 -Value $newContent
             $nppChecksum1142 = Join-Path $distPath "MDPlus.1.14.2.checksums.sha256"
@@ -309,7 +311,7 @@ switch ($Action) {
         Remove-Item $stagingDir -Recurse -Force
 
         # 3. Package source code archive (Notepad++ source release style)
-        $appVersion = "1.14.3"
+        $appVersion = "1.14.4"
         Write-Host "`n[INFO] Creating source code release archive (MDPlus-$appVersion-src.zip)..." -ForegroundColor Yellow
         $srcZipPath = Join-Path $distPath "MDPlus-$appVersion-src.zip"
         if (Test-Path $srcZipPath) {
@@ -338,11 +340,12 @@ switch ($Action) {
         # 4. Compile Inno Setup Windows installer if ISCC.exe is installed
         $innoCompiler = Get-InnoSetupCompiler
         $issScript = Join-Path $PSScriptRoot "installer\MDPlus.iss"
-
-        if ($innoCompiler -and (Test-Path $innoCompiler)) {
-            Write-Host "`n[INFO] Compiling Windows Setup Installer (MDPlus-Setup.exe)..." -ForegroundColor Yellow
-            Write-Host "Using Inno Setup Compiler: $innoCompiler" -ForegroundColor Gray
-            & $innoCompiler $issScript /O"$distPath" /F"MDPlus-Setup" | Out-Null
+        if ($innoCompiler -and (Test-Path $issScript)) {
+            Write-Host "`n[INFO] Compiling Windows Setup Installer with Inno Setup..." -ForegroundColor Yellow
+            $isccOutput = & $innoCompiler $issScript /O"$distPath" /F"MDPlus-Setup"
+            if ($LASTEXITCODE -ne 0) {
+                Write-Warning "Inno Setup compilation failed with exit code $LASTEXITCODE. Installer may not be updated."
+            }
             $setupPath = Join-Path $distPath "MDPlus-Setup.exe"
             if (Test-Path $setupPath) {
                 Sign-File $setupPath
@@ -367,6 +370,7 @@ switch ($Action) {
         Set-Content -Path (Join-Path $distPath "MDPlus.exe.sha256") -Value "$exeHash  MDPlus.exe"
         Set-Content -Path (Join-Path $distPath "MDPlus-win-x64.zip.sha256") -Value "$zipHash  MDPlus-win-x64.zip"
         Set-Content -Path (Join-Path $distPath "MDPlus-$appVersion-src.zip.sha256") -Value "$srcHash  MDPlus-$appVersion-src.zip"
+        Set-Content -Path (Join-Path $distPath "MDPlus-1.14.4-src.zip.sha256") -Value "$srcHash  MDPlus-1.14.4-src.zip"
         Set-Content -Path (Join-Path $distPath "MDPlus-1.14.3-src.zip.sha256") -Value "$srcHash  MDPlus-1.14.3-src.zip"
         Set-Content -Path (Join-Path $distPath "MDPlus-1.14.2-src.zip.sha256") -Value "$srcHash  MDPlus-1.14.2-src.zip"
         Set-Content -Path (Join-Path $distPath "MDPlus-1.14.1-src.zip.sha256") -Value "$srcHash  MDPlus-1.14.1-src.zip"
@@ -395,6 +399,7 @@ $setupHash  MDPlus-Setup.exe
 "@
         Set-Content -Path (Join-Path $distPath "SHA256SUMS.txt") -Value $checksumContent
         Set-Content -Path (Join-Path $distPath "MDPlus.$appVersion.checksums.sha256") -Value $checksumContent
+        Set-Content -Path (Join-Path $distPath "MDPlus.1.14.4.checksums.sha256") -Value $checksumContent
         Set-Content -Path (Join-Path $distPath "MDPlus.1.14.3.checksums.sha256") -Value $checksumContent
         Set-Content -Path (Join-Path $distPath "MDPlus.1.14.2.checksums.sha256") -Value $checksumContent
         Set-Content -Path (Join-Path $distPath "MDPlus.1.14.1.checksums.sha256") -Value $checksumContent

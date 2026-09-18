@@ -22,6 +22,7 @@
 
             <TextBox Name="FindTextBox" Grid.Column="1" Height="26" VerticalContentAlignment="Center" 
                      Padding="6,0,6,0" FontSize="13" Background="#1e1e1e" Foreground="#ffffff" 
+                     CaretBrush="{DynamicResource ForegroundBrush}"
                      BorderBrush="#555555" BorderThickness="1"
                      TextChanged="FindTextBox_TextChanged" KeyDown="FindTextBox_KeyDown" />
 

@@ -161,6 +161,14 @@
             </Style.Triggers>
         </Style>
 
+        <!-- Global Text Editor Styles (Caret cursor matching text color for dark/light themes) -->
+        <Style TargetType="{x:Type TextBox}">
+            <Setter Property="CaretBrush" Value="{DynamicResource ForegroundBrush}"/>
+        </Style>
+        <Style TargetType="{x:Type RichTextBox}">
+            <Setter Property="CaretBrush" Value="{DynamicResource ForegroundBrush}"/>
+        </Style>
+
         <!-- Clean Menu Style -->
         <Style TargetType="{x:Type Menu}">
             <Setter Property="Background" Value="{DynamicResource MenuBackgroundBrush}"/>

@@ -1,6 +1,15 @@
 # MDPlus Release Notes
 
-## Version 1.14.3 (Latest)
+## Version 1.14.4 (Latest)
+
+See [docs/RELEASE_NOTES_v1.14.4.md](docs/RELEASE_NOTES_v1.14.4.md) for full details.
+
+### Highlights
+- **Theme-Aware Text Cursor (Caret) Color Parity:** The cursor / caret color (`CaretBrush`) now dynamically matches the active text color (`ForegroundBrush` / `palette.EditorFg`) across all 8 theme presets.
+- **High-Contrast Dark Mode Editing:** Eliminates invisible or hard-to-find black carets on dark backgrounds in GitHub Dark, Nord, One Dark, Monokai, and other dark themes.
+- **Universal Input Surface Coverage:** Synchronized across the rendered editor (`MarkdownScrollViewer`), raw Markdown editor (`RawMarkdownTextBox`), in-page search (`FindTextBox`), and integrity verification dialogs (`FilePathTextBox`, `ExpectedHashTextBox`).
+
+## Version 1.14.3
 
 See [docs/RELEASE_NOTES_v1.14.3.md](docs/RELEASE_NOTES_v1.14.3.md) for full details.
 
