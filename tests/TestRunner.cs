@@ -3605,8 +3605,8 @@ MDPlus v1.09 expands the hyper-fast native Windows reader with universal text su
             var mathInlineElem = LatexMathRenderer.RenderMath("A = k \\times B", ThemePalette.GitHubDark, 14.5, isDisplay: false);
             Assert(mathInlineElem is Border, "Inline math element must be wrapped in a Border container");
             var mathBorder = (Border)mathInlineElem;
-            Assert(mathBorder.Margin.Top == 3 && mathBorder.Margin.Bottom == -3,
-                $"Inline math border must have calibrated baseline margin (3, -3), got ({mathBorder.Margin.Top}, {mathBorder.Margin.Bottom})");
+            Assert(mathBorder.Margin.Top == 0 && mathBorder.Margin.Bottom == 0,
+                $"Inline math border must have calibrated baseline margin (0, 0), got ({mathBorder.Margin.Top}, {mathBorder.Margin.Bottom})");
 
             // 2. Verify MarkdownToWpfConverter inline code span margin and baseline alignment
             var parser = new MarkdownParser();
@@ -3630,11 +3630,11 @@ MDPlus v1.09 expands the hyper-fast native Windows reader with universal text su
             Assert(uicMathList.Count == 2, $"Expected 2 inline math containers, got {uicMathList.Count}");
             foreach (var uicMath in uicMathList)
             {
-                Assert(uicMath.BaselineAlignment == BaselineAlignment.Center, "Inline math container must have BaselineAlignment.Center");
+                Assert(uicMath.BaselineAlignment == BaselineAlignment.Baseline, "Inline math container must have BaselineAlignment.Baseline");
                 Assert(uicMath.Child is Border, "Inline math container child must be a Border");
                 var mb = (Border)uicMath.Child;
-                Assert(mb.Margin.Top == 3 && mb.Margin.Bottom == -3,
-                    $"Inline math border must have calibrated baseline margin (3, -3), got ({mb.Margin.Top}, {mb.Margin.Bottom})");
+                Assert(mb.Margin.Top == 0 && mb.Margin.Bottom == 0,
+                    $"Inline math border must have calibrated baseline margin (0, 0), got ({mb.Margin.Top}, {mb.Margin.Bottom})");
             }
 
             // 4. Verify HtmlWpfRenderer kbd and code tags
