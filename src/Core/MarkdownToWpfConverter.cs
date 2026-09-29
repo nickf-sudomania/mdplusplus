@@ -802,7 +802,7 @@ namespace MDPlus.Core
                         var mathElement = LatexMathRenderer.RenderMath(math.Expression, _palette, 14.5, math.IsDisplay);
                         return new InlineUIContainer(mathElement)
                         {
-                            BaselineAlignment = BaselineAlignment.Center,
+                            BaselineAlignment = BaselineAlignment.Baseline,
                             Tag = new MathTag { Expression = math.Expression, IsDisplay = math.IsDisplay }
                         };
                     }
