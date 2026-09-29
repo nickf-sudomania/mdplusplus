@@ -1,6 +1,14 @@
 # MDPlus Release Notes
 
-## Version 1.14.4 (Latest)
+## Version 1.14.5 (Latest)
+
+See [docs/RELEASE_NOTES_v1.14.5.md](docs/RELEASE_NOTES_v1.14.5.md) for full details.
+
+### Highlights
+- **Typographic Baseline Alignment for Inline Math:** Corrected baseline-anchored typography rendering for simple inline math equations to flow naturally with text instead of floating like a superscript.
+
+
+## Version 1.14.4
 
 See [docs/RELEASE_NOTES_v1.14.4.md](docs/RELEASE_NOTES_v1.14.4.md) for full details.
 
@@ -159,3 +167,4 @@ See [docs/RELEASE_NOTES_v1.03.md](docs/RELEASE_NOTES_v1.03.md) for full details.
 - **Dynamic Windows DWM Title Bar Theming:** Native Windows Desktop Window Manager integration dynamically styles caption and title bar colors to match active themes.
 - **Session Restore & Multi-Tab Enhancements:** Tab navigation (Ctrl+Tab, Ctrl+Shift+Tab, Ctrl+W), single-click close buttons, dirty state protection, and graceful empty shell.
 - **Hardened GitHub Auto-Updater:** 1-click update verification, automated 24h debounced startup checks, and reliable UAC elevation (`runas` verb) with clean session preservation and shutdown.
+
