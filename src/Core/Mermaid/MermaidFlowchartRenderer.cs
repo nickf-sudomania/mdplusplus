@@ -194,9 +194,14 @@ namespace MDPlus.Core.Mermaid
 
                     DrawConnectorSpline(ctx, route, layout.Orientation);
 
-                    if (route.Edge.Arrow == MermaidArrowHead.Arrow)
+                    if (route.Edge.Arrow == MermaidArrowHead.Arrow || route.Edge.Arrow == MermaidArrowHead.Bidirectional)
                     {
                         DrawArrowhead(aCtx, route.EndPoint, route.ArrowheadAngle);
+                    }
+
+                    if (route.Edge.Arrow == MermaidArrowHead.Reverse || route.Edge.Arrow == MermaidArrowHead.Bidirectional)
+                    {
+                        DrawArrowhead(aCtx, route.StartPoint, route.StartArrowheadAngle);
                     }
                 }
             }

@@ -51,6 +51,7 @@ namespace MDPlus.Core.Mermaid
         public Point? LabelPosition { get; set; }
         public Size LabelSize { get; set; }
         public double ArrowheadAngle { get; set; }
+        public double StartArrowheadAngle { get; set; }
         public bool IsFeedbackEdge { get; set; }
 
         public EdgeLayoutRoute(MermaidEdge edge)
@@ -680,6 +681,10 @@ namespace MDPlus.Core.Mermaid
                     // Compute Arrowhead Angle from final incoming tangent
                     Point lastControl = route.Waypoints.Count > 0 ? route.Waypoints[route.Waypoints.Count - 1] : route.ControlPoint2;
                     route.ArrowheadAngle = Math.Atan2(route.EndPoint.Y - lastControl.Y, route.EndPoint.X - lastControl.X);
+
+                    // Compute Start Arrowhead Angle pointing into StartPoint (for Reverse and Bidirectional arrows)
+                    Point firstControl = route.Waypoints.Count > 0 ? route.Waypoints[0] : route.ControlPoint1;
+                    route.StartArrowheadAngle = Math.Atan2(route.StartPoint.Y - firstControl.Y, route.StartPoint.X - firstControl.X);
                 }
                 else
                 {
@@ -691,6 +696,7 @@ namespace MDPlus.Core.Mermaid
                         route.EndPoint = tgt.RightPort;
                         escapeX = Math.Max(src.X + src.Width, tgt.X + tgt.Width) + 24.0 + (feedbackCounter * 16.0);
                         route.ArrowheadAngle = Math.PI; // Inward to the left (180 deg)
+                        route.StartArrowheadAngle = Math.PI;
                     }
                     else
                     {
@@ -698,6 +704,7 @@ namespace MDPlus.Core.Mermaid
                         route.EndPoint = tgt.BottomPort;
                         escapeX = Math.Max(src.Y + src.Height, tgt.Y + tgt.Height) + 24.0 + (feedbackCounter * 16.0);
                         route.ArrowheadAngle = -Math.PI / 2.0; // Inward upward
+                        route.StartArrowheadAngle = -Math.PI / 2.0;
                     }
                     feedbackCounter++;
 
@@ -745,6 +752,49 @@ namespace MDPlus.Core.Mermaid
                 }
 
                 result.Edges.Add(route);
+            }
+
+            // Prevent edge label collisions / overlaps
+            for (int i = 0; i < result.Edges.Count; i++)
+            {
+                var r1 = result.Edges[i];
+                if (!r1.LabelPosition.HasValue || string.IsNullOrEmpty(r1.Edge.Label)) continue;
+
+                var b1 = new Rect(
+                    r1.LabelPosition.Value.X - r1.LabelSize.Width / 2.0,
+                    r1.LabelPosition.Value.Y - r1.LabelSize.Height / 2.0,
+                    r1.LabelSize.Width,
+                    r1.LabelSize.Height);
+
+                for (int j = i + 1; j < result.Edges.Count; j++)
+                {
+                    var r2 = result.Edges[j];
+                    if (!r2.LabelPosition.HasValue || string.IsNullOrEmpty(r2.Edge.Label)) continue;
+
+                    var b2 = new Rect(
+                        r2.LabelPosition.Value.X - r2.LabelSize.Width / 2.0,
+                        r2.LabelPosition.Value.Y - r2.LabelSize.Height / 2.0,
+                        r2.LabelSize.Width,
+                        r2.LabelSize.Height);
+
+                    if (b1.IntersectsWith(b2))
+                    {
+                        double shift = (b1.Bottom - b2.Top) + 6.0;
+                        r2.LabelPosition = new Point(r2.LabelPosition.Value.X, r2.LabelPosition.Value.Y + shift);
+                    }
+                }
+            }
+
+            // Ensure TotalWidth & TotalHeight enclose any edge label pills that extend beyond graph boundaries
+            foreach (var route in result.Edges)
+            {
+                if (route.LabelPosition.HasValue)
+                {
+                    double r = route.LabelPosition.Value.X + route.LabelSize.Width / 2.0 + 8.0;
+                    double b = route.LabelPosition.Value.Y + route.LabelSize.Height / 2.0 + 8.0;
+                    if (r > result.TotalWidth) result.TotalWidth = r;
+                    if (b > result.TotalHeight) result.TotalHeight = b;
+                }
             }
         }
 

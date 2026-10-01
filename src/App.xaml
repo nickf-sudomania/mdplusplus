@@ -31,27 +31,27 @@
             <Border Background="Transparent" SnapsToDevicePixels="True"/>
         </ControlTemplate>
 
-        <!-- 2. Vertical ScrollBar Thumb Template (Slim pill expanding on hover/drag) -->
+        <!-- 2. Vertical ScrollBar Thumb Template (Substantial pill expanding on hover/drag) -->
         <ControlTemplate x:Key="ScrollBarThumbVertical" TargetType="{x:Type Thumb}">
-            <Grid SnapsToDevicePixels="True">
+            <Grid Background="Transparent" SnapsToDevicePixels="True">
                 <Border x:Name="ThumbVisual"
-                        Background="{DynamicResource BorderBrush}"
+                        Background="{DynamicResource MutedForegroundBrush}"
                         CornerRadius="4"
-                        Width="6"
-                        MinHeight="24"
+                        Width="8"
+                        MinHeight="40"
                         HorizontalAlignment="Center"
                         Margin="1,2,1,2"
-                        Opacity="0.55"
+                        Opacity="0.65"
                         SnapsToDevicePixels="True"/>
             </Grid>
             <ControlTemplate.Triggers>
                 <Trigger Property="IsMouseOver" Value="True">
-                    <Setter TargetName="ThumbVisual" Property="Width" Value="8"/>
+                    <Setter TargetName="ThumbVisual" Property="Width" Value="10"/>
                     <Setter TargetName="ThumbVisual" Property="Opacity" Value="0.85"/>
                     <Setter TargetName="ThumbVisual" Property="Background" Value="{DynamicResource MutedForegroundBrush}"/>
                 </Trigger>
                 <Trigger Property="IsDragging" Value="True">
-                    <Setter TargetName="ThumbVisual" Property="Width" Value="8"/>
+                    <Setter TargetName="ThumbVisual" Property="Width" Value="12"/>
                     <Setter TargetName="ThumbVisual" Property="Opacity" Value="1.0"/>
                     <Setter TargetName="ThumbVisual" Property="Background" Value="{DynamicResource AccentBrush}"/>
                 </Trigger>
@@ -60,25 +60,25 @@
 
         <!-- 3. Horizontal ScrollBar Thumb Template -->
         <ControlTemplate x:Key="ScrollBarThumbHorizontal" TargetType="{x:Type Thumb}">
-            <Grid SnapsToDevicePixels="True">
+            <Grid Background="Transparent" SnapsToDevicePixels="True">
                 <Border x:Name="ThumbVisual"
-                        Background="{DynamicResource BorderBrush}"
+                        Background="{DynamicResource MutedForegroundBrush}"
                         CornerRadius="4"
-                        Height="6"
-                        MinWidth="24"
+                        Height="8"
+                        MinWidth="40"
                         VerticalAlignment="Center"
                         Margin="2,1,2,1"
-                        Opacity="0.55"
+                        Opacity="0.65"
                         SnapsToDevicePixels="True"/>
             </Grid>
             <ControlTemplate.Triggers>
                 <Trigger Property="IsMouseOver" Value="True">
-                    <Setter TargetName="ThumbVisual" Property="Height" Value="8"/>
+                    <Setter TargetName="ThumbVisual" Property="Height" Value="10"/>
                     <Setter TargetName="ThumbVisual" Property="Opacity" Value="0.85"/>
                     <Setter TargetName="ThumbVisual" Property="Background" Value="{DynamicResource MutedForegroundBrush}"/>
                 </Trigger>
                 <Trigger Property="IsDragging" Value="True">
-                    <Setter TargetName="ThumbVisual" Property="Height" Value="8"/>
+                    <Setter TargetName="ThumbVisual" Property="Height" Value="12"/>
                     <Setter TargetName="ThumbVisual" Property="Opacity" Value="1.0"/>
                     <Setter TargetName="ThumbVisual" Property="Background" Value="{DynamicResource AccentBrush}"/>
                 </Trigger>
@@ -88,14 +88,14 @@
         <!-- 4. Vertical ScrollBar Template (No blocky arrow buttons, clean fluent track) -->
         <ControlTemplate x:Key="VerticalScrollBarTemplate" TargetType="{x:Type ScrollBar}">
             <Grid x:Name="Bg" Background="Transparent" SnapsToDevicePixels="True">
-                <Track x:Name="PART_Track" IsDirectionReversed="True" Width="10" HorizontalAlignment="Center">
+                <Track x:Name="PART_Track" IsDirectionReversed="True" Width="14" HorizontalAlignment="Center">
                     <Track.DecreaseRepeatButton>
                         <RepeatButton Command="{x:Static ScrollBar.PageUpCommand}"
                                       Template="{StaticResource ScrollBarPageButtonTemplate}"
                                       Focusable="False" IsTabStop="False"/>
                     </Track.DecreaseRepeatButton>
                     <Track.Thumb>
-                        <Thumb x:Name="PART_Thumb" Template="{StaticResource ScrollBarThumbVertical}"/>
+                        <Thumb x:Name="PART_Thumb" Template="{StaticResource ScrollBarThumbVertical}" MinHeight="40"/>
                     </Track.Thumb>
                     <Track.IncreaseRepeatButton>
                         <RepeatButton Command="{x:Static ScrollBar.PageDownCommand}"
@@ -106,7 +106,7 @@
             </Grid>
             <ControlTemplate.Triggers>
                 <Trigger Property="IsMouseOver" Value="True">
-                    <Setter TargetName="PART_Thumb" Property="Opacity" Value="0.75"/>
+                    <Setter TargetName="PART_Thumb" Property="Opacity" Value="0.90"/>
                 </Trigger>
                 <Trigger Property="IsEnabled" Value="False">
                     <Setter TargetName="Bg" Property="Opacity" Value="0.2"/>
@@ -117,14 +117,14 @@
         <!-- 5. Horizontal ScrollBar Template -->
         <ControlTemplate x:Key="HorizontalScrollBarTemplate" TargetType="{x:Type ScrollBar}">
             <Grid x:Name="Bg" Background="Transparent" SnapsToDevicePixels="True">
-                <Track x:Name="PART_Track" IsDirectionReversed="False" Height="10" VerticalAlignment="Center">
+                <Track x:Name="PART_Track" IsDirectionReversed="False" Height="14" VerticalAlignment="Center">
                     <Track.DecreaseRepeatButton>
                         <RepeatButton Command="{x:Static ScrollBar.PageLeftCommand}"
                                       Template="{StaticResource ScrollBarPageButtonTemplate}"
                                       Focusable="False" IsTabStop="False"/>
                     </Track.DecreaseRepeatButton>
                     <Track.Thumb>
-                        <Thumb x:Name="PART_Thumb" Template="{StaticResource ScrollBarThumbHorizontal}"/>
+                        <Thumb x:Name="PART_Thumb" Template="{StaticResource ScrollBarThumbHorizontal}" MinWidth="40"/>
                     </Track.Thumb>
                     <Track.IncreaseRepeatButton>
                         <RepeatButton Command="{x:Static ScrollBar.PageRightCommand}"
@@ -135,7 +135,7 @@
             </Grid>
             <ControlTemplate.Triggers>
                 <Trigger Property="IsMouseOver" Value="True">
-                    <Setter TargetName="PART_Thumb" Property="Opacity" Value="0.75"/>
+                    <Setter TargetName="PART_Thumb" Property="Opacity" Value="0.90"/>
                 </Trigger>
                 <Trigger Property="IsEnabled" Value="False">
                     <Setter TargetName="Bg" Property="Opacity" Value="0.2"/>
@@ -149,13 +149,13 @@
             <Setter Property="OverridesDefaultStyle" Value="True"/>
             <Style.Triggers>
                 <Trigger Property="Orientation" Value="Vertical">
-                    <Setter Property="Width" Value="10"/>
+                    <Setter Property="Width" Value="14"/>
                     <Setter Property="Height" Value="Auto"/>
                     <Setter Property="Template" Value="{StaticResource VerticalScrollBarTemplate}"/>
                 </Trigger>
                 <Trigger Property="Orientation" Value="Horizontal">
                     <Setter Property="Width" Value="Auto"/>
-                    <Setter Property="Height" Value="10"/>
+                    <Setter Property="Height" Value="14"/>
                     <Setter Property="Template" Value="{StaticResource HorizontalScrollBarTemplate}"/>
                 </Trigger>
             </Style.Triggers>

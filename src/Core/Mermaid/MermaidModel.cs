@@ -41,8 +41,10 @@ namespace MDPlus.Core.Mermaid
     /// </summary>
     public enum MermaidArrowHead
     {
-        None,       // Undirected link (---, -.-, ===)
-        Arrow       // Directed arrow (--> , -.->, ==>)
+        None,           // Undirected link (---, -.-, ===)
+        Arrow,          // Directed forward arrow (--> , -.->, ==>)
+        Reverse,        // Directed reverse arrow (<--, <-.-, <==)
+        Bidirectional   // Bidirectional arrow (<-->, <-.->, <==>)
     }
 
     /// <summary>
@@ -133,9 +135,27 @@ namespace MDPlus.Core.Mermaid
             string labelPart = Label != null ? $"|{Label}|" : string.Empty;
             string op = Stroke switch
             {
-                MermaidStrokeStyle.Dotted => Arrow == MermaidArrowHead.Arrow ? "-.->" : "-.-",
-                MermaidStrokeStyle.Thick => Arrow == MermaidArrowHead.Arrow ? "==>" : "===",
-                _ => Arrow == MermaidArrowHead.Arrow ? "-->" : "---"
+                MermaidStrokeStyle.Dotted => Arrow switch
+                {
+                    MermaidArrowHead.Arrow => "-.->",
+                    MermaidArrowHead.Reverse => "<-.-",
+                    MermaidArrowHead.Bidirectional => "<-.->",
+                    _ => "-.-"
+                },
+                MermaidStrokeStyle.Thick => Arrow switch
+                {
+                    MermaidArrowHead.Arrow => "==>",
+                    MermaidArrowHead.Reverse => "<==",
+                    MermaidArrowHead.Bidirectional => "<==>",
+                    _ => "==="
+                },
+                _ => Arrow switch
+                {
+                    MermaidArrowHead.Arrow => "-->",
+                    MermaidArrowHead.Reverse => "<--",
+                    MermaidArrowHead.Bidirectional => "<-->",
+                    _ => "---"
+                }
             };
             return $"{SourceId} {op}{labelPart} {TargetId}";
         }

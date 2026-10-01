@@ -1,6 +1,15 @@
 # MDPlus Release Notes
 
-## Version 1.15.0 (Latest)
+## Version 1.15.1 (Latest)
+
+See [docs/RELEASE_NOTES_v1.15.1.md](docs/RELEASE_NOTES_v1.15.1.md) for full details.
+
+### Highlights
+- **Mermaid Flowchart Bidirectional Connectors & Collision Prevention:** Supports `<-->` syntax and prevents label overlaps.
+- **Inline & Display Math Optical Calibration:** Unified OpenType TextBlock baseline merging and display math promotion.
+- **Scrollbar Thumb Usability & Ergonomics:** Enlarged track (14px), increased MinHeight (40px), and high-contrast styling.
+
+## Version 1.15.0
 
 See [docs/RELEASE_NOTES_v1.15.0.md](docs/RELEASE_NOTES_v1.15.0.md) for full details.
 

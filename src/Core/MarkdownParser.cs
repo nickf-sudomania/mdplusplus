@@ -511,7 +511,7 @@ namespace MDPlus.Core
                     if (UnorderedListRegex.IsMatch(next) || OrderedListRegex.IsMatch(next)) break;
                     if (next.StartsWith("    ") || next.StartsWith("\t") || next.StartsWith("  "))
                     {
-                        itemLines.Add(next.Trim());
+                        itemLines.Add(next.TrimStart());
                         currentLine++;
                     }
                     else
@@ -520,7 +520,7 @@ namespace MDPlus.Core
                     }
                 }
 
-                string fullItemText = string.Join(" ", itemLines);
+                string fullItemText = string.Join("\n", itemLines);
                 var listItem = new ListItemBlock();
 
                 // Check for Task Checkbox: [ ] or [x]

@@ -258,6 +258,11 @@ namespace MDPlus.Tests
             RunTest("Empirical Challenge M3-2: Scroll Propagation, Theme Switching, 60 FPS & Large Graphs", MermaidLayoutTests.TestEmpiricalChallengerM3_2Suite);
             RunTest("Empirical Challenge M4-1: White-Box Adversarial Stress Suite", MermaidLayoutTests.TestEmpiricalChallengerM4_1AdversarialVerificationSuite);
 
+            // 27. Bug Fix Regressions: Lists, Math Typographic Baseline & Scrollbar Hit Targets
+            RunTest("List Continuation Hard Line Breaks & Display Math Container", TestListContinuationHardLineBreaksAndDisplayMath);
+            RunTest("Query 8 Activist Short Math Typographic Baseline Layout", TestQuery8ActivistShortMathTypographicBaselineLayout);
+            RunTest("ScrollBar Metrics, Theme Contrast & Hit Target Security", TestScrollBarMetricsAndHitTargetSecurity);
+
             sw.Stop();
 
 
@@ -6296,6 +6301,167 @@ MDPlus v1.09 expands the hyper-fast native Windows reader with universal text su
             // Explicitly accessing FlowDocument property creates it on demand
             var doc = tab.FlowDocument;
             Assert(doc != null, "FlowDocument must be created on demand");
+        }
+
+        private static void TestListContinuationHardLineBreaksAndDisplayMath()
+        {
+            var parser = new MarkdownParser();
+            string listMarkdown =
+                "- `capitalExpenditure`: `< 0` (e.g., `-3,200,000,000`)\n" +
+                "- `dividendsPaid`: `< 0`  \n" +
+                "  **Critical Formula Hazard:** Standard Free Cash Flow is defined as $\\text{Operating Cash Flow} - \\text{CapEx}$. Because FMP's `capitalExpenditure` is already negative, FMP calculates:  \n" +
+                "  $$\\text{freeCashFlow} = \\text{operatingCashFlow} + \\text{capitalExpenditure}$$  \n" +
+                "  If an engineer writes `operating_cash_flow - capital_expenditure`, they will inadvertently **add** CapEx.";
+
+            var doc = parser.Parse(listMarkdown);
+            AssertEqual(1, doc.Blocks.Count, "Doc must contain 1 block");
+            var listBlock = doc.Blocks[0] as ListBlock;
+            Assert(listBlock != null, "Block must be ListBlock");
+            AssertEqual(2, listBlock!.Items.Count, "List must contain 2 items");
+
+            var item2 = listBlock.Items[1];
+            // Check that item 2 has LineBreakInline with isHard: true from '  \n'
+            var hardBreak = item2.Inlines.OfType<LineBreakInline>().FirstOrDefault(b => b.IsHard);
+            Assert(hardBreak != null, "Item 2 must contain a hard line break inline from trailing double spaces");
+
+            // Check that item 2 has display MathInline
+            var displayMath = item2.Inlines.OfType<MathInline>().FirstOrDefault(m => m.IsDisplay);
+            Assert(displayMath != null, "Item 2 must contain a display math inline");
+            Assert(displayMath!.Expression.Contains("freeCashFlow"), "Display math must contain freeCashFlow");
+
+            // Now convert to WPF FlowDocument and verify block promotion
+            var converter = new MarkdownToWpfConverter("", ThemePalette.GitHubDark, enableLatex: true, enableHtml: true);
+            var flowDoc = converter.Convert(doc);
+            var wpfList = flowDoc.Blocks.OfType<List>().FirstOrDefault();
+            Assert(wpfList != null, "Converted FlowDocument must contain a List");
+            var wpfItem2 = wpfList!.ListItems.ElementAt(1);
+
+            var blocks = wpfItem2.Blocks.ToList();
+            Assert(blocks.Count >= 3, $"Item 2 must contain at least 3 blocks (pre-paragraph, math block, post-paragraph), got {blocks.Count}");
+            Assert(blocks[0] is Paragraph, "Block 0 must be Paragraph");
+            Assert(blocks[1] is BlockUIContainer, "Block 1 must be BlockUIContainer for display math");
+            Assert(blocks[2] is Paragraph, "Block 2 must be Paragraph");
+
+            // Verify Block 0 contains LineBreak
+            var p0 = (Paragraph)blocks[0];
+            Assert(p0.Inlines.OfType<LineBreak>().Any(), "Preceding paragraph must contain a LineBreak element from hard line break");
+            // Verify Block 0 does not end with LineBreak
+            Assert(!(p0.Inlines.LastInline is LineBreak), "Preceding paragraph must not end with a trailing LineBreak before the math block");
+
+            // Verify Block 2 does not start with LineBreak
+            var p2 = (Paragraph)blocks[2];
+            Assert(!(p2.Inlines.FirstInline is LineBreak), "Subsequent paragraph must not start with a leading LineBreak after the math block");
+        }
+
+        private static void TestQuery8ActivistShortMathTypographicBaselineLayout()
+        {
+            var directElement = LatexMathRenderer.RenderMath("< 0", ThemePalette.GitHubDark);
+            Assert(directElement != null, "LatexMathRenderer must render '< 0'");
+
+            var parser = new MarkdownParser();
+            string query8Markdown =
+                "* **Analyst Description:** Forensic screen targeting troubled, over-leveraged companies suffering from structural liquidity drain ($< 0$), expanding Cash Conversion Cycles ($CCC$ expanded $\\ge 25\\text{ days YoY}$), high indebtedness ($Net Debt / EBITDA \\ge 4.5\\times$ for positive EBITDA, or distressed debt with negative EBITDA), and deteriorating current ratios.\n" +
+                "* **Screening Criteria:** Structural Liquidity Drain $< 0$, CCC YoY Expansion $\\ge 25$ days, Over-leveraged Debt ((Net Debt/EBITDA $\\ge 4.5$ and LTM EBITDA $> 0$) OR (LTM EBITDA $\\le 0$ and Net Debt $> 0$)), Current Ratio YoY Change $< 0$.";
+
+            var doc = parser.Parse(query8Markdown);
+            var converter = new MarkdownToWpfConverter("", ThemePalette.GitHubDark, enableLatex: true, enableHtml: true);
+            var flowDoc = converter.Convert(doc);
+
+            var rtb = new RichTextBox
+            {
+                Width = 850,
+                Document = flowDoc,
+                IsReadOnly = true
+            };
+            rtb.Measure(new Size(850, 2000));
+            rtb.Arrange(new Rect(0, 0, 850, rtb.DesiredSize.Height));
+            rtb.UpdateLayout();
+
+            Assert(rtb.ActualWidth > 0 && rtb.ActualHeight > 0, "RichTextBox layout measurement must succeed for Query 8");
+
+            var listBlock = flowDoc.Blocks.OfType<List>().FirstOrDefault();
+            Assert(listBlock != null, "Query 8 must parse into a List block");
+
+            var allMathContainers = new List<InlineUIContainer>();
+            foreach (var item in listBlock!.ListItems)
+            {
+                foreach (var block in item.Blocks.OfType<Paragraph>())
+                {
+                    foreach (var inline in block.Inlines.OfType<InlineUIContainer>())
+                    {
+                        if (inline.Tag is MathTag) allMathContainers.Add(inline);
+                    }
+                }
+            }
+
+            Assert(allMathContainers.Count >= 7, $"Expected at least 7 math containers in Query 8, found {allMathContainers.Count}");
+
+            // Verify relational and inequality expressions: "< 0", "\ge 25", "\ge 4.5", "\le 0", "> 0"
+            string[] testExpressions = new[] { "< 0", "\\ge 25\\text{ days YoY}", "Net Debt / EBITDA \\ge 4.5\\times", "\\ge 4.5", "\\le 0", "> 0" };
+            foreach (var expr in testExpressions)
+            {
+                var matchingUic = allMathContainers.FirstOrDefault(u => (u.Tag as MathTag)?.Expression == expr);
+                Assert(matchingUic != null, $"Query 8 must contain math container for '{expr}'");
+                Assert(matchingUic!.BaselineAlignment == BaselineAlignment.Center, $"Container for '{expr}' must be BaselineAlignment.Center");
+                var border = (Border)matchingUic.Child;
+                Assert(border.ActualWidth > 0 && border.ActualHeight > 0, $"Container for '{expr}' must have positive dimensions without clipping");
+            }
+
+            // Verify that for "< 0", the relational operator and digit 0 are merged into a single TextBlock
+            var lessThanZero = allMathContainers.First(u => (u.Tag as MathTag)?.Expression == "< 0");
+            var ltzBorder = (Border)lessThanZero.Child;
+            Assert(ltzBorder.Child is TextBlock, $"< 0> expression child must be a merged TextBlock, got {ltzBorder.Child?.GetType().FullName} with children: {(ltzBorder.Child is StackPanel sp ? string.Join(", ", sp.Children.OfType<UIElement>().Select(c => c is TextBlock tb ? tb.Text : c.GetType().Name)) : "not stackpanel")}");
+            var ltzTb = (TextBlock)ltzBorder.Child!;
+            Assert(ltzTb.Text.Contains("<") && ltzTb.Text.Contains("0"), $"< 0> TextBlock must contain '<' and '0' on identical baseline (got '{ltzTb.Text}')");
+
+            // Verify that for "\ge 4.5", the operator and digit are merged
+            var ge45 = allMathContainers.First(u => (u.Tag as MathTag)?.Expression == "\\ge 4.5");
+            var ge45Border = (Border)ge45.Child;
+            Assert(ge45Border.Child is TextBlock, "\\ge 4.5 expression child must be a merged TextBlock");
+            var ge45Tb = (TextBlock)ge45Border.Child!;
+            Assert(ge45Tb.Text.Contains("≥") && ge45Tb.Text.Contains("4.5"), $"\\ge 4.5 TextBlock must contain '≥' and '4.5' on identical baseline (got '{ge45Tb.Text}')");
+        }
+
+        private static void TestScrollBarMetricsAndHitTargetSecurity()
+        {
+            string[] possiblePaths = new[]
+            {
+                System.IO.Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "..", "..", "..", "..", "src", "App.xaml"),
+                System.IO.Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "..", "..", "..", "src", "App.xaml"),
+                System.IO.Path.Combine(Environment.CurrentDirectory, "src", "App.xaml")
+            };
+
+            string appXamlPath = possiblePaths.FirstOrDefault(p => System.IO.File.Exists(p)) ?? string.Empty;
+            Assert(!string.IsNullOrEmpty(appXamlPath), "App.xaml must exist");
+
+            string xamlText = System.IO.File.ReadAllText(appXamlPath);
+
+            // 1. Track width/height must be 14 for reliable clicking
+            Assert(xamlText.Contains("PART_Track\" IsDirectionReversed=\"True\" Width=\"14\""), "Vertical PART_Track must have Width=\"14\"");
+            Assert(xamlText.Contains("PART_Track\" IsDirectionReversed=\"False\" Height=\"14\""), "Horizontal PART_Track must have Height=\"14\"");
+
+            // 2. Thumb minimum dimensions must be 40 to avoid shrinking to tiny unclickable slivers
+            Assert(xamlText.Contains("PART_Thumb\" Template=\"{StaticResource ScrollBarThumbVertical}\" MinHeight=\"40\""),
+                "Vertical PART_Thumb must declare MinHeight=\"40\"");
+            Assert(xamlText.Contains("PART_Thumb\" Template=\"{StaticResource ScrollBarThumbHorizontal}\" MinWidth=\"40\""),
+                "Horizontal PART_Thumb must declare MinWidth=\"40\"");
+
+            // 3. Thumb visual must use high-contrast MutedForegroundBrush in resting state
+            Assert(xamlText.Contains("x:Name=\"ThumbVisual\"\r\n                        Background=\"{DynamicResource MutedForegroundBrush}\"") ||
+                   xamlText.Contains("x:Name=\"ThumbVisual\"\n                        Background=\"{DynamicResource MutedForegroundBrush}\""),
+                "ThumbVisual must use MutedForegroundBrush for high contrast");
+
+            // 4. Thumb template root Grid must declare Background=\"Transparent\" to intercept drag events across full width
+            Assert(xamlText.Contains("<ControlTemplate x:Key=\"ScrollBarThumbVertical\" TargetType=\"{x:Type Thumb}\">\r\n            <Grid Background=\"Transparent\"") ||
+                   xamlText.Contains("<ControlTemplate x:Key=\"ScrollBarThumbVertical\" TargetType=\"{x:Type Thumb}\">\n            <Grid Background=\"Transparent\""),
+                "Vertical thumb template root Grid must have Background=\"Transparent\"");
+            Assert(xamlText.Contains("<ControlTemplate x:Key=\"ScrollBarThumbHorizontal\" TargetType=\"{x:Type Thumb}\">\r\n            <Grid Background=\"Transparent\"") ||
+                   xamlText.Contains("<ControlTemplate x:Key=\"ScrollBarThumbHorizontal\" TargetType=\"{x:Type Thumb}\">\n            <Grid Background=\"Transparent\""),
+                "Horizontal thumb template root Grid must have Background=\"Transparent\"");
+
+            // 5. Global ScrollBar style must set Width/Height to 14
+            Assert(xamlText.Contains("<Setter Property=\"Width\" Value=\"14\"/>"), "Global ScrollBar style must set Width=14");
+            Assert(xamlText.Contains("<Setter Property=\"Height\" Value=\"14\"/>"), "Global ScrollBar style must set Height=14");
         }
     }
 }

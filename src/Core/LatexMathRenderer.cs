@@ -261,15 +261,28 @@ namespace MDPlus.Core
                     }
 
                     bool currentIsWordOrNum = char.IsLetterOrDigit(c) || c == '\\';
-                    if (hadSpace && lastWasWordOrNum && currentIsWordOrNum && panel.Children.Count > 0)
-                    {
-                        panel.Children.Add(new Border { Width = Math.Max(2.5, fontSize * 0.25) });
-                    }
 
-                    var item = ParseItem(fg, fontSize, isDisplay);
+                    var item = ParseItem(fg, fontSize, isDisplay, isStart: panel.Children.Count == 0);
                     if (item != null)
                     {
-                        panel.Children.Add(item);
+                        if (panel.Children.Count > 0 &&
+                            panel.Children[panel.Children.Count - 1] is TextBlock prevTb &&
+                            item is TextBlock currTb &&
+                            CanMergeTextBlocks(prevTb, currTb))
+                        {
+                            MergeTextBlocks(prevTb, currTb, hadSpace);
+                        }
+                        else
+                        {
+                            if (hadSpace && lastWasWordOrNum && currentIsWordOrNum && panel.Children.Count > 0)
+                            {
+                                if (item is FrameworkElement fe)
+                                {
+                                    fe.Margin = new Thickness(Math.Max(2.5, fontSize * 0.25), fe.Margin.Top, fe.Margin.Right, fe.Margin.Bottom);
+                                }
+                            }
+                            panel.Children.Add(item);
+                        }
                         lastWasWordOrNum = currentIsWordOrNum;
                     }
                 }
@@ -281,7 +294,66 @@ namespace MDPlus.Core
                     return single;
                 }
 
+                // Baseline alignment harmonization between MathFont and TextFont (\text{...})
+                bool hasTextFont = false;
+                bool hasMathFont = false;
+                foreach (var child in panel.Children)
+                {
+                    if (child is TextBlock tb)
+                    {
+                        if (Equals(tb.FontFamily, TextFont)) hasTextFont = true;
+                        if (Equals(tb.FontFamily, MathFont)) hasMathFont = true;
+                    }
+                }
+
+                if (hasTextFont && hasMathFont)
+                {
+                    double vShift = Math.Round(fontSize * (1.8 / 14.5), 1);
+                    foreach (var child in panel.Children)
+                    {
+                        if (child is TextBlock tb && Equals(tb.FontFamily, MathFont))
+                        {
+                            tb.Margin = new Thickness(tb.Margin.Left, tb.Margin.Top + vShift, tb.Margin.Right, tb.Margin.Bottom);
+                        }
+                    }
+                }
+
                 return panel;
+            }
+
+            private static bool CanMergeTextBlocks(TextBlock a, TextBlock b)
+            {
+                if (a == null || b == null) return false;
+
+                bool fam = Equals(a.FontFamily, b.FontFamily) || (a.FontFamily != null && b.FontFamily != null && a.FontFamily.Source == b.FontFamily.Source);
+                bool sz = Math.Abs(a.FontSize - b.FontSize) < 0.01;
+                bool wt = a.FontWeight == b.FontWeight;
+                bool st = a.FontStyle == b.FontStyle;
+                bool fg = Equals(a.Foreground, b.Foreground) ||
+                          (a.Foreground is SolidColorBrush sa && b.Foreground is SolidColorBrush sb && sa.Color == sb.Color);
+
+                return fam && sz && wt && st && fg;
+            }
+
+            private static void MergeTextBlocks(TextBlock a, TextBlock b, bool hadSpace)
+            {
+                string sep = "";
+                if (hadSpace && !a.Text.EndsWith(" ") && !b.Text.StartsWith(" "))
+                {
+                    sep = " ";
+                }
+                a.Text = a.Text + sep + b.Text;
+            }
+
+            private static bool IsRelationalOrBinaryCommand(string cmd)
+            {
+                return cmd switch
+                {
+                    "ge" or "geq" or "le" or "leq" or "neq" or "ne" or
+                    "approx" or "equiv" or "sim" or "simeq" or "cong" or
+                    "ll" or "gg" or "pm" or "mp" or "times" or "div" or "cdot" => true,
+                    _ => false
+                };
             }
 
             private bool PeekNextIsCommand(string cmd)
@@ -293,9 +365,9 @@ namespace MDPlus.Core
                 return false;
             }
 
-            private UIElement? ParseItem(Brush fg, double fontSize, bool isDisplay)
+            private UIElement? ParseItem(Brush fg, double fontSize, bool isDisplay, bool isStart = false)
             {
-                UIElement? baseElement = ParseBase(fg, fontSize, isDisplay);
+                UIElement? baseElement = ParseBase(fg, fontSize, isDisplay, isStart);
                 if (baseElement == null) return null;
 
                 // Check for subscripts and superscripts: base_{sub}^{sup} or base^{sup}_{sub}
@@ -352,7 +424,7 @@ namespace MDPlus.Core
                 return CreateGlyph(c.ToString(), fg, fontSize, char.IsLetter(c));
             }
 
-            private UIElement? ParseBase(Brush fg, double fontSize, bool isDisplay)
+            private UIElement? ParseBase(Brush fg, double fontSize, bool isDisplay, bool isStart = false)
             {
                 SkipWhitespace();
                 if (IsEof) return null;
@@ -371,7 +443,7 @@ namespace MDPlus.Core
                 // 2. Commands starting with '\'
                 if (c == '\\')
                 {
-                    return ParseCommand(fg, fontSize, isDisplay);
+                    return ParseCommand(fg, fontSize, isDisplay, isStart);
                 }
 
                 // 3. Numbers
@@ -416,15 +488,17 @@ namespace MDPlus.Core
                     case '=':
                     case '<':
                     case '>':
-                        return CreateGlyph($" {op} ", fg, fontSize, isItalic: false);
+                        string formattedOp = isStart ? $"{op} " : $" {op} ";
+                        return CreateGlyph(formattedOp, fg, fontSize, isItalic: false);
                     case '*':
-                        return CreateGlyph(" · ", fg, fontSize, isItalic: false);
+                        string formattedMul = isStart ? "· " : " · ";
+                        return CreateGlyph(formattedMul, fg, fontSize, isItalic: false);
                     default:
                         return CreateGlyph(op, fg, fontSize, isItalic: false);
                 }
             }
 
-            private UIElement? ParseCommand(Brush fg, double fontSize, bool isDisplay)
+            private UIElement? ParseCommand(Brush fg, double fontSize, bool isDisplay, bool isStart = false)
             {
                 Read(); // consume '\'
                 if (IsEof) return null;
@@ -615,6 +689,11 @@ namespace MDPlus.Core
                 // 11. Known Symbols & Greek Letters
                 if (Symbols.TryGetValue(cmd, out string? symbolGlyph))
                 {
+                    if (IsRelationalOrBinaryCommand(cmd))
+                    {
+                        string formattedSym = isStart ? $"{symbolGlyph} " : $" {symbolGlyph} ";
+                        return CreateGlyph(formattedSym, fg, fontSize, isItalic: false);
+                    }
                     return CreateGlyph(symbolGlyph, fg, fontSize, isItalic: false);
                 }
 

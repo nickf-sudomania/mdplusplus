@@ -276,6 +276,60 @@ namespace MDPlus.Core
 
         private Block ConvertParagraph(ParagraphBlock para)
         {
+            if (para.Inlines.Any(i => i is MathInline m && m.IsDisplay))
+            {
+                var section = new Section { Margin = new Thickness(0, 0, 0, 14) };
+                var currentP = new Paragraph { Margin = new Thickness(0, 0, 0, 6), LineHeight = 24 };
+                bool skipLeadingBreaks = false;
+
+                foreach (var inline in para.Inlines)
+                {
+                    if (inline is MathInline math && math.IsDisplay)
+                    {
+                        while (currentP.Inlines.Count > 0)
+                        {
+                            var last = currentP.Inlines.LastInline;
+                            if (last is LineBreak || (last is Run r && string.IsNullOrWhiteSpace(r.Text)))
+                            {
+                                currentP.Inlines.Remove(last);
+                            }
+                            else
+                            {
+                                break;
+                            }
+                        }
+
+                        if (currentP.Inlines.Count > 0)
+                        {
+                            section.Blocks.Add(currentP);
+                            currentP = new Paragraph { Margin = new Thickness(0, 6, 0, 14), LineHeight = 24 };
+                        }
+
+                        var mathBlock = ConvertMathBlock(new MathBlock(math.Expression));
+                        section.Blocks.Add(mathBlock);
+                        skipLeadingBreaks = true;
+                    }
+                    else
+                    {
+                        if (skipLeadingBreaks && (inline is LineBreakInline || (inline is TextInline ti && string.IsNullOrWhiteSpace(ti.Text))))
+                        {
+                            continue;
+                        }
+                        skipLeadingBreaks = false;
+
+                        var wpfInline = ConvertInline(inline);
+                        if (wpfInline != null) currentP.Inlines.Add(wpfInline);
+                    }
+                }
+
+                if (currentP.Inlines.Count > 0)
+                {
+                    section.Blocks.Add(currentP);
+                }
+
+                return section;
+            }
+
             var p = new Paragraph
             {
                 Margin = new Thickness(0, 0, 0, 14),
@@ -644,29 +698,101 @@ namespace MDPlus.Core
                     };
                     p.Inlines.Add(new InlineUIContainer(checkBox) { BaselineAlignment = BaselineAlignment.Center });
 
+                    bool skipLeadingBreaks = false;
                     foreach (var inline in item.Inlines)
                     {
-                        var wpfInline = ConvertInline(inline);
-                        if (wpfInline != null)
+                        if (inline is MathInline math && math.IsDisplay)
                         {
-                            if (item.IsChecked && wpfInline is Run run)
+                            while (p.Inlines.Count > 0)
                             {
-                                run.Foreground = _mutedBrush;
+                                var last = p.Inlines.LastInline;
+                                if (last is LineBreak || (last is Run r && string.IsNullOrWhiteSpace(r.Text)))
+                                {
+                                    p.Inlines.Remove(last);
+                                }
+                                else
+                                {
+                                    break;
+                                }
                             }
-                            p.Inlines.Add(wpfInline);
+
+                            if (p.Inlines.Count > 0)
+                            {
+                                wpfItem.Blocks.Add(p);
+                                p = new Paragraph { Margin = new Thickness(0, 2, 0, 2) };
+                            }
+                            wpfItem.Blocks.Add(ConvertMathBlock(new MathBlock(math.Expression)));
+                            skipLeadingBreaks = true;
+                        }
+                        else
+                        {
+                            if (skipLeadingBreaks && (inline is LineBreakInline || (inline is TextInline ti && string.IsNullOrWhiteSpace(ti.Text))))
+                            {
+                                continue;
+                            }
+                            skipLeadingBreaks = false;
+
+                            var wpfInline = ConvertInline(inline);
+                            if (wpfInline != null)
+                            {
+                                if (item.IsChecked && wpfInline is Run run)
+                                {
+                                    run.Foreground = _mutedBrush;
+                                }
+                                p.Inlines.Add(wpfInline);
+                            }
                         }
                     }
-                    wpfItem.Blocks.Add(p);
+                    if (p.Inlines.Count > 0)
+                    {
+                        wpfItem.Blocks.Add(p);
+                    }
                 }
                 else
                 {
                     var p = new Paragraph { Margin = new Thickness(0, 2, 0, 2) };
+                    bool skipLeadingBreaks = false;
                     foreach (var inline in item.Inlines)
                     {
-                        var wpfInline = ConvertInline(inline);
-                        if (wpfInline != null) p.Inlines.Add(wpfInline);
+                        if (inline is MathInline math && math.IsDisplay)
+                        {
+                            while (p.Inlines.Count > 0)
+                            {
+                                var last = p.Inlines.LastInline;
+                                if (last is LineBreak || (last is Run r && string.IsNullOrWhiteSpace(r.Text)))
+                                {
+                                    p.Inlines.Remove(last);
+                                }
+                                else
+                                {
+                                    break;
+                                }
+                            }
+
+                            if (p.Inlines.Count > 0)
+                            {
+                                wpfItem.Blocks.Add(p);
+                                p = new Paragraph { Margin = new Thickness(0, 2, 0, 2) };
+                            }
+                            wpfItem.Blocks.Add(ConvertMathBlock(new MathBlock(math.Expression)));
+                            skipLeadingBreaks = true;
+                        }
+                        else
+                        {
+                            if (skipLeadingBreaks && (inline is LineBreakInline || (inline is TextInline ti && string.IsNullOrWhiteSpace(ti.Text))))
+                            {
+                                continue;
+                            }
+                            skipLeadingBreaks = false;
+
+                            var wpfInline = ConvertInline(inline);
+                            if (wpfInline != null) p.Inlines.Add(wpfInline);
+                        }
                     }
-                    wpfItem.Blocks.Add(p);
+                    if (p.Inlines.Count > 0)
+                    {
+                        wpfItem.Blocks.Add(p);
+                    }
                 }
 
                 foreach (var childBlock in item.Blocks)

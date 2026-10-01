@@ -1,5 +1,6 @@
 using System;
 using System.Diagnostics;
+using System.Linq;
 using MDPlus.Core.Mermaid;
 
 namespace MDPlus.Tests
@@ -237,6 +238,82 @@ namespace MDPlus.Tests
             AssertEqual(MermaidStrokeStyle.Thick, e5.Stroke, "Edge 5 Stroke");
             AssertEqual(MermaidArrowHead.None, e5.Arrow, "Edge 5 Arrow");
             AssertEqual("F === G", e5.ToString(), "Edge 5 ToString");
+
+            // 7. Bidirectional and Reverse Connectors (<-->, <--, <==>, <==, <-.->, <-.-)
+            string biDiagram = @"graph TD
+    A <--> B
+    B <-- C
+    C <==> D
+    D <== E
+    E <-.-> F
+    F <-.- G
+";
+            Assert(MermaidFlowchartParser.TryParse(biDiagram, out var biGraph, out string? biErr), $"Parse bidirectional failed: {biErr}");
+            AssertEqual(6, biGraph!.Edges.Count, "Bidirectional Edge count");
+            AssertEqual(MermaidArrowHead.Bidirectional, biGraph.Edges[0].Arrow, "Edge 0 Bidirectional");
+            AssertEqual(MermaidStrokeStyle.Solid, biGraph.Edges[0].Stroke, "Edge 0 Stroke");
+            AssertEqual("A <--> B", biGraph.Edges[0].ToString(), "Edge 0 ToString");
+
+            AssertEqual(MermaidArrowHead.Reverse, biGraph.Edges[1].Arrow, "Edge 1 Reverse");
+            AssertEqual(MermaidStrokeStyle.Solid, biGraph.Edges[1].Stroke, "Edge 1 Stroke");
+            AssertEqual("B <-- C", biGraph.Edges[1].ToString(), "Edge 1 ToString");
+
+            AssertEqual(MermaidArrowHead.Bidirectional, biGraph.Edges[2].Arrow, "Edge 2 Bidirectional Thick");
+            AssertEqual(MermaidStrokeStyle.Thick, biGraph.Edges[2].Stroke, "Edge 2 Stroke");
+            AssertEqual("C <==> D", biGraph.Edges[2].ToString(), "Edge 2 ToString");
+
+            AssertEqual(MermaidArrowHead.Reverse, biGraph.Edges[3].Arrow, "Edge 3 Reverse Thick");
+            AssertEqual(MermaidStrokeStyle.Thick, biGraph.Edges[3].Stroke, "Edge 3 Stroke");
+            AssertEqual("D <== E", biGraph.Edges[3].ToString(), "Edge 3 ToString");
+
+            AssertEqual(MermaidArrowHead.Bidirectional, biGraph.Edges[4].Arrow, "Edge 4 Bidirectional Dotted");
+            AssertEqual(MermaidStrokeStyle.Dotted, biGraph.Edges[4].Stroke, "Edge 4 Stroke");
+            AssertEqual("E <-.-> F", biGraph.Edges[4].ToString(), "Edge 4 ToString");
+
+            AssertEqual(MermaidArrowHead.Reverse, biGraph.Edges[5].Arrow, "Edge 5 Reverse Dotted");
+            AssertEqual(MermaidStrokeStyle.Dotted, biGraph.Edges[5].Stroke, "Edge 5 Stroke");
+            AssertEqual("F <-.- G", biGraph.Edges[5].ToString(), "Edge 5 ToString");
+
+            // 8. SECMASTER_OVERLAP.md QA Diagram Verification
+            string secMasterDiagram = @"graph TD
+    FMP[Financial Modeling Prep]
+    FISC[Fiscal.ai]
+    AIE[Aiera]
+
+    FMP <-->|CIK| FISC
+    FMP <-->|ISIN| AIE
+    FISC <-->|Ticker + MIC| AIE
+";
+            Assert(MermaidFlowchartParser.TryParse(secMasterDiagram, out var smGraph, out string? smErr), $"SecMaster diagram failed: {smErr}");
+            AssertEqual(3, smGraph!.Nodes.Count, "SecMaster Node count");
+            AssertEqual(3, smGraph.Edges.Count, "SecMaster Edge count");
+            AssertEqual(MermaidArrowHead.Bidirectional, smGraph.Edges[0].Arrow, "SecMaster Edge 0 Arrow");
+            AssertEqual("CIK", smGraph.Edges[0].Label, "SecMaster Edge 0 Label");
+
+            var smLayout = MermaidLayoutEngine.Layout(smGraph);
+            AssertEqual(3, smLayout.Nodes.Count, "SecMaster layout nodes");
+            AssertEqual(3, smLayout.Edges.Count, "SecMaster layout edges");
+            Assert(smLayout.Edges.All(e => e.Edge.Arrow == MermaidArrowHead.Bidirectional && !double.IsNaN(e.StartArrowheadAngle)),
+                "All SecMaster edges have bidirectional arrowheads computed");
+            // Check that edge labels do not overlap
+            var labels = smLayout.Edges.Where(e => e.LabelPosition.HasValue).ToList();
+            for (int i = 0; i < labels.Count; i++)
+            {
+                var rectI = new System.Windows.Rect(
+                    labels[i].LabelPosition!.Value.X - labels[i].LabelSize.Width / 2.0,
+                    labels[i].LabelPosition!.Value.Y - labels[i].LabelSize.Height / 2.0,
+                    labels[i].LabelSize.Width,
+                    labels[i].LabelSize.Height);
+                for (int j = i + 1; j < labels.Count; j++)
+                {
+                    var rectJ = new System.Windows.Rect(
+                        labels[j].LabelPosition!.Value.X - labels[j].LabelSize.Width / 2.0,
+                        labels[j].LabelPosition!.Value.Y - labels[j].LabelSize.Height / 2.0,
+                        labels[j].LabelSize.Width,
+                        labels[j].LabelSize.Height);
+                    Assert(!rectI.IntersectsWith(rectJ), $"SecMaster edge labels {i} and {j} must not intersect");
+                }
+            }
         }
 
         /// <summary>

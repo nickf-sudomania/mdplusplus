@@ -692,7 +692,91 @@ namespace MDPlus.Core.Mermaid
                     return false;
                 }
 
-                // 1. Thick connector starting with '=='
+                // 1. Reverse or Bidirectional connector starting with '<'
+                if (Peek() == '<')
+                {
+                    // Thick: <==> or <==
+                    if (Peek(1) == '=' && Peek(2) == '=')
+                    {
+                        if (Peek(3) == '>')
+                        {
+                            Advance(4);
+                            stroke = MermaidStrokeStyle.Thick;
+                            arrow = MermaidArrowHead.Bidirectional;
+                            label = ReadOptionalPipeLabel();
+                            return true;
+                        }
+                        Advance(3);
+                        stroke = MermaidStrokeStyle.Thick;
+                        arrow = MermaidArrowHead.Reverse;
+                        label = ReadOptionalPipeLabel();
+                        return true;
+                    }
+
+                    // Dotted: <-.-> or <-.-
+                    if (Peek(1) == '-' && Peek(2) == '.')
+                    {
+                        if (Peek(3) == '-' && Peek(4) == '>')
+                        {
+                            Advance(5);
+                            stroke = MermaidStrokeStyle.Dotted;
+                            arrow = MermaidArrowHead.Bidirectional;
+                            label = ReadOptionalPipeLabel();
+                            return true;
+                        }
+                        if (Peek(3) == '-')
+                        {
+                            Advance(4);
+                            stroke = MermaidStrokeStyle.Dotted;
+                            arrow = MermaidArrowHead.Reverse;
+                            label = ReadOptionalPipeLabel();
+                            return true;
+                        }
+                        if (TryReadInlineConnector("<-.", ".->", out label))
+                        {
+                            stroke = MermaidStrokeStyle.Dotted;
+                            arrow = MermaidArrowHead.Bidirectional;
+                            return true;
+                        }
+                        return false;
+                    }
+
+                    // Solid: <--> or <--
+                    if (Peek(1) == '-' && Peek(2) == '-')
+                    {
+                        if (Peek(3) == '>')
+                        {
+                            Advance(4);
+                            stroke = MermaidStrokeStyle.Solid;
+                            arrow = MermaidArrowHead.Bidirectional;
+                            label = ReadOptionalPipeLabel();
+                            return true;
+                        }
+                        Advance(3);
+                        stroke = MermaidStrokeStyle.Solid;
+                        arrow = MermaidArrowHead.Reverse;
+                        label = ReadOptionalPipeLabel();
+                        return true;
+                    }
+
+                    // Check for inline connectors starting with <--
+                    if (TryReadInlineConnector("<--", "-->", out label))
+                    {
+                        stroke = MermaidStrokeStyle.Solid;
+                        arrow = MermaidArrowHead.Bidirectional;
+                        return true;
+                    }
+                    if (TryReadInlineConnector("<--", "---", out label))
+                    {
+                        stroke = MermaidStrokeStyle.Solid;
+                        arrow = MermaidArrowHead.Reverse;
+                        return true;
+                    }
+
+                    return false;
+                }
+
+                // 2. Thick connector starting with '=='
                 if (Peek() == '=' && Peek(1) == '=')
                 {
                     if (Peek(2) == '>')
@@ -731,7 +815,7 @@ namespace MDPlus.Core.Mermaid
                     return false;
                 }
 
-                // 2. Dotted connector starting with '-.'
+                // 3. Dotted connector starting with '-.'
                 if (Peek() == '-' && Peek(1) == '.')
                 {
                     if (Peek(2) == '-' && Peek(3) == '>')
@@ -764,7 +848,7 @@ namespace MDPlus.Core.Mermaid
                     return false;
                 }
 
-                // 3. Solid connector starting with '--'
+                // 4. Solid connector starting with '--'
                 if (Peek() == '-' && Peek(1) == '-')
                 {
                     if (Peek(2) == '>')
@@ -786,7 +870,7 @@ namespace MDPlus.Core.Mermaid
                         return true;
                     }
 
-                    // Check for inline solid label: -- label --> or -- label ---
+                    // Check for inline solid label: -- label --> or -- label --- or -- label <--
                     if (TryReadInlineConnector("--", "-->", out label))
                     {
                         stroke = MermaidStrokeStyle.Solid;
@@ -797,6 +881,12 @@ namespace MDPlus.Core.Mermaid
                     {
                         stroke = MermaidStrokeStyle.Solid;
                         arrow = MermaidArrowHead.None;
+                        return true;
+                    }
+                    if (TryReadInlineConnector("--", "<--", out label))
+                    {
+                        stroke = MermaidStrokeStyle.Solid;
+                        arrow = MermaidArrowHead.Reverse;
                         return true;
                     }
 
@@ -901,6 +991,10 @@ namespace MDPlus.Core.Mermaid
                         }
                     }
                     if (c == '=' && Peek(1) == '=')
+                    {
+                        break;
+                    }
+                    if (c == '<' && (Peek(1) == '-' || Peek(1) == '='))
                     {
                         break;
                     }
