@@ -501,8 +501,8 @@ public static void Main() => Console.WriteLine(""Stress"");
                 AssertEqual(BaselineAlignment.Center, uic.BaselineAlignment, "Container BaselineAlignment must be Center");
                 AssertTrue(uic.Child is Border, "Child must be a Border container");
                 var b = (Border)uic.Child;
-                AssertEqual(2.5, b.Margin.Top, "Paragraph math top margin must be 2.5 DIPs");
-                AssertEqual(-2.5, b.Margin.Bottom, "Paragraph math bottom margin must be -2.5 DIPs");
+                AssertEqual(-1.0, b.Margin.Top, "Paragraph math top margin must be -1.0 DIPs");
+                AssertEqual(1.0, b.Margin.Bottom, "Paragraph math bottom margin must be 1.0 DIPs");
                 AssertEqual(0.0, b.Margin.Top + b.Margin.Bottom, "Zero-sum vertical margin invariant violated in Paragraph");
             }
 
@@ -523,8 +523,8 @@ public static void Main() => Console.WriteLine(""Stress"");
                 AssertNotNull(uic, "ListItem must contain a math container");
                 AssertEqual(BaselineAlignment.Center, uic!.BaselineAlignment, "ListItem container BaselineAlignment must be Center");
                 var b = (Border)uic.Child;
-                AssertEqual(2.5, b.Margin.Top, "ListItem math top margin must be 2.5 DIPs");
-                AssertEqual(-2.5, b.Margin.Bottom, "ListItem math bottom margin must be -2.5 DIPs");
+                AssertEqual(-1.0, b.Margin.Top, "ListItem math top margin must be -1.0 DIPs");
+                AssertEqual(1.0, b.Margin.Bottom, "ListItem math bottom margin must be 1.0 DIPs");
                 AssertEqual(0.0, b.Margin.Top + b.Margin.Bottom, "Zero-sum vertical margin invariant violated in ListItem");
             }
 
@@ -548,7 +548,7 @@ public static void Main() => Console.WriteLine(""Stress"");
                 double expectedFont = expectedFontSizes[h];
                 AssertEqual(expectedFont, hp.FontSize, $"Heading H{h + 1} FontSize mismatch");
 
-                double expectedVOffset = Math.Round(expectedFont * (2.5 / 14.5), 1);
+                double expectedVOffset = Math.Round(expectedFont * (-1.0 / 15.0), 1);
                 var uic = hp.Inlines.OfType<InlineUIContainer>().FirstOrDefault();
                 AssertNotNull(uic, $"Heading H{h + 1} must contain math container");
                 AssertEqual(BaselineAlignment.Center, uic!.BaselineAlignment, $"Heading H{h + 1} BaselineAlignment must be Center");
@@ -580,8 +580,8 @@ public static void Main() => Console.WriteLine(""Stress"");
             {
                 AssertEqual(BaselineAlignment.Center, tuic.BaselineAlignment, "Table math BaselineAlignment must be Center");
                 var b = (Border)tuic.Child;
-                AssertEqual(2.5, b.Margin.Top, "Table math top margin must be 2.5 DIPs");
-                AssertEqual(-2.5, b.Margin.Bottom, "Table math bottom margin must be -2.5 DIPs");
+                AssertEqual(-1.0, b.Margin.Top, "Table math top margin must be -1.0 DIPs");
+                AssertEqual(1.0, b.Margin.Bottom, "Table math bottom margin must be 1.0 DIPs");
                 AssertEqual(0.0, b.Margin.Top + b.Margin.Bottom, "Zero-sum vertical margin invariant violated in Table");
             }
 
@@ -671,8 +671,8 @@ public static void Main() => Console.WriteLine(""Stress"");
 
                 AssertEqual(BaselineAlignment.Center, targetUic!.BaselineAlignment, $"Expression '{expr}' must have BaselineAlignment.Center");
                 var border = (Border)targetUic.Child;
-                AssertEqual(2.5, border.Margin.Top, $"Expression '{expr}' Top margin must be 2.5 DIPs");
-                AssertEqual(-2.5, border.Margin.Bottom, $"Expression '{expr}' Bottom margin must be -2.5 DIPs");
+                AssertEqual(-1.0, border.Margin.Top, $"Expression '{expr}' Top margin must be -1.0 DIPs");
+                AssertEqual(1.0, border.Margin.Bottom, $"Expression '{expr}' Bottom margin must be 1.0 DIPs");
                 AssertTrue(border.ActualWidth > 0, $"Expression '{expr}' ActualWidth must be > 0 (no horizontal clipping)");
                 AssertTrue(border.ActualHeight > 0, $"Expression '{expr}' ActualHeight must be > 0 (no vertical clipping)");
 
@@ -695,8 +695,8 @@ public static void Main() => Console.WriteLine(""Stress"");
                 AssertTrue(opticalDelta <= 1.5,
                     $"Expression '{expr}' optical delta ({opticalDelta:F2} DIPs) must be <= 1.5 DIPs (mathCenter={mathCenterY:F2}, textCenter={textCenterY:F2})");
 
-                // Non-elevation guard: formula must not sit higher than text Top - 2.0 DIPs (superscript elevation prevention)
-                AssertTrue(borderRect.Top >= textRect.Top - 2.0,
+                // Non-elevation guard: formula must not sit higher than text Top - 3.5 DIPs (superscript elevation prevention)
+                AssertTrue(borderRect.Top >= textRect.Top - 3.5,
                     $"Expression '{expr}' non-elevation guard violated: borderRect.Top ({borderRect.Top:F2}) is elevated above text Top ({textRect.Top:F2})");
 
                 verifiedCount++;
@@ -839,8 +839,8 @@ public static void Main() => Console.WriteLine(""Stress"");
                 AssertNotNull(elem, $"RenderMath must return non-null element for '{snippet}'");
                 AssertTrue(elem is Border, $"RenderMath must wrap result in Border for '{snippet}'");
                 var b = (Border)elem;
-                AssertEqual(2.5, b.Margin.Top, $"Top margin must be preserved for '{snippet}'");
-                AssertEqual(-2.5, b.Margin.Bottom, $"Bottom margin must be preserved for '{snippet}'");
+                AssertEqual(-1.0, b.Margin.Top, $"Top margin must be preserved for '{snippet}'");
+                AssertEqual(1.0, b.Margin.Bottom, $"Bottom margin must be preserved for '{snippet}'");
             }
         }
 

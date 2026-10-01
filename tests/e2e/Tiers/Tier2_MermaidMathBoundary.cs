@@ -712,8 +712,8 @@ namespace MDPlus.E2E.Tiers
         {
             var elem = LatexMathRenderer.RenderMath("x", ThemePalette.GitHubDark, 14.5, false);
             var border = (Border)elem;
-            AssertEqual(2.5, border.Margin.Top);
-            AssertEqual(-2.5, border.Margin.Bottom);
+            AssertEqual(-1.0, border.Margin.Top);
+            AssertEqual(1.0, border.Margin.Bottom);
         }
 
         private static void TestT2_F11_3_DeepNestedScripts()
@@ -732,13 +732,13 @@ namespace MDPlus.E2E.Tiers
 
         private static void TestT2_F11_5_FontSizeBoundaries()
         {
-            // Small font: 8pt -> vOffset = round(8 * 2.5 / 14.5, 1) = round(1.379, 1) = 1.4
-            double vSmall = Math.Round(8.0 * (2.5 / 14.5), 1);
-            AssertEqual(1.4, vSmall);
+            // Small font: 8pt -> vOffset = round(8 * -1.0 / 15.0, 1) = round(-0.533, 1) = -0.5
+            double vSmall = Math.Round(8.0 * (-1.0 / 15.0), 1);
+            AssertEqual(-0.5, vSmall);
 
-            // Large font: 36pt -> vOffset = round(36 * 2.5 / 14.5, 1) = round(6.206, 1) = 6.2
-            double vLarge = Math.Round(36.0 * (2.5 / 14.5), 1);
-            AssertEqual(6.2, vLarge);
+            // Large font: 36pt -> vOffset = round(36 * -1.0 / 15.0, 1) = round(-2.4, 1) = -2.4
+            double vLarge = Math.Round(36.0 * (-1.0 / 15.0), 1);
+            AssertEqual(-2.4, vLarge);
         }
 
         #endregion
@@ -756,8 +756,8 @@ namespace MDPlus.E2E.Tiers
 
             var uic = para.Inlines.OfType<InlineUIContainer>().First();
             var border = (Border)uic.Child;
-            AssertEqual(2.5, border.Margin.Top);
-            AssertEqual(-2.5, border.Margin.Bottom);
+            AssertEqual(-1.0, border.Margin.Top);
+            AssertEqual(1.0, border.Margin.Bottom);
         }
 
         private static void TestT2_F12_2_ListItemLineStepConsistency()
@@ -810,8 +810,8 @@ namespace MDPlus.E2E.Tiers
         {
             var elem = LatexMathRenderer.RenderMath("< 18\\%", ThemePalette.GitHubDark, 14.5, false);
             var border = (Border)elem;
-            AssertEqual(2.5, border.Margin.Top);
-            AssertEqual(-2.5, border.Margin.Bottom);
+            AssertEqual(-1.0, border.Margin.Top);
+            AssertEqual(1.0, border.Margin.Bottom);
         }
 
         private static void TestT2_F13_2_CombinedPercentAndCurrency()

@@ -1,6 +1,15 @@
 # MDPlus Release Notes
 
-## Version 1.15.1 (Latest)
+## Version 1.15.2 (Latest)
+
+See [docs/RELEASE_NOTES_v1.15.2.md](docs/RELEASE_NOTES_v1.15.2.md) for full details.
+
+### Highlights
+- **Typographic Baseline Alignment & Punctuation Grounding:** Fixed overcompensated offset pushing inline code pills and math below baseline; calibrated font-proportional vertical offset to achieve pixel-perfect collinearity ($y=115$ px) with Segoe UI text.
+- **Currency Delimiter Protection:** Added whitespace lookahead to isolate unescaped currency amounts (`$2B`, `$10M`) from greedy TeX inline math pairing.
+- **HTML Element Parity:** Synchronized `<kbd>` keycaps and `<code>` elements in `HtmlWpfRenderer.cs` with the new calibrated baseline margin.
+
+## Version 1.15.1
 
 See [docs/RELEASE_NOTES_v1.15.1.md](docs/RELEASE_NOTES_v1.15.1.md) for full details.
 

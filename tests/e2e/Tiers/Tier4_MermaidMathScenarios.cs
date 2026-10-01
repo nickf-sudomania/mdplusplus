@@ -117,8 +117,8 @@ namespace MDPlus.E2E.Tiers
             {
                 AssertEqual(BaselineAlignment.Center, uic.BaselineAlignment, "Math container must have BaselineAlignment.Center");
                 var border = (Border)uic.Child;
-                AssertEqual(2.5, border.Margin.Top, "Top margin must be 2.5 DIPs");
-                AssertEqual(-2.5, border.Margin.Bottom, "Bottom margin must be -2.5 DIPs");
+                AssertEqual(-1.0, border.Margin.Top, "Top margin must be -1.0 DIPs");
+                AssertEqual(1.0, border.Margin.Bottom, "Bottom margin must be 1.0 DIPs");
                 AssertTrue(border.ActualWidth > 0, "ActualWidth must be positive (no clipping)");
                 AssertTrue(border.ActualHeight > 0, "ActualHeight must be positive (no clipping)");
             }

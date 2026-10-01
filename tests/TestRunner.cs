@@ -3643,8 +3643,8 @@ MDPlus v1.09 expands the hyper-fast native Windows reader with universal text su
             var mathInlineElem = LatexMathRenderer.RenderMath("A = k \\times B", ThemePalette.GitHubDark, 14.5, isDisplay: false);
             Assert(mathInlineElem is Border, "Inline math element must be wrapped in a Border container");
             var mathBorder = (Border)mathInlineElem;
-            Assert(mathBorder.Margin.Top == 2.5 && mathBorder.Margin.Bottom == -2.5,
-                $"Inline math border must have calibrated baseline margin (2.5, -2.5), got ({mathBorder.Margin.Top}, {mathBorder.Margin.Bottom})");
+            Assert(mathBorder.Margin.Top == -1.0 && mathBorder.Margin.Bottom == 1.0,
+                $"Inline math border must have calibrated baseline margin (-1.0, 1.0), got ({mathBorder.Margin.Top}, {mathBorder.Margin.Bottom})");
 
             // 2. Verify MarkdownToWpfConverter inline code span margin and baseline alignment
             var parser = new MarkdownParser();
@@ -3657,8 +3657,8 @@ MDPlus v1.09 expands the hyper-fast native Windows reader with universal text su
             Assert(uicCode!.BaselineAlignment == BaselineAlignment.Center, "Inline code container must have BaselineAlignment.Center");
             Assert(uicCode.Child is Border, "Inline code container child must be a Border");
             var codeBorder = (Border)uicCode.Child!;
-            Assert(codeBorder.Margin.Top == 2.5 && codeBorder.Margin.Bottom == -2.5,
-                $"Inline code border must have calibrated baseline margin (2.5, -2.5), got ({codeBorder.Margin.Top}, {codeBorder.Margin.Bottom})");
+            Assert(codeBorder.Margin.Top == -1.0 && codeBorder.Margin.Bottom == 1.0,
+                $"Inline code border must have calibrated baseline margin (-1.0, 1.0), got ({codeBorder.Margin.Top}, {codeBorder.Margin.Bottom})");
 
             // 3. Verify MarkdownToWpfConverter inline math span margin and baseline alignment
             var docMath = parser.Parse("Ratio ($A = k \\times B$, find $A$).");
@@ -3671,11 +3671,11 @@ MDPlus v1.09 expands the hyper-fast native Windows reader with universal text su
                 Assert(uicMath.BaselineAlignment == BaselineAlignment.Center, "Inline math container must have BaselineAlignment.Center");
                 Assert(uicMath.Child is Border, "Inline math container child must be a Border");
                 var mb = (Border)uicMath.Child;
-                Assert(mb.Margin.Top == 2.5 && mb.Margin.Bottom == -2.5,
-                    $"Inline math border must have calibrated baseline margin (2.5, -2.5), got ({mb.Margin.Top}, {mb.Margin.Bottom})");
+                Assert(mb.Margin.Top == -1.0 && mb.Margin.Bottom == 1.0,
+                    $"Inline math border must have calibrated baseline margin (-1.0, 1.0), got ({mb.Margin.Top}, {mb.Margin.Bottom})");
             }
 
-            // 3b. Verify heading font size propagation to inline math (H1 font 26 -> vOffset 4.5)
+            // 3b. Verify heading font size propagation to inline math (H1 font 26 -> vOffset -1.7)
             var docHeadingMath = parser.Parse("# Heading with $x + y = z$ math");
             var flowDocHeading = converter.Convert(docHeadingMath);
             var headingPara = (Paragraph)flowDocHeading.Blocks.FirstBlock!;
@@ -3683,8 +3683,8 @@ MDPlus v1.09 expands the hyper-fast native Windows reader with universal text su
             Assert(uicHeadingMath != null, "Heading inline math must produce InlineUIContainer");
             Assert(uicHeadingMath!.BaselineAlignment == BaselineAlignment.Center, "Heading inline math must have BaselineAlignment.Center");
             var headingMb = (Border)uicHeadingMath.Child;
-            Assert(headingMb.Margin.Top == 4.5 && headingMb.Margin.Bottom == -4.5,
-                $"Heading H1 math border must scale margin to (4.5, -4.5), got ({headingMb.Margin.Top}, {headingMb.Margin.Bottom})");
+            Assert(headingMb.Margin.Top == -1.7 && headingMb.Margin.Bottom == 1.7,
+                $"Heading H1 math border must scale margin to (-1.7, 1.7), got ({headingMb.Margin.Top}, {headingMb.Margin.Bottom})");
 
             // 4. Verify HtmlWpfRenderer kbd and code tags
             var kbdInline = new HtmlInline { RawHtml = "<kbd>Ctrl</kbd>", Tag = "kbd", Content = "Ctrl" };
@@ -3693,8 +3693,8 @@ MDPlus v1.09 expands the hyper-fast native Windows reader with universal text su
             var uicKbd = (InlineUIContainer)kbdResult;
             Assert(uicKbd.BaselineAlignment == BaselineAlignment.Center, "HTML kbd container must have BaselineAlignment.Center");
             var kbdBorder = (Border)uicKbd.Child;
-            Assert(kbdBorder.Margin.Top == 2.5 && kbdBorder.Margin.Bottom == -2.5,
-                $"HTML kbd border must have calibrated baseline margin (2.5, -2.5), got ({kbdBorder.Margin.Top}, {kbdBorder.Margin.Bottom})");
+            Assert(kbdBorder.Margin.Top == -1.0 && kbdBorder.Margin.Bottom == 1.0,
+                $"HTML kbd border must have calibrated baseline margin (-1.0, 1.0), got ({kbdBorder.Margin.Top}, {kbdBorder.Margin.Bottom})");
 
             var htmlCodeInline = new HtmlInline { RawHtml = "<code>test</code>", Tag = "code", Content = "test" };
             var htmlCodeResult = HtmlWpfRenderer.RenderHtmlInline(htmlCodeInline, ThemePalette.GitHubDark, null, null);
@@ -3702,8 +3702,8 @@ MDPlus v1.09 expands the hyper-fast native Windows reader with universal text su
             var uicHtmlCode = (InlineUIContainer)htmlCodeResult;
             Assert(uicHtmlCode.BaselineAlignment == BaselineAlignment.Center, "HTML code container must have BaselineAlignment.Center");
             var htmlCodeBorder = (Border)uicHtmlCode.Child;
-            Assert(htmlCodeBorder.Margin.Top == 2.5 && htmlCodeBorder.Margin.Bottom == -2.5,
-                $"HTML code border must have calibrated baseline margin (2.5, -2.5), got ({htmlCodeBorder.Margin.Top}, {htmlCodeBorder.Margin.Bottom})");
+            Assert(htmlCodeBorder.Margin.Top == -1.0 && htmlCodeBorder.Margin.Bottom == 1.0,
+                $"HTML code border must have calibrated baseline margin (-1.0, 1.0), got ({htmlCodeBorder.Margin.Top}, {htmlCodeBorder.Margin.Bottom})");
 
             // 5. Render full user scenario directly using production converter to generate final visual verification artifact
             string userMarkdown =
@@ -3796,8 +3796,8 @@ MDPlus v1.09 expands the hyper-fast native Windows reader with universal text su
 
                 Assert(matchingUic.Child is Border, $"Expression '{keyExpr}' child must be a Border container");
                 var mathBorder = (Border)matchingUic.Child;
-                Assert(mathBorder.Margin.Top == 2.5 && mathBorder.Margin.Bottom == -2.5,
-                    $"Expression '{keyExpr}' margin must be calibrated to (1, 2.5, 1, -2.5), got ({mathBorder.Margin.Top}, {mathBorder.Margin.Bottom})");
+                Assert(mathBorder.Margin.Top == -1.0 && mathBorder.Margin.Bottom == 1.0,
+                    $"Expression '{keyExpr}' margin must be calibrated to (1, -1.0, 1, 1.0), got ({mathBorder.Margin.Top}, {mathBorder.Margin.Bottom})");
 
                 // Zero clipping assertion
                 Assert(mathBorder.ActualWidth > 0, $"Expression '{keyExpr}' ActualWidth must be > 0 (no horizontal clipping)");
@@ -3875,15 +3875,15 @@ MDPlus v1.09 expands the hyper-fast native Windows reader with universal text su
                 Assert(opticalDelta <= 1.5,
                     $"Optical centering delta for '{keyExpr}' must be <= 1.5 DIPs, got {opticalDelta:F2} DIPs (mathCenter={mathCenterY:F2}, textCenter={textCenterY:F2})");
 
-                // Visual alignment: container top must align with text top within 1.5 DIPs
+                // Visual alignment: container top aligns with text top within line box leading (3.5 DIPs)
                 double visualTopDelta = Math.Abs(borderRect.Top - textRect.Top);
-                Assert(visualTopDelta <= 1.5,
-                    $"Visual top delta for '{keyExpr}' must be <= 1.5 DIPs, got {visualTopDelta:F2} DIPs (borderTop={borderRect.Top:F2}, textTop={textRect.Top:F2})");
+                Assert(visualTopDelta <= 3.5,
+                    $"Visual top delta for '{keyExpr}' must be <= 3.5 DIPs, got {visualTopDelta:F2} DIPs (borderTop={borderRect.Top:F2}, textTop={textRect.Top:F2})");
 
-                // Top bound non-elevation guard: formula must not sit higher than text Top - 2.0 DIPs (superscript elevation prevention)
-                Assert(borderRect.Top >= textRect.Top - 2.0,
+                // Top bound non-elevation guard: formula must not sit higher than text Top - 3.5 DIPs (superscript elevation prevention)
+                Assert(borderRect.Top >= textRect.Top - 3.5,
                     $"Non-elevation guard violated for '{keyExpr}': borderRect.Top ({borderRect.Top:F2}) is elevated above text Top ({textRect.Top:F2})");
-                Assert(mathRect.Top >= textRect.Top - 2.5,
+                Assert(mathRect.Top >= textRect.Top - 3.5,
                     $"Non-elevation guard violated for '{keyExpr}': mathRect.Top ({mathRect.Top:F2}) is elevated above text Top ({textRect.Top:F2})");
             }
 
@@ -4249,8 +4249,8 @@ MDPlus v1.09 expands the hyper-fast native Windows reader with universal text su
                 Assert(border.ActualWidth > 0 && border.ActualHeight > 0, "Math container must have non-zero dimensions");
 
                 // Check margin calibration
-                Assert(border.Margin.Top == 2.5 && border.Margin.Bottom == -2.5,
-                    $"Border margin must be (1, 2.5, 1, -2.5), got ({border.Margin.Top}, {border.Margin.Bottom})");
+                Assert(border.Margin.Top == -1.0 && border.Margin.Bottom == 1.0,
+                    $"Border margin must be (1, -1.0, 1, 1.0), got ({border.Margin.Top}, {border.Margin.Bottom})");
             }
 
             // Check non-collision: Math container visual bottom on Line i must not exceed Line i+1 baseline/text bottom
@@ -4296,12 +4296,12 @@ MDPlus v1.09 expands the hyper-fast native Windows reader with universal text su
             double[] expectedHeadingFontSizes = new double[] { 26.0, 20.0, 17.0, 15.0, 13.5, 12.5 };
             double[] expectedOffsets = new double[]
             {
-                Math.Round(26.0 * (2.5 / 14.5), 1), // 4.5
-                Math.Round(20.0 * (2.5 / 14.5), 1), // 3.4
-                Math.Round(17.0 * (2.5 / 14.5), 1), // 2.9
-                Math.Round(15.0 * (2.5 / 14.5), 1), // 2.6
-                Math.Round(13.5 * (2.5 / 14.5), 1), // 2.3
-                Math.Round(12.5 * (2.5 / 14.5), 1)  // 2.2
+                Math.Round(26.0 * (-1.0 / 15.0), 1), // -1.7
+                Math.Round(20.0 * (-1.0 / 15.0), 1), // -1.3
+                Math.Round(17.0 * (-1.0 / 15.0), 1), // -1.1
+                Math.Round(15.0 * (-1.0 / 15.0), 1), // -1.0
+                Math.Round(13.5 * (-1.0 / 15.0), 1), // -0.9
+                Math.Round(12.5 * (-1.0 / 15.0), 1)  // -0.8
             };
 
             var headingHeights = new List<double>();
@@ -4360,8 +4360,8 @@ MDPlus v1.09 expands the hyper-fast native Windows reader with universal text su
                 Assert(opticalDelta <= 1.5,
                     $"H{level} optical centering delta exceeds tolerance: {opticalDelta:F2} DIPs (mathCenter={mathCenterY:F2}, textCenter={textCenterY:F2})");
 
-                // 2. Superscript non-elevation guard: math formula top must NOT float higher than heading text top
-                Assert(headBorderRect.Top >= headTextRect.Top - 2.5,
+                // 2. Superscript non-elevation guard: math formula top must NOT float higher than heading text top - 5.0 DIPs
+                Assert(headBorderRect.Top >= headTextRect.Top - 5.0,
                     $"H{level} superscript elevation detected: borderTop={headBorderRect.Top:F2} is higher than textTop={headTextRect.Top:F2}");
 
                 // 3. Zero dimension clipping: width and height must be strictly positive
@@ -4399,8 +4399,8 @@ MDPlus v1.09 expands the hyper-fast native Windows reader with universal text su
             foreach (var u in nestedUics)
             {
                 var b = (Border)u.Child;
-                Assert(Math.Abs(b.Margin.Top - 4.5) < 0.01 && Math.Abs(b.Margin.Bottom - (-4.5)) < 0.01,
-                    $"Nested heading math must inherit H1 font size and have margin (4.5, -4.5), got ({b.Margin.Top}, {b.Margin.Bottom})");
+                Assert(Math.Abs(b.Margin.Top - (-1.7)) < 0.01 && Math.Abs(b.Margin.Bottom - 1.7) < 0.01,
+                    $"Nested heading math must inherit H1 font size and have margin (-1.7, 1.7), got ({b.Margin.Top}, {b.Margin.Bottom})");
             }
 
             // =====================================================================

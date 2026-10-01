@@ -103,19 +103,19 @@ namespace MDPlus.E2E.Tiers
             var converter = new MarkdownToWpfConverter("", ThemePalette.GitHubDark, enableLatex: true, enableHtml: true);
             var flowDoc = converter.Convert(parser.Parse(md));
 
-            // Check headings have scaled math container margins
+            // Check headings have scaled math container margins (-1.7)
             var h1 = (Paragraph)flowDoc.Blocks.ElementAt(0);
             var h1Uic = h1.Inlines.OfType<InlineUIContainer>().First();
             var h1Border = (Border)h1Uic.Child;
-            AssertEqual(4.5, h1Border.Margin.Top);
+            AssertEqual(-1.7, h1Border.Margin.Top);
 
-            // Check list items have standard math container margins (2.5)
+            // Check list items have standard math container margins (-1.0)
             var list = flowDoc.Blocks.OfType<List>().First();
             var item2 = list.ListItems.ElementAt(1);
             var item2Para = (Paragraph)item2.Blocks.FirstBlock!;
             var item2Uic = item2Para.Inlines.OfType<InlineUIContainer>().First();
             var item2Border = (Border)item2Uic.Child;
-            AssertEqual(2.5, item2Border.Margin.Top);
+            AssertEqual(-1.0, item2Border.Margin.Top);
         }
 
         private static void TestT3_4_ThemeSwitchingLiveCycleWithMermaidCanvas()

@@ -692,6 +692,11 @@ namespace MDPlus.Core
                                         }
                                     }
                                 }
+                                else
+                                {
+                                    // Hit another '$' preceded by whitespace without closing current one: abort candidate
+                                    break;
+                                }
                             }
                             if (text[k] == '\n' && k + 1 < length && text[k + 1] == '\n')
                             {

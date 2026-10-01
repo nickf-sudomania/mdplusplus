@@ -191,7 +191,7 @@ namespace MDPlus.Core
             }
             else
             {
-                double vOffset = Math.Round(effectiveFontSize * (2.5 / 14.5), 1);
+                double vOffset = Math.Round(effectiveFontSize * (-1.0 / 15.0), 1);
                 var container = new Border
                 {
                     Background = Brushes.Transparent,

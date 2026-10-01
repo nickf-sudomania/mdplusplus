@@ -901,20 +901,20 @@ namespace MDPlus.E2E.Tiers
             AssertTrue(mathElem is Border, "Inline math must be wrapped in a Border container");
             var border = (Border)mathElem;
 
-            AssertEqual(2.5, border.Margin.Top, "Top margin must be +2.5");
-            AssertEqual(-2.5, border.Margin.Bottom, "Bottom margin must be -2.5");
+            AssertEqual(-1.0, border.Margin.Top, "Top margin must be -1.0");
+            AssertEqual(1.0, border.Margin.Bottom, "Bottom margin must be 1.0");
         }
 
         private static void TestF11_3_VOffsetScalingFormula()
         {
-            // vOffset = Math.Round(effectiveFontSize * (2.5 / 14.5), 1)
-            double size1 = 14.5;
-            double expected1 = Math.Round(size1 * (2.5 / 14.5), 1);
-            AssertEqual(2.5, expected1);
+            // vOffset = Math.Round(effectiveFontSize * (-1.0 / 15.0), 1)
+            double size1 = 15.0;
+            double expected1 = Math.Round(size1 * (-1.0 / 15.0), 1);
+            AssertEqual(-1.0, expected1);
 
-            double size2 = 29.0;
-            double expected2 = Math.Round(size2 * (2.5 / 14.5), 1);
-            AssertEqual(5.0, expected2);
+            double size2 = 30.0;
+            double expected2 = Math.Round(size2 * (-1.0 / 15.0), 1);
+            AssertEqual(-2.0, expected2);
         }
 
         private static void TestF11_4_ZeroNetLineHeightExpansion()
@@ -979,7 +979,7 @@ namespace MDPlus.E2E.Tiers
             var uic = para.Inlines.OfType<InlineUIContainer>().FirstOrDefault();
             AssertNotNull(uic, "Heading math must produce InlineUIContainer");
             var border = (Border)uic!.Child;
-            AssertTrue(border.Margin.Top > 2.5, "Heading math margin must scale up with ambient font size");
+            AssertTrue(border.Margin.Top < 0, "Heading math margin must scale negatively with ambient font size");
         }
 
         private static void TestF12_4_H1LargeFontMargin()
@@ -992,9 +992,9 @@ namespace MDPlus.E2E.Tiers
             var para = (Paragraph)flowDoc.Blocks.FirstBlock!;
             var uic = para.Inlines.OfType<InlineUIContainer>().First();
             var border = (Border)uic.Child;
-            // Ambient font size for H1 is 26 -> vOffset = round(26 * 2.5/14.5, 1) = round(4.48, 1) = 4.5
-            AssertEqual(4.5, border.Margin.Top);
-            AssertEqual(-4.5, border.Margin.Bottom);
+            // Ambient font size for H1 is 26 -> vOffset = round(26 * -1.0/15.0, 1) = round(-1.733, 1) = -1.7
+            AssertEqual(-1.7, border.Margin.Top);
+            AssertEqual(1.7, border.Margin.Bottom);
         }
 
         private static void TestF12_5_ZeroClippingLargeOperators()
@@ -1014,32 +1014,32 @@ namespace MDPlus.E2E.Tiers
         {
             var elem = LatexMathRenderer.RenderMath("ROIC > 18\\%", ThemePalette.GitHubDark, 14.5, isDisplay: false);
             var border = (Border)elem;
-            AssertEqual(2.5, border.Margin.Top);
-            AssertEqual(-2.5, border.Margin.Bottom);
+            AssertEqual(-1.0, border.Margin.Top);
+            AssertEqual(1.0, border.Margin.Bottom);
         }
 
         private static void TestF13_2_LeadingInequalityFormula()
         {
             var elem = LatexMathRenderer.RenderMath("> 18\\%", ThemePalette.GitHubDark, 14.5, isDisplay: false);
             var border = (Border)elem;
-            AssertEqual(2.5, border.Margin.Top);
-            AssertEqual(-2.5, border.Margin.Bottom);
+            AssertEqual(-1.0, border.Margin.Top);
+            AssertEqual(1.0, border.Margin.Bottom);
         }
 
         private static void TestF13_3_SignedComparisonFormula()
         {
             var elem = LatexMathRenderer.RenderMath("\\ge +1.5\\%", ThemePalette.GitHubDark, 14.5, isDisplay: false);
             var border = (Border)elem;
-            AssertEqual(2.5, border.Margin.Top);
-            AssertEqual(-2.5, border.Margin.Bottom);
+            AssertEqual(-1.0, border.Margin.Top);
+            AssertEqual(1.0, border.Margin.Bottom);
         }
 
         private static void TestF13_4_MultiplicationFormula()
         {
             var elem = LatexMathRenderer.RenderMath("\\le 30\\times", ThemePalette.GitHubDark, 14.5, isDisplay: false);
             var border = (Border)elem;
-            AssertEqual(2.5, border.Margin.Top);
-            AssertEqual(-2.5, border.Margin.Bottom);
+            AssertEqual(-1.0, border.Margin.Top);
+            AssertEqual(1.0, border.Margin.Bottom);
         }
 
         private static void TestF13_5_FullQuery2MarkdownDocument()
