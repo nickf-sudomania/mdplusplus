@@ -8,6 +8,7 @@ using System.Windows.Controls;
 using System.Windows.Documents;
 using System.Windows.Media;
 using System.Windows.Media.Imaging;
+using MDPlus.Core.Mermaid;
 
 namespace MDPlus.Core
 {
@@ -266,7 +267,7 @@ namespace MDPlus.Core
 
             foreach (var inline in heading.Inlines)
             {
-                var wpfInline = ConvertInline(inline);
+                var wpfInline = ConvertInline(inline, p.FontSize);
                 if (wpfInline != null) p.Inlines.Add(wpfInline);
             }
 
@@ -392,6 +393,24 @@ namespace MDPlus.Core
 
         private Block ConvertCodeBlock(CodeBlock code)
         {
+            // Intercept Mermaid flowchart diagrams and render as native vector FlowDocument elements
+            if (!string.IsNullOrEmpty(code.Language) && code.Language.Equals("mermaid", StringComparison.OrdinalIgnoreCase))
+            {
+                if (MermaidFlowchartParser.TryParse(code.Code, out var graph, out _))
+                {
+                    try
+                    {
+                        var buic = MermaidFlowchartRenderer.Render(graph, _palette, code.Code);
+                        buic.Tag = new CodeBlockTag { Language = "mermaid", Code = code.Code };
+                        return buic;
+                    }
+                    catch
+                    {
+                        // Gracefully fall back to standard code block view on layout or rendering error
+                    }
+                }
+            }
+
             var outerBorder = new Border
             {
                 Background = _codeBgBrush,
@@ -674,7 +693,9 @@ namespace MDPlus.Core
             return new BlockUIContainer(line);
         }
 
-        private Inline? ConvertInline(MarkdownInline inline)
+        private Inline? ConvertInline(MarkdownInline inline) => ConvertInline(inline, 14.5);
+
+        private Inline? ConvertInline(MarkdownInline inline, double ambientFontSize)
         {
             switch (inline)
             {
@@ -685,7 +706,7 @@ namespace MDPlus.Core
                     var boldSpan = new Bold();
                     foreach (var c in bold.Children)
                     {
-                        var ci = ConvertInline(c);
+                        var ci = ConvertInline(c, ambientFontSize);
                         if (ci != null) boldSpan.Inlines.Add(ci);
                     }
                     return boldSpan;
@@ -694,7 +715,7 @@ namespace MDPlus.Core
                     var italicSpan = new Italic();
                     foreach (var c in italic.Children)
                     {
-                        var ci = ConvertInline(c);
+                        var ci = ConvertInline(c, ambientFontSize);
                         if (ci != null) italicSpan.Inlines.Add(ci);
                     }
                     return italicSpan;
@@ -704,7 +725,7 @@ namespace MDPlus.Core
                     var innerItalic = (Italic)biSpan.Inlines.FirstInline;
                     foreach (var c in bi.Children)
                     {
-                        var ci = ConvertInline(c);
+                        var ci = ConvertInline(c, ambientFontSize);
                         if (ci != null) innerItalic.Inlines.Add(ci);
                     }
                     return biSpan;
@@ -714,7 +735,7 @@ namespace MDPlus.Core
                     strikeSpan.TextDecorations.Add(TextDecorations.Strikethrough);
                     foreach (var c in strike.Children)
                     {
-                        var ci = ConvertInline(c);
+                        var ci = ConvertInline(c, ambientFontSize);
                         if (ci != null) strikeSpan.Inlines.Add(ci);
                     }
                     return strikeSpan;
@@ -727,7 +748,7 @@ namespace MDPlus.Core
                     };
                     foreach (var c in hl.Children)
                     {
-                        var ci = ConvertInline(c);
+                        var ci = ConvertInline(c, ambientFontSize);
                         if (ci != null) hlSpan.Inlines.Add(ci);
                     }
                     return hlSpan;
@@ -785,7 +806,7 @@ namespace MDPlus.Core
 
                     foreach (var c in link.Children)
                     {
-                        var ci = ConvertInline(c);
+                        var ci = ConvertInline(c, ambientFontSize);
                         if (ci != null) hyperlink.Inlines.Add(ci);
                     }
                     return hyperlink;
@@ -799,10 +820,10 @@ namespace MDPlus.Core
                 case MathInline math:
                     if (_enableLatex)
                     {
-                        var mathElement = LatexMathRenderer.RenderMath(math.Expression, _palette, 14.5, math.IsDisplay);
+                        var mathElement = LatexMathRenderer.RenderMath(math.Expression, _palette, ambientFontSize, math.IsDisplay);
                         return new InlineUIContainer(mathElement)
                         {
-                            BaselineAlignment = BaselineAlignment.Baseline,
+                            BaselineAlignment = BaselineAlignment.Center,
                             Tag = new MathTag { Expression = math.Expression, IsDisplay = math.IsDisplay }
                         };
                     }
@@ -822,7 +843,7 @@ namespace MDPlus.Core
                             html,
                             _palette,
                             onNavigate: HandleNavigation,
-                            convertChild: ConvertInline);
+                            convertChild: c => ConvertInline(c, ambientFontSize));
                     }
                     else
                     {

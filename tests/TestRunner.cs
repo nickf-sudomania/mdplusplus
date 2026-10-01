@@ -182,6 +182,9 @@ namespace MDPlus.Tests
             RunTest("Empirical Performance Benchmark: LaTeX & HTML Zero-Overhead", TestEmpiricalPerformanceBenchmarkWithLatexAndHtmlPlugins);
             RunTest("LaTeX and HTML Edge Cases, Regression Guards & Symbol Typography", TestLatexAndHtmlEdgeCasesAndRegressions);
             RunTest("Measure Baseline Alignment", TestMeasureBaselineAlignment);
+            RunTest("Inline Math Query 2 Typographic Baseline & Optical Layout", TestInlineMathQuery2TypographicBaselineLayout);
+            RunTest("Inline Math Adversarial Typography Stress (Challenger M1-1)", TestInlineMathAdversarialTypographyStress);
+            RunTest("Empirical Challenge M1-2: Line Height Invariance & Heading Typography", TestChallengerM1_2LineHeightAndHeadingTypography);
             RunTest("LaTeX Math Recursive Font Modifiers, Overline, & Escapes", TestLatexBoldFormattingAndEscapes);
             RunTest("Native HTML Table Block Rendering & Layout", TestHtmlTableRendering);
             RunTest("Single-Instance Multi-Tab Mode & Preference Serialization", TestSingleInstanceAndMultiTabSettings);
@@ -227,7 +230,37 @@ namespace MDPlus.Tests
             RunTest("Tabular Special Column Names, Sorting & Delete Safeguard", TestTabularSpecialColumnNamesAndSorting);
             RunTest("Tabular IsVisualCapped Lazy FlowDocument Safety", TestTabularIsVisualCappedLazySafety);
 
+            // 25. Mermaid Flowchart AST, Grammar & Parser Tests (Milestone M2)
+            RunTest("Mermaid Flowchart Orientation Directives", MermaidTests.TestOrientationParsing);
+            RunTest("Mermaid Flowchart Node Shapes and Label Extraction", MermaidTests.TestAllNodeShapesAndLabelExtraction);
+            RunTest("Mermaid Flowchart Quoted and Multiline Labels", MermaidTests.TestQuotedAndMultilineNodeLabels);
+            RunTest("Mermaid Flowchart Connections and Arrows", MermaidTests.TestAllConnectionTypesAndArrows);
+            RunTest("Mermaid Flowchart Edge Labels Pipe and Inline", MermaidTests.TestEdgeLabelsPipeAndInline);
+            RunTest("Mermaid Flowchart Multi-Node Chaining", MermaidTests.TestMultiNodeChaining);
+            RunTest("Mermaid Flowchart Subgraphs and Grouping", MermaidTests.TestSubgraphsAndGrouping);
+            RunTest("Mermaid Flowchart Comments and Directives Ignored", MermaidTests.TestCommentsAndDirectivesIgnored);
+            RunTest("Mermaid Flowchart Fallback and Error Degradation", MermaidTests.TestGracefulFallbackAndErrorSafeguard);
+            RunTest("Mermaid Flowchart Performance Benchmark (< 5ms for 20 nodes)", MermaidTests.TestPerformanceBenchmark20Nodes);
+            RunTest("Empirical Challenge M2-1: Adversarial Syntax & Fallback Stress", MermaidTests.TestEmpiricalChallengerM2_1AdversarialSuite);
+            RunTest("Empirical Challenge M2-2: Scale, Stress & Ambiguity", MermaidTests.TestEmpiricalChallengerM2_2_ScaleStressAndAmbiguitySuite);
+
+            // 26. Mermaid Flowchart Layout Engine & Vector Renderer Tests (Milestone M3)
+            RunTest("Mermaid Layout Orientation Directives (TD, TB, BT, LR, RL)", MermaidLayoutTests.TestOrientationLayoutCalculations);
+            RunTest("Mermaid Layout Non-Overlapping Node Bounds & Spacing", MermaidLayoutTests.TestNodePositionAndNonOverlappingBounds);
+            RunTest("Mermaid Layout Five Node Shapes Sizing & Metrics", MermaidLayoutTests.TestAllFiveNodeShapesGeometricSizing);
+            RunTest("Mermaid Layout Connector Routes & Arrowhead Angles", MermaidLayoutTests.TestConnectorRoutesAndArrowheadOrientation);
+            RunTest("Mermaid Layout Cycle Reversal & Feedback Arc Corridor", MermaidLayoutTests.TestCycleReversalAndFeedbackEdgeCorridor);
+            RunTest("Mermaid Vector Rendering Visual Tree & CodeBlockTag", MermaidLayoutTests.TestWpfVectorRenderingTree);
+            RunTest("Mermaid Flowchart Interception & Fallback Degradation", MermaidLayoutTests.TestMarkdownToWpfConverterMermaidInterceptionAndFallback);
+            RunTest("Mermaid Theme Contrast WCAG AA/AAA Compliance", MermaidLayoutTests.TestThemePaletteContrastComplianceAllThemes);
+            RunTest("Mermaid 20-Node Flowchart Layout & Render Benchmark", MermaidLayoutTests.TestPerformanceBenchmarkTwentyNodes);
+            RunTest("Empirical Challenge M3-1: Complex Topologies & Geometry", MermaidLayoutTests.TestEmpiricalChallengerM3_1ComplexTopologiesAndGeometry);
+            RunTest("Empirical Challenge M3-2: Scroll Propagation, Theme Switching, 60 FPS & Large Graphs", MermaidLayoutTests.TestEmpiricalChallengerM3_2Suite);
+            RunTest("Empirical Challenge M4-1: White-Box Adversarial Stress Suite", MermaidLayoutTests.TestEmpiricalChallengerM4_1AdversarialVerificationSuite);
+
             sw.Stop();
+
+
 
             Console.WriteLine("\n==================================================");
             Console.WriteLine($"Test Results: {_passCount} PASSED, {_failCount} FAILED in {sw.ElapsedMilliseconds} ms");
@@ -2477,7 +2510,7 @@ b4f2e7af3a2e26456be05a236d8fa5f6750069fe45f8cf16197ea9934ee53b0a  MDPlus-win-x64
             installTask.Wait();
             var installResult = installTask.Result;
 
-            Assert(installResult.Success, "Download & verify with valid SHA-256 hash must succeed");
+            Assert(installResult.Success, $"Download & verify with valid SHA-256 hash must succeed: {installResult.ErrorMessage}");
             Assert(!string.IsNullOrEmpty(installResult.InstallerPath), "InstallerPath must be populated");
             Assert(System.IO.File.Exists(installResult.InstallerPath), "Downloaded installer file must exist");
             AssertEqual(realHash, installResult.ActualHash, "Actual hash matches computed hash");
@@ -3605,8 +3638,8 @@ MDPlus v1.09 expands the hyper-fast native Windows reader with universal text su
             var mathInlineElem = LatexMathRenderer.RenderMath("A = k \\times B", ThemePalette.GitHubDark, 14.5, isDisplay: false);
             Assert(mathInlineElem is Border, "Inline math element must be wrapped in a Border container");
             var mathBorder = (Border)mathInlineElem;
-            Assert(mathBorder.Margin.Top == 0 && mathBorder.Margin.Bottom == 0,
-                $"Inline math border must have calibrated baseline margin (0, 0), got ({mathBorder.Margin.Top}, {mathBorder.Margin.Bottom})");
+            Assert(mathBorder.Margin.Top == 2.5 && mathBorder.Margin.Bottom == -2.5,
+                $"Inline math border must have calibrated baseline margin (2.5, -2.5), got ({mathBorder.Margin.Top}, {mathBorder.Margin.Bottom})");
 
             // 2. Verify MarkdownToWpfConverter inline code span margin and baseline alignment
             var parser = new MarkdownParser();
@@ -3630,12 +3663,23 @@ MDPlus v1.09 expands the hyper-fast native Windows reader with universal text su
             Assert(uicMathList.Count == 2, $"Expected 2 inline math containers, got {uicMathList.Count}");
             foreach (var uicMath in uicMathList)
             {
-                Assert(uicMath.BaselineAlignment == BaselineAlignment.Baseline, "Inline math container must have BaselineAlignment.Baseline");
+                Assert(uicMath.BaselineAlignment == BaselineAlignment.Center, "Inline math container must have BaselineAlignment.Center");
                 Assert(uicMath.Child is Border, "Inline math container child must be a Border");
                 var mb = (Border)uicMath.Child;
-                Assert(mb.Margin.Top == 0 && mb.Margin.Bottom == 0,
-                    $"Inline math border must have calibrated baseline margin (0, 0), got ({mb.Margin.Top}, {mb.Margin.Bottom})");
+                Assert(mb.Margin.Top == 2.5 && mb.Margin.Bottom == -2.5,
+                    $"Inline math border must have calibrated baseline margin (2.5, -2.5), got ({mb.Margin.Top}, {mb.Margin.Bottom})");
             }
+
+            // 3b. Verify heading font size propagation to inline math (H1 font 26 -> vOffset 4.5)
+            var docHeadingMath = parser.Parse("# Heading with $x + y = z$ math");
+            var flowDocHeading = converter.Convert(docHeadingMath);
+            var headingPara = (Paragraph)flowDocHeading.Blocks.FirstBlock!;
+            var uicHeadingMath = headingPara.Inlines.OfType<InlineUIContainer>().FirstOrDefault();
+            Assert(uicHeadingMath != null, "Heading inline math must produce InlineUIContainer");
+            Assert(uicHeadingMath!.BaselineAlignment == BaselineAlignment.Center, "Heading inline math must have BaselineAlignment.Center");
+            var headingMb = (Border)uicHeadingMath.Child;
+            Assert(headingMb.Margin.Top == 4.5 && headingMb.Margin.Bottom == -4.5,
+                $"Heading H1 math border must scale margin to (4.5, -4.5), got ({headingMb.Margin.Top}, {headingMb.Margin.Bottom})");
 
             // 4. Verify HtmlWpfRenderer kbd and code tags
             var kbdInline = new HtmlInline { RawHtml = "<kbd>Ctrl</kbd>", Tag = "kbd", Content = "Ctrl" };
@@ -3681,6 +3725,780 @@ MDPlus v1.09 expands the hyper-fast native Windows reader with universal text su
             rtb.UpdateLayout();
 
             Assert(rtb.ActualWidth > 0 && rtb.ActualHeight > 0, "RichTextBox layout measurement must succeed for baseline-aligned document");
+        }
+
+        private static void TestInlineMathQuery2TypographicBaselineLayout()
+        {
+            var parser = new MarkdownParser();
+            string query2Markdown =
+                "* **Analyst Description:** Identify elite compounding businesses with wide economic moats generating high returns on invested capital ($ROIC > 18\\%$, $ROE > 20\\%$) where pricing power is actively expanding gross margins by at least 150 bps year-over-year while operating margins expand sequentially.\n" +
+                "* **Screening Criteria:** ROIC $> 18\\%$, ROE $> 20\\%$, Gross Margin YoY Expansion $\\ge +1.5\\%$ (+150 bps), Operating Margin QoQ Expansion $> 0$, Forward P/E $\\le 30\\times$.";
+
+            var doc = parser.Parse(query2Markdown);
+            var converter = new MarkdownToWpfConverter("", ThemePalette.GitHubDark, enableLatex: true, enableHtml: true);
+            var flowDoc = converter.Convert(doc);
+
+            var rtb = new RichTextBox
+            {
+                Width = 850,
+                Document = flowDoc,
+                IsReadOnly = true
+            };
+
+            rtb.Measure(new Size(850, 2000));
+            rtb.Arrange(new Rect(0, 0, 850, rtb.DesiredSize.Height));
+            rtb.UpdateLayout();
+
+            Assert(rtb.ActualWidth > 0 && rtb.ActualHeight > 0, "RichTextBox layout measurement must succeed for Query 2 expressions");
+
+            // Extract all InlineUIContainer elements representing math formulas in Query 2
+            var listBlock = flowDoc.Blocks.OfType<List>().FirstOrDefault();
+            Assert(listBlock != null, "Query 2 markdown must parse into a List block");
+            Assert(listBlock!.ListItems.Count >= 2, "Query 2 must contain at least 2 list items");
+
+            var allMathContainers = new List<InlineUIContainer>();
+            var mathToParaMap = new Dictionary<InlineUIContainer, Paragraph>();
+
+            foreach (var item in listBlock.ListItems)
+            {
+                foreach (var block in item.Blocks)
+                {
+                    if (block is Paragraph p)
+                    {
+                        foreach (var inline in p.Inlines)
+                        {
+                            if (inline is InlineUIContainer uic && uic.Tag is MathTag)
+                            {
+                                allMathContainers.Add(uic);
+                                mathToParaMap[uic] = p;
+                            }
+                        }
+                    }
+                }
+            }
+
+            Assert(allMathContainers.Count >= 4, $"Expected at least 4 math containers in Query 2, found {allMathContainers.Count}");
+
+            // Authoritative expressions from Query 2
+            string[] keyExpressions = new[] { "ROIC > 18\\%", "ROE > 20\\%", "\\ge +1.5\\%", "\\le 30\\times" };
+            foreach (var keyExpr in keyExpressions)
+            {
+                var matchingUic = allMathContainers.FirstOrDefault(u => (u.Tag as MathTag)?.Expression == keyExpr);
+                Assert(matchingUic != null, $"Query 2 must contain inline math expression for '{keyExpr}'");
+
+                Assert(matchingUic!.BaselineAlignment == BaselineAlignment.Center,
+                    $"Expression '{keyExpr}' container must have BaselineAlignment.Center");
+
+                Assert(matchingUic.Child is Border, $"Expression '{keyExpr}' child must be a Border container");
+                var mathBorder = (Border)matchingUic.Child;
+                Assert(mathBorder.Margin.Top == 2.5 && mathBorder.Margin.Bottom == -2.5,
+                    $"Expression '{keyExpr}' margin must be calibrated to (1, 2.5, 1, -2.5), got ({mathBorder.Margin.Top}, {mathBorder.Margin.Bottom})");
+
+                // Zero clipping assertion
+                Assert(mathBorder.ActualWidth > 0, $"Expression '{keyExpr}' ActualWidth must be > 0 (no horizontal clipping)");
+                Assert(mathBorder.ActualHeight > 0, $"Expression '{keyExpr}' ActualHeight must be > 0 (no vertical clipping)");
+
+                // Measure character and visual rectangles
+                var parentPara = mathToParaMap[matchingUic];
+                int uicIndex = -1;
+                int idx = 0;
+                foreach (var inline in parentPara.Inlines)
+                {
+                    if (inline == matchingUic) { uicIndex = idx; break; }
+                    idx++;
+                }
+
+                Run? prevRun = null;
+                for (int i = uicIndex - 1; i >= 0; i--)
+                {
+                    var inl = parentPara.Inlines.ElementAt(i);
+                    if (inl is Run r && !string.IsNullOrWhiteSpace(r.Text))
+                    {
+                        prevRun = r;
+                        break;
+                    }
+                    else if (inl is Span s)
+                    {
+                        var nested = s.Inlines.OfType<Run>().LastOrDefault(r => !string.IsNullOrWhiteSpace(r.Text));
+                        if (nested != null) { prevRun = nested; break; }
+                    }
+                }
+
+                Run? nextRun = null;
+                for (int i = uicIndex + 1; i < parentPara.Inlines.Count; i++)
+                {
+                    var inl = parentPara.Inlines.ElementAt(i);
+                    if (inl is Run r && !string.IsNullOrWhiteSpace(r.Text))
+                    {
+                        nextRun = r;
+                        break;
+                    }
+                    else if (inl is Span s)
+                    {
+                        var nested = s.Inlines.OfType<Run>().FirstOrDefault(r => !string.IsNullOrWhiteSpace(r.Text));
+                        if (nested != null) { nextRun = nested; break; }
+                    }
+                }
+
+                Rect textRect = Rect.Empty;
+                if (prevRun != null)
+                {
+                    textRect = prevRun.ContentEnd.GetCharacterRect(LogicalDirection.Backward);
+                }
+                if ((textRect.IsEmpty || textRect.Height == 0) && nextRun != null)
+                {
+                    textRect = nextRun.ContentStart.GetCharacterRect(LogicalDirection.Forward);
+                }
+                if (textRect.IsEmpty || textRect.Height == 0)
+                {
+                    textRect = matchingUic.ContentStart.GetCharacterRect(LogicalDirection.Backward);
+                }
+
+                Rect mathRect = matchingUic.ContentStart.GetCharacterRect(LogicalDirection.Forward);
+                Rect borderRect = mathRect;
+                if (mathBorder.IsDescendantOf(rtb))
+                {
+                    Point borderPos = mathBorder.TranslatePoint(new Point(0, 0), rtb);
+                    borderRect = new Rect(borderPos, new Size(mathBorder.ActualWidth, mathBorder.ActualHeight));
+                }
+
+                // Typographic optical centering delta <= 1.5 DIPs
+                double mathCenterY = mathRect.Top + mathRect.Height / 2.0;
+                double textCenterY = textRect.Top + textRect.Height / 2.0;
+                double opticalDelta = Math.Abs(mathCenterY - textCenterY);
+
+                Assert(opticalDelta <= 1.5,
+                    $"Optical centering delta for '{keyExpr}' must be <= 1.5 DIPs, got {opticalDelta:F2} DIPs (mathCenter={mathCenterY:F2}, textCenter={textCenterY:F2})");
+
+                // Visual alignment: container top must align with text top within 1.5 DIPs
+                double visualTopDelta = Math.Abs(borderRect.Top - textRect.Top);
+                Assert(visualTopDelta <= 1.5,
+                    $"Visual top delta for '{keyExpr}' must be <= 1.5 DIPs, got {visualTopDelta:F2} DIPs (borderTop={borderRect.Top:F2}, textTop={textRect.Top:F2})");
+
+                // Top bound non-elevation guard: formula must not sit higher than text Top - 2.0 DIPs (superscript elevation prevention)
+                Assert(borderRect.Top >= textRect.Top - 2.0,
+                    $"Non-elevation guard violated for '{keyExpr}': borderRect.Top ({borderRect.Top:F2}) is elevated above text Top ({textRect.Top:F2})");
+                Assert(mathRect.Top >= textRect.Top - 2.5,
+                    $"Non-elevation guard violated for '{keyExpr}': mathRect.Top ({mathRect.Top:F2}) is elevated above text Top ({textRect.Top:F2})");
+            }
+
+            // Stress test tall/deep math symbols (fraction, integral, sum) to ensure zero clipping
+            var tallDoc = parser.Parse("Tall math $\\int_0^\\infty e^{-x} dx = 1$ and $\\sum_{k=1}^n \\frac{1}{k^2} = \\frac{\\pi^2}{6}$ inline.");
+            var flowDocTall = converter.Convert(tallDoc);
+            var rtbTall = new RichTextBox
+            {
+                Width = 850,
+                Document = flowDocTall,
+                IsReadOnly = true
+            };
+            rtbTall.Measure(new Size(850, 2000));
+            rtbTall.Arrange(new Rect(0, 0, 850, rtbTall.DesiredSize.Height));
+            rtbTall.UpdateLayout();
+            Assert(rtbTall.ActualWidth > 0 && rtbTall.ActualHeight > 0, "Tall math document layout must succeed");
+            var tallContainers = flowDocTall.Blocks.OfType<Paragraph>().SelectMany(p => p.Inlines.OfType<InlineUIContainer>()).ToList();
+            Assert(tallContainers.Count == 2, $"Expected 2 tall math containers, got {tallContainers.Count}");
+            foreach (var tc in tallContainers)
+            {
+                var b = (Border)tc.Child;
+                Assert(b.ActualWidth > 0 && b.ActualHeight > 0, "Tall math element must have positive layout dimensions without clipping");
+            }
+        }
+
+        private static void TestInlineMathAdversarialTypographyStress()
+        {
+            var parser = new MarkdownParser();
+            var converter = new MarkdownToWpfConverter("", ThemePalette.GitHubDark, enableLatex: true, enableHtml: true);
+
+            // Local helper to collect all MathInline containers across any block / inline structure
+            static List<InlineUIContainer> FindAllMathContainers(FlowDocument doc)
+            {
+                var list = new List<InlineUIContainer>();
+                void ScanInline(Inline inl)
+                {
+                    if (inl is InlineUIContainer uic && uic.Tag is MathTag) list.Add(uic);
+                    else if (inl is Span s)
+                    {
+                        foreach (var child in s.Inlines) ScanInline(child);
+                    }
+                }
+                void ScanBlock(Block b)
+                {
+                    if (b is Paragraph p)
+                    {
+                        foreach (var inl in p.Inlines) ScanInline(inl);
+                    }
+                    else if (b is Section sec)
+                    {
+                        foreach (var child in sec.Blocks) ScanBlock(child);
+                    }
+                    else if (b is List l)
+                    {
+                        foreach (var item in l.ListItems)
+                        {
+                            foreach (var child in item.Blocks) ScanBlock(child);
+                        }
+                    }
+                    else if (b is Table t)
+                    {
+                        foreach (var rg in t.RowGroups)
+                        {
+                            foreach (var row in rg.Rows)
+                            {
+                                foreach (var cell in row.Cells)
+                                {
+                                    foreach (var child in cell.Blocks) ScanBlock(child);
+                                }
+                            }
+                        }
+                    }
+                }
+                foreach (var b in doc.Blocks) ScanBlock(b);
+                return list;
+            }
+
+            // Local helper to measure and verify typography bounds and optical alignment
+            static void VerifyContainers(RichTextBox rtb, List<InlineUIContainer> containers, string suiteName, double maxOpticalDelta = 2.5, double maxElevation = 3.5)
+            {
+                Assert(containers.Count > 0, $"{suiteName} must contain at least 1 math container");
+                foreach (var uic in containers)
+                {
+                    var tag = uic.Tag as MathTag;
+                    string expr = tag?.Expression ?? "unknown";
+
+                    Assert(uic.BaselineAlignment == BaselineAlignment.Center,
+                        $"{suiteName} [{expr}]: BaselineAlignment must be Center, got {uic.BaselineAlignment}");
+                    Assert(uic.Child is Border, $"{suiteName} [{expr}]: Child must be Border");
+                    var border = (Border)uic.Child;
+                    Assert(border.ActualWidth > 0, $"{suiteName} [{expr}]: ActualWidth must be > 0 (no horizontal clipping)");
+                    Assert(border.ActualHeight > 0, $"{suiteName} [{expr}]: ActualHeight must be > 0 (no vertical clipping)");
+
+                    Rect mathRect = uic.ContentStart.GetCharacterRect(LogicalDirection.Forward);
+                    Assert(!mathRect.IsEmpty && mathRect.Height > 0, $"{suiteName} [{expr}]: mathRect must have valid height");
+
+                    // Check non-elevation vs character slot
+                    Paragraph? parentPara = null;
+                    DependencyObject? cur = uic.Parent;
+                    while (cur != null)
+                    {
+                        if (cur is Paragraph p) { parentPara = p; break; }
+                        if (cur is FrameworkContentElement fce) cur = fce.Parent;
+                        else break;
+                    }
+
+                    if (parentPara != null)
+                    {
+                        Run? textRun = null;
+                        void FindRun(InlineCollection inlines)
+                        {
+                            foreach (var inl in inlines)
+                            {
+                                if (inl is Run r && !string.IsNullOrWhiteSpace(r.Text))
+                                {
+                                    textRun = r;
+                                    break;
+                                }
+                                if (inl is Span sp) FindRun(sp.Inlines);
+                                if (textRun != null) break;
+                            }
+                        }
+                        FindRun(parentPara.Inlines);
+
+                        if (textRun != null)
+                        {
+                            Rect textRect = textRun.ContentStart.GetCharacterRect(LogicalDirection.Forward);
+                            if (!textRect.IsEmpty && textRect.Height > 0)
+                            {
+                                double mathCenterY = mathRect.Top + mathRect.Height / 2.0;
+                                double textCenterY = textRect.Top + textRect.Height / 2.0;
+                                double opticalDelta = Math.Abs(mathCenterY - textCenterY);
+
+                                Console.WriteLine($"  [DIAG] {suiteName} [{expr}]: mathRect=({mathRect.Left:F1},{mathRect.Top:F1},{mathRect.Width:F1},{mathRect.Height:F1}), textRect=({textRect.Left:F1},{textRect.Top:F1},{textRect.Width:F1},{textRect.Height:F1}), mathCenterY={mathCenterY:F2}, textCenterY={textCenterY:F2}, opticalDelta={opticalDelta:F2}");
+
+                                Assert(opticalDelta <= maxOpticalDelta,
+                                    $"{suiteName} [{expr}]: optical delta ({opticalDelta:F2}) must be <= {maxOpticalDelta:F2} DIPs");
+
+                                // Symmetric extension guard: math container must extend symmetrically around text center (never float into superscript position)
+                                double topExtension = textRect.Top - mathRect.Top;
+                                double bottomExtension = (mathRect.Top + mathRect.Height) - (textRect.Top + textRect.Height);
+                                double asymmetry = Math.Abs(topExtension - bottomExtension);
+                                Assert(asymmetry <= 2.5,
+                                    $"{suiteName} [{expr}]: vertical centering asymmetry ({asymmetry:F2}) must be <= 2.5 DIPs (superscript elevation prevention)");
+                            }
+                        }
+                    }
+                }
+            }
+
+            // 1. Large Exponent Towers & Deep Sub/Superscripts
+            string towerMd = "Towers: $x^{y^{z^w}}$ and $2^{2^{2^2}}$ and $e^{-x^2 / 2}$ and $A_{i_j}^{k_l}$ in text.";
+            var docTower = parser.Parse(towerMd);
+            var flowTower = converter.Convert(docTower);
+            var rtbTower = new RichTextBox { Width = 850, Document = flowTower, IsReadOnly = true };
+            rtbTower.Measure(new Size(850, 2000));
+            rtbTower.Arrange(new Rect(0, 0, 850, rtbTower.DesiredSize.Height));
+            rtbTower.UpdateLayout();
+            var towerContainers = FindAllMathContainers(flowTower);
+            Assert(towerContainers.Count == 4, $"Expected 4 exponent tower containers, got {towerContainers.Count}");
+            VerifyContainers(rtbTower, towerContainers, "Exponent Towers", maxOpticalDelta: 3.0, maxElevation: 4.5);
+
+            // 2. Nested Fractions & Radicals
+            string fracMd = "Fractions: $\\frac{\\frac{a}{b}}{\\frac{c}{d}}$ and $\\frac{1}{1 + \\frac{1}{1 + \\frac{1}{x}}}$ and $\\sqrt{\\frac{a+b}{c-d}}$ inline.";
+            var docFrac = parser.Parse(fracMd);
+            var flowFrac = converter.Convert(docFrac);
+            var rtbFrac = new RichTextBox { Width = 850, Document = flowFrac, IsReadOnly = true };
+            rtbFrac.Measure(new Size(850, 2000));
+            rtbFrac.Arrange(new Rect(0, 0, 850, rtbFrac.DesiredSize.Height));
+            rtbFrac.UpdateLayout();
+            var fracContainers = FindAllMathContainers(flowFrac);
+            Assert(fracContainers.Count == 3, $"Expected 3 nested fraction containers, got {fracContainers.Count}");
+            VerifyContainers(rtbFrac, fracContainers, "Nested Fractions", maxOpticalDelta: 3.5, maxElevation: 10.0);
+
+            // 3. Tall Large Operators with Upper & Lower Limits
+            string tallMd = "Operators: $\\int_a^b f(x) dx$ and $\\sum_{i=1}^n x_i$ and $\\prod_{k=1}^\\infty (1 - q^k)$ and $\\oint_C \\vec{F} \\cdot d\\vec{r}$ inline.";
+            var docTall = parser.Parse(tallMd);
+            var flowTall = converter.Convert(docTall);
+            var rtbTall2 = new RichTextBox { Width = 850, Document = flowTall, IsReadOnly = true };
+            rtbTall2.Measure(new Size(850, 2000));
+            rtbTall2.Arrange(new Rect(0, 0, 850, rtbTall2.DesiredSize.Height));
+            rtbTall2.UpdateLayout();
+            var tallOpsContainers = FindAllMathContainers(flowTall);
+            Assert(tallOpsContainers.Count == 4, $"Expected 4 tall operator containers, got {tallOpsContainers.Count}");
+            VerifyContainers(rtbTall2, tallOpsContainers, "Tall Operators", maxOpticalDelta: 2.5, maxElevation: 4.0);
+
+            // 4. Negative Numbers and Operators
+            string negMd = "Negatives: $-18\\%$, $\\ge -1.5\\%$, $\\le -30\\times$, and $x - y = -5$ in line.";
+            var docNeg = parser.Parse(negMd);
+            var flowNeg = converter.Convert(docNeg);
+            var rtbNeg = new RichTextBox { Width = 850, Document = flowNeg, IsReadOnly = true };
+            rtbNeg.Measure(new Size(850, 2000));
+            rtbNeg.Arrange(new Rect(0, 0, 850, rtbNeg.DesiredSize.Height));
+            rtbNeg.UpdateLayout();
+            var negContainers = FindAllMathContainers(flowNeg);
+            Assert(negContainers.Count == 4, $"Expected 4 negative number containers, got {negContainers.Count}");
+            VerifyContainers(rtbNeg, negContainers, "Negative Numbers", maxOpticalDelta: 1.5, maxElevation: 2.5);
+
+            // 5. Directly Adjacent Punctuation
+            string punctMd = "Punctuation: ($ROIC > 18\\%$), [$> 18\\%$], {$x = 1$}, !$x$!, and ($\\frac{a}{b}$).";
+            var docPunct = parser.Parse(punctMd);
+            var flowPunct = converter.Convert(docPunct);
+            var rtbPunct = new RichTextBox { Width = 850, Document = flowPunct, IsReadOnly = true };
+            rtbPunct.Measure(new Size(850, 2000));
+            rtbPunct.Arrange(new Rect(0, 0, 850, rtbPunct.DesiredSize.Height));
+            rtbPunct.UpdateLayout();
+            var punctContainers = FindAllMathContainers(flowPunct);
+            Assert(punctContainers.Count == 5, $"Expected 5 adjacent punctuation containers, got {punctContainers.Count}");
+            VerifyContainers(rtbPunct, punctContainers, "Adjacent Punctuation", maxOpticalDelta: 2.5, maxElevation: 3.5);
+
+            // 6. Nested Formatting (Bold, Italic, Strikethrough, Highlight)
+            string formatMd = "**Bold $ROIC > 18\\%$ text**, *italic $x = 1$ text*, ***both $y = 2$***, and ~~strike $\\le 30\\times$~~.";
+            var docFormat = parser.Parse(formatMd);
+            var flowFormat = converter.Convert(docFormat);
+            var rtbFormat = new RichTextBox { Width = 850, Document = flowFormat, IsReadOnly = true };
+            rtbFormat.Measure(new Size(850, 2000));
+            rtbFormat.Arrange(new Rect(0, 0, 850, rtbFormat.DesiredSize.Height));
+            rtbFormat.UpdateLayout();
+            var formatContainers = FindAllMathContainers(flowFormat);
+            Assert(formatContainers.Count == 4, $"Expected 4 nested format containers, got {formatContainers.Count}");
+            VerifyContainers(rtbFormat, formatContainers, "Nested Formatting", maxOpticalDelta: 1.5, maxElevation: 2.5);
+
+            // 7. Multi-Block Contexts (Blockquote, Callout, Lists, Table)
+            string multiMd =
+                "> Quote with $ROIC > 18\\%$\n>\n" +
+                "> [!NOTE]\n" +
+                "> Callout formula $\\int_0^1 f(x) dx$\n\n" +
+                "* Unordered list item with $ROIC > 18\\%$\n" +
+                "1. Ordered list item with $\\ge +1.5\\%$\n" +
+                "- [ ] Task unchecked with $\\le 30\\times$\n" +
+                "- [x] Task checked with $\\sum_{i=1}^n i$\n\n" +
+                "| Header $x + y$ | Value |\n" +
+                "|---|---|\n" +
+                "| Metric | $\\le 30\\times$ |";
+            var docMulti = parser.Parse(multiMd);
+            var flowMulti = converter.Convert(docMulti);
+            var rtbMulti = new RichTextBox { Width = 850, Document = flowMulti, IsReadOnly = true };
+            rtbMulti.Measure(new Size(850, 2000));
+            rtbMulti.Arrange(new Rect(0, 0, 850, rtbMulti.DesiredSize.Height));
+            rtbMulti.UpdateLayout();
+            var multiContainers = FindAllMathContainers(flowMulti);
+            Assert(multiContainers.Count >= 7, $"Expected at least 7 multi-block containers, got {multiContainers.Count}");
+            VerifyContainers(rtbMulti, multiContainers, "Multi-Block Contexts", maxOpticalDelta: 2.5, maxElevation: 4.0);
+
+            // 8. Line-Spacing Jitter & Line Height Stability Guard
+            string jitterMd =
+                "First line pure plain text sample without any formulas.\n\n" +
+                "Second line with standard inline formula $ROIC > 18\\%$ and $\\ge +1.5\\%$ here.\n\n" +
+                "Third line pure plain text sample without any formulas.";
+            var docJitter = parser.Parse(jitterMd);
+            var flowJitter = converter.Convert(docJitter);
+            var rtbJitter = new RichTextBox { Width = 850, Document = flowJitter, IsReadOnly = true };
+            rtbJitter.Measure(new Size(850, 2000));
+            rtbJitter.Arrange(new Rect(0, 0, 850, rtbJitter.DesiredSize.Height));
+            rtbJitter.UpdateLayout();
+            var paras = flowJitter.Blocks.OfType<Paragraph>().ToList();
+            Assert(paras.Count == 3, $"Expected 3 paragraphs in jitter test, got {paras.Count}");
+            Rect r1 = paras[0].ContentStart.GetCharacterRect(LogicalDirection.Forward);
+            Rect r2 = paras[1].ContentStart.GetCharacterRect(LogicalDirection.Forward);
+            Rect r3 = paras[2].ContentStart.GetCharacterRect(LogicalDirection.Forward);
+            double h1 = r1.Height;
+            double h2 = r2.Height;
+            double h3 = r3.Height;
+            Assert(Math.Abs(h1 - h2) <= 1.0,
+                $"Paragraph 1 line height ({h1:F2} DIPs) and Paragraph 2 with inline math ({h2:F2} DIPs) must match within 1.0 DIP (zero line-spacing jitter)");
+            Assert(Math.Abs(h1 - h3) <= 1.0,
+                $"Paragraph 1 line height ({h1:F2} DIPs) and Paragraph 3 ({h3:F2} DIPs) must match within 1.0 DIP (line height consistency)");
+        }
+
+        private static void TestChallengerM1_2LineHeightAndHeadingTypography()
+        {
+            var parser = new MarkdownParser();
+            var converter = new MarkdownToWpfConverter("", ThemePalette.GitHubDark, enableLatex: true, enableHtml: true);
+
+            // =====================================================================
+            // Part 1: Line Height Invariance in Paragraph (LineHeight = 24)
+            // =====================================================================
+            // Consecutive lines with inline math formulas in a single paragraph with hard line breaks.
+            string multilineMarkdown =
+                "Line 1 with formula $ROIC > 18\\%$ text.\\\n" +
+                "Line 2 with formula $ROE > 20\\%$ text.\\\n" +
+                "Line 3 with formula $\\ge +1.5\\%$ text.\\\n" +
+                "Line 4 with formula $\\le 30\\times$ text.\\\n" +
+                "Line 5 with multiple $A = k \\times B$ and $C = D + E$ formulas.\\\n" +
+                "Line 6 control text with no math whatsoever.\\\n" +
+                "Line 7 control text with no math whatsoever.";
+
+            var docMultiline = parser.Parse(multilineMarkdown);
+            var flowDocMultiline = converter.Convert(docMultiline);
+            var para = flowDocMultiline.Blocks.OfType<Paragraph>().FirstOrDefault();
+            Assert(para != null, "Parsed document must contain a Paragraph");
+            Assert(para!.LineHeight == 24, $"Paragraph LineHeight must be 24, got {para.LineHeight}");
+
+            var rtb = new RichTextBox
+            {
+                Width = 850,
+                Document = flowDocMultiline,
+                IsReadOnly = true
+            };
+            rtb.Measure(new Size(850, 2000));
+            rtb.Arrange(new Rect(0, 0, 850, rtb.DesiredSize.Height));
+            rtb.UpdateLayout();
+
+            // Extract each line's leading Run to measure line baseline and step
+            var runs = para.Inlines.OfType<Run>().Where(r => r.Text.StartsWith("Line ")).ToList();
+            Assert(runs.Count == 7, $"Expected 7 line runs, found {runs.Count}");
+
+            var lineTops = new List<double>();
+            var lineHeights = new List<double>();
+            for (int i = 0; i < runs.Count; i++)
+            {
+                var r = runs[i];
+                Rect rRect = r.ContentStart.GetCharacterRect(LogicalDirection.Forward);
+                lineTops.Add(rRect.Top);
+                lineHeights.Add(rRect.Height);
+                Console.WriteLine($"[CHALLENGER-M1-2] Line {i + 1}: Top={rRect.Top:F2}, Height={rRect.Height:F2}, Bottom={rRect.Bottom:F2}");
+            }
+
+            // Verify line step (delta Y between consecutive lines)
+            for (int i = 0; i < lineTops.Count - 1; i++)
+            {
+                double step = lineTops[i + 1] - lineTops[i];
+                Console.WriteLine($"[CHALLENGER-M1-2] Step Line {i + 1}->{i + 2}: {step:F2} DIPs");
+            }
+
+            // Empirical observation:
+            // 1. Math -> Math lines (Line 1->2, 2->3, 3->4, 4->5): step is exactly 24.00 DIPs
+            for (int i = 0; i < 4; i++)
+            {
+                double step = lineTops[i + 1] - lineTops[i];
+                Assert(Math.Abs(step - 24.0) < 0.1,
+                    $"Consecutive math-to-math line spacing invariance violated between Line {i + 1} and Line {i + 2}: step is {step:F2} DIPs, expected 24.0 DIPs");
+            }
+
+            // 2. Text -> Text lines (Line 6->7): step is exactly 24.00 DIPs
+            double textToTextStep = lineTops[6] - lineTops[5];
+            Assert(Math.Abs(textToTextStep - 24.0) < 0.1,
+                $"Consecutive text-to-text line spacing invariance violated: step is {textToTextStep:F2} DIPs, expected 24.0 DIPs");
+
+            // 3. Math -> Text transition (Line 5->6): step contracts to 21.98 DIPs (-2.02 DIPs)
+            // because BaselineAlignment.Center on math containers shifts text glyphs down by ~2.02 DIPs within the 24.0 line box.
+            double mathToTextStep = lineTops[5] - lineTops[4];
+            Console.WriteLine($"[CHALLENGER-M1-2] Math->Text boundary step (Line 5->6): {mathToTextStep:F2} DIPs (contraction delta: {mathToTextStep - 24.0:F2} DIPs)");
+            Assert(Math.Abs(mathToTextStep - 21.98) < 0.2,
+                $"Math->Text transition step mismatch: expected ~21.98 DIPs, got {mathToTextStep:F2} DIPs");
+
+            // 4. Invariant line box test:
+            // Multiline paragraph height: 7 lines with math line box + baseline shift ~ 170.0 DIPs
+            Console.WriteLine($"[CHALLENGER-M1-2] Multiline paragraph DesiredSize.Height={rtb.DesiredSize.Height:F2} DIPs (nominal 7*24=168.0, with baseline offset ~170.0 DIPs)");
+            Assert(Math.Abs(rtb.DesiredSize.Height - 170.0) < 2.0,
+                $"Total paragraph height violated: expected ~170.0 DIPs, got {rtb.DesiredSize.Height:F2} DIPs");
+
+            // Verify visual boundaries of math borders inside the paragraph
+            var uics = para.Inlines.OfType<InlineUIContainer>().ToList();
+            Assert(uics.Count == 6, $"Expected 6 inline math containers, got {uics.Count}");
+            for (int i = 0; i < uics.Count; i++)
+            {
+                var uic = uics[i];
+                var border = (Border)uic.Child;
+                Point pt = border.TranslatePoint(new Point(0, 0), rtb);
+                Rect borderRect = new Rect(pt, new Size(border.ActualWidth, border.ActualHeight));
+                Console.WriteLine($"[CHALLENGER-M1-2] MathContainer {i + 1} ({(uic.Tag as MathTag)?.Expression}): VisualTop={borderRect.Top:F2}, Height={borderRect.Height:F2}, VisualBottom={borderRect.Bottom:F2}");
+                Assert(border.ActualWidth > 0 && border.ActualHeight > 0, "Math container must have non-zero dimensions");
+
+                // Check margin calibration
+                Assert(border.Margin.Top == 2.5 && border.Margin.Bottom == -2.5,
+                    $"Border margin must be (1, 2.5, 1, -2.5), got ({border.Margin.Top}, {border.Margin.Bottom})");
+            }
+
+            // Check non-collision: Math container visual bottom on Line i must not exceed Line i+1 baseline/text bottom
+            for (int i = 0; i < 4; i++)
+            {
+                var uic = uics[i];
+                var border = (Border)uic.Child;
+                Point pt = border.TranslatePoint(new Point(0, 0), rtb);
+                double nextLineTop = lineTops[i + 1];
+                Assert(pt.Y + border.ActualHeight <= nextLineTop + 2.0,
+                    $"Visual collision detected: Math on Line {i + 1} bottom ({pt.Y + border.ActualHeight:F2}) overlaps Line {i + 2} top ({nextLineTop:F2})");
+            }
+
+            // =====================================================================
+            // Part 1b: Soft-wrapped Paragraph with Formulas across Lines
+            // =====================================================================
+            string wrappedMd = "Analysis shows that compounding equity capital with $ROIC > 18\\%$ consistently generates superior alpha over long holding horizons while controlling enterprise value multiples with forward ratios like $\\le 30\\times$ and keeping balance sheet leverage modest with expanding operating profits $\\ge +1.5\\%$ across all operational business cycles.";
+            var docWrapped = parser.Parse(wrappedMd);
+            var flowDocWrapped = converter.Convert(docWrapped);
+            var rtbWrapped = new RichTextBox
+            {
+                Width = 420,
+                Document = flowDocWrapped,
+                IsReadOnly = true
+            };
+            rtbWrapped.Measure(new Size(420, 2000));
+            rtbWrapped.Arrange(new Rect(0, 0, 420, rtbWrapped.DesiredSize.Height));
+            rtbWrapped.UpdateLayout();
+            Assert(rtbWrapped.ActualWidth > 0 && rtbWrapped.ActualHeight > 0, "Wrapped paragraph layout must succeed");
+            var wrappedPara = flowDocWrapped.Blocks.OfType<Paragraph>().FirstOrDefault();
+            Assert(wrappedPara != null, "Wrapped paragraph must exist");
+            var wrappedUics = wrappedPara!.Inlines.OfType<InlineUIContainer>().ToList();
+            Assert(wrappedUics.Count == 3, $"Expected 3 math containers in wrapped paragraph, got {wrappedUics.Count}");
+            foreach (var wuic in wrappedUics)
+            {
+                var wb = (Border)wuic.Child;
+                Assert(wb.ActualWidth > 0 && wb.ActualHeight > 0, "Wrapped math container must have positive dimensions");
+            }
+
+            // =====================================================================
+            // Part 2: Headings H1-H6 Scaling, Optical Center & Bounds Comparison
+            // =====================================================================
+            double[] expectedHeadingFontSizes = new double[] { 26.0, 20.0, 17.0, 15.0, 13.5, 12.5 };
+            double[] expectedOffsets = new double[]
+            {
+                Math.Round(26.0 * (2.5 / 14.5), 1), // 4.5
+                Math.Round(20.0 * (2.5 / 14.5), 1), // 3.4
+                Math.Round(17.0 * (2.5 / 14.5), 1), // 2.9
+                Math.Round(15.0 * (2.5 / 14.5), 1), // 2.6
+                Math.Round(13.5 * (2.5 / 14.5), 1), // 2.3
+                Math.Round(12.5 * (2.5 / 14.5), 1)  // 2.2
+            };
+
+            var headingHeights = new List<double>();
+            for (int level = 1; level <= 6; level++)
+            {
+                string headingMarkdown = new string('#', level) + " Heading Level " + level + " with $ROIC > 18\\%$ metric";
+                var docH = parser.Parse(headingMarkdown);
+                var flowDocH = converter.Convert(docH);
+                var headPara = flowDocH.Blocks.OfType<Paragraph>().FirstOrDefault();
+                Assert(headPara != null, $"Heading level {level} must convert to Paragraph");
+
+                double expectedFontSize = expectedHeadingFontSizes[level - 1];
+                double expectedOffset = expectedOffsets[level - 1];
+
+                Assert(Math.Abs(headPara!.FontSize - expectedFontSize) < 0.01,
+                    $"Heading level {level} font size mismatch: expected {expectedFontSize}, got {headPara.FontSize}");
+
+                var headRtb = new RichTextBox
+                {
+                    Width = 850,
+                    Document = flowDocH,
+                    IsReadOnly = true
+                };
+                headRtb.Measure(new Size(850, 1000));
+                headRtb.Arrange(new Rect(0, 0, 850, headRtb.DesiredSize.Height));
+                headRtb.UpdateLayout();
+
+                var headUic = headPara.Inlines.OfType<InlineUIContainer>().FirstOrDefault();
+                Assert(headUic != null, $"Heading level {level} must contain InlineUIContainer");
+                Assert(headUic!.BaselineAlignment == BaselineAlignment.Center,
+                    $"Heading level {level} BaselineAlignment must be Center");
+
+                var headBorder = (Border)headUic.Child;
+                Assert(Math.Abs(headBorder.Margin.Top - expectedOffset) < 0.01 && Math.Abs(headBorder.Margin.Bottom - (-expectedOffset)) < 0.01,
+                    $"Heading level {level} margin mismatch: expected ({expectedOffset}, {-expectedOffset}), got ({headBorder.Margin.Top}, {headBorder.Margin.Bottom})");
+
+                headingHeights.Add(headBorder.ActualHeight);
+
+                // Character and visual rectangles
+                var headRun = headPara.Inlines.OfType<Run>().FirstOrDefault(r => r.Text.Contains("Heading Level"));
+                Assert(headRun != null, $"Heading level {level} text run not found");
+                Rect headTextRect = headRun!.ContentStart.GetCharacterRect(LogicalDirection.Forward);
+                Rect headMathRect = headUic.ContentStart.GetCharacterRect(LogicalDirection.Forward);
+                Point headBorderPt = headBorder.TranslatePoint(new Point(0, 0), headRtb);
+                Rect headBorderRect = new Rect(headBorderPt, new Size(headBorder.ActualWidth, headBorder.ActualHeight));
+
+                double textCenterY = headTextRect.Top + headTextRect.Height / 2.0;
+                double mathCenterY = headMathRect.Top + headMathRect.Height / 2.0;
+                double opticalDelta = Math.Abs(mathCenterY - textCenterY);
+                double visualTopDelta = Math.Abs(headBorderRect.Top - headTextRect.Top);
+
+                Console.WriteLine($"[CHALLENGER-M1-2] H{level} (Font={expectedFontSize:F1}, vOffset={expectedOffset:F1}): TextTop={headTextRect.Top:F2}, TextHeight={headTextRect.Height:F2}, BorderTop={headBorderRect.Top:F2}, BorderHeight={headBorder.ActualHeight:F2}, DeltaTop={visualTopDelta:F2}, CenterDelta={opticalDelta:F2}");
+
+                // Verification constraints across all headings:
+                // 1. Optical centering delta must remain <= 1.5 DIPs across all heading levels
+                Assert(opticalDelta <= 1.5,
+                    $"H{level} optical centering delta exceeds tolerance: {opticalDelta:F2} DIPs (mathCenter={mathCenterY:F2}, textCenter={textCenterY:F2})");
+
+                // 2. Superscript non-elevation guard: math formula top must NOT float higher than heading text top
+                Assert(headBorderRect.Top >= headTextRect.Top - 2.5,
+                    $"H{level} superscript elevation detected: borderTop={headBorderRect.Top:F2} is higher than textTop={headTextRect.Top:F2}");
+
+                // 3. Zero dimension clipping: width and height must be strictly positive
+                Assert(headBorder.ActualWidth > 0 && headBorder.ActualHeight > 0,
+                    $"H{level} zero dimension clipping detected");
+            }
+
+            // Verify monotonic scaling of math border heights across headings (H1 > H2 > H3 > H4 > H5 > H6)
+            for (int i = 0; i < headingHeights.Count - 1; i++)
+            {
+                Assert(headingHeights[i] >= headingHeights[i + 1],
+                    $"Heading math border height should scale monotonically: H{i + 1} ({headingHeights[i]:F2}) vs H{i + 2} ({headingHeights[i + 1]:F2})");
+            }
+
+            // =====================================================================
+            // Part 3: Nested Inlines in Headings (Bold, Italic, Link)
+            // =====================================================================
+            string nestedHeadingMd = "# Heading with **bold $ROIC > 18\\%$** and *italic $\\le 30\\times$*";
+            var docNestedH = parser.Parse(nestedHeadingMd);
+            var flowDocNestedH = converter.Convert(docNestedH);
+            var nestedHPara = flowDocNestedH.Blocks.OfType<Paragraph>().FirstOrDefault();
+            Assert(nestedHPara != null, "Nested heading must parse to Paragraph");
+
+            var nestedUics = new List<InlineUIContainer>();
+            void FindUics(InlineCollection inlines)
+            {
+                foreach (var inl in inlines)
+                {
+                    if (inl is InlineUIContainer u) nestedUics.Add(u);
+                    else if (inl is Span s) FindUics(s.Inlines);
+                }
+            }
+            FindUics(nestedHPara!.Inlines);
+            Assert(nestedUics.Count == 2, $"Expected 2 nested math containers in heading, found {nestedUics.Count}");
+            foreach (var u in nestedUics)
+            {
+                var b = (Border)u.Child;
+                Assert(Math.Abs(b.Margin.Top - 4.5) < 0.01 && Math.Abs(b.Margin.Bottom - (-4.5)) < 0.01,
+                    $"Nested heading math must inherit H1 font size and have margin (4.5, -4.5), got ({b.Margin.Top}, {b.Margin.Bottom})");
+            }
+
+            // =====================================================================
+            // Part 4: Consecutive Math Formulas in ListItems (LineHeight = NaN)
+            // =====================================================================
+            string listMarkdown =
+                "* Item 1 with $ROIC > 18\\%$\n" +
+                "* Item 2 with $ROE > 20\\%$\n" +
+                "* Item 3 with $\\ge +1.5\\%$\n" +
+                "* Item 4 with $\\le 30\\times$";
+            var docList = parser.Parse(listMarkdown);
+            var flowDocList = converter.Convert(docList);
+            var listBlock = flowDocList.Blocks.OfType<List>().FirstOrDefault();
+            Assert(listBlock != null, "List block must exist");
+            Assert(listBlock!.ListItems.Count == 4, "Must have 4 list items");
+
+            var listRtb = new RichTextBox
+            {
+                Width = 850,
+                Document = flowDocList,
+                IsReadOnly = true
+            };
+            listRtb.Measure(new Size(850, 1000));
+            listRtb.Arrange(new Rect(0, 0, 850, listRtb.DesiredSize.Height));
+            listRtb.UpdateLayout();
+
+            double prevItemTop = -1;
+            for (int i = 0; i < listBlock.ListItems.Count; i++)
+            {
+                var li = listBlock.ListItems.ElementAt(i);
+                var liPara = li.Blocks.OfType<Paragraph>().FirstOrDefault();
+                Assert(liPara != null, $"ListItem {i} must have Paragraph");
+                var liRun = liPara!.Inlines.OfType<Run>().FirstOrDefault();
+                Assert(liRun != null, $"ListItem {i} must have Run");
+                Rect liRunRect = liRun!.ContentStart.GetCharacterRect(LogicalDirection.Forward);
+                Console.WriteLine($"[CHALLENGER-M1-2] ListItem {i + 1}: Top={liRunRect.Top:F2}, Height={liRunRect.Height:F2}");
+                if (prevItemTop >= 0)
+                {
+                    double itemStep = liRunRect.Top - prevItemTop;
+                    Console.WriteLine($"[CHALLENGER-M1-2] ListItem Step {i}->{i + 1}: {itemStep:F2} DIPs");
+                    Assert(itemStep > 15.0, $"List item step too small: {itemStep:F2}");
+                }
+                prevItemTop = liRunRect.Top;
+            }
+
+            // =====================================================================
+            // Part 5: Multiple Math Formulas on the Same Line in Paragraph
+            // =====================================================================
+            string sameLineMd = "Formulas: $A = 1$ and $B = 2$ and $C = 3$ and $D = 4$ and $E = 5$ on one line.";
+            var docSame = parser.Parse(sameLineMd);
+            var flowDocSame = converter.Convert(docSame);
+            var sameRtb = new RichTextBox
+            {
+                Width = 850,
+                Document = flowDocSame,
+                IsReadOnly = true
+            };
+            sameRtb.Measure(new Size(850, 1000));
+            sameRtb.Arrange(new Rect(0, 0, 850, sameRtb.DesiredSize.Height));
+            sameRtb.UpdateLayout();
+
+            var samePara = flowDocSame.Blocks.OfType<Paragraph>().FirstOrDefault();
+            Assert(samePara != null, "Same line paragraph must exist");
+            var sameUics = samePara!.Inlines.OfType<InlineUIContainer>().ToList();
+            Assert(sameUics.Count == 5, $"Expected 5 formulas on same line, got {sameUics.Count}");
+
+            double firstTop = -1;
+            for (int i = 0; i < sameUics.Count; i++)
+            {
+                var border = (Border)sameUics[i].Child;
+                Point pt = border.TranslatePoint(new Point(0, 0), sameRtb);
+                Console.WriteLine($"[CHALLENGER-M1-2] SameLine Formula {i + 1}: VisualTop={pt.Y:F2}, Height={border.ActualHeight:F2}");
+                if (firstTop < 0) firstTop = pt.Y;
+                else
+                {
+                    Assert(Math.Abs(pt.Y - firstTop) < 0.5,
+                        $"Formulas on same line must have identical VisualTop, got {pt.Y:F2} vs {firstTop:F2}");
+                }
+            }
+
+            // =====================================================================
+            // Part 6: Layout Stability Across Multiple Widths (300, 800, 1600)
+            // =====================================================================
+            double[] testWidths = new double[] { 300, 800, 1600 };
+            foreach (double w in testWidths)
+            {
+                var docW = parser.Parse(multilineMarkdown);
+                var flowDocW = converter.Convert(docW);
+                var dynRtb = new RichTextBox
+                {
+                    Width = w,
+                    Document = flowDocW,
+                    IsReadOnly = true
+                };
+                dynRtb.Measure(new Size(w, 2000));
+                dynRtb.Arrange(new Rect(0, 0, w, dynRtb.DesiredSize.Height));
+                dynRtb.UpdateLayout();
+                Assert(!double.IsNaN(dynRtb.DesiredSize.Height) && !double.IsInfinity(dynRtb.DesiredSize.Height),
+                    $"Layout height at width {w} must be finite");
+                Assert(dynRtb.DesiredSize.Height > 0, $"Layout height at width {w} must be > 0");
+            }
+
+            Console.WriteLine("--- EMPIRICAL CHALLENGE M1-2: ALL TESTS PASSED SUCCESSFULLY ---\n");
         }
 
         private static void TestLatexBoldFormattingAndEscapes()
@@ -5314,7 +6132,7 @@ MDPlus v1.09 expands the hyper-fast native Windows reader with universal text su
             // Empty string or whitespace-only producing 0 columns
             var doc = CsvToFlowDocumentConverter.Convert("", palette, isTsv: false);
             Assert(doc != null, "FlowDocument must not be null");
-            Assert(doc.Blocks.Count > 0, "FlowDocument must contain at least 1 block placeholder");
+            Assert(doc!.Blocks.Count > 0, "FlowDocument must contain at least 1 block placeholder");
             var para = doc.Blocks.FirstBlock as Paragraph;
             Assert(para != null, "First block must be Paragraph");
             AssertEqual("EmptyPlaceholder", para!.Tag as string, "Placeholder must have EmptyPlaceholder tag");

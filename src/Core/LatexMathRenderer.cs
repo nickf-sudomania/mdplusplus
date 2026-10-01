@@ -191,11 +191,12 @@ namespace MDPlus.Core
             }
             else
             {
+                double vOffset = Math.Round(effectiveFontSize * (2.5 / 14.5), 1);
                 var container = new Border
                 {
                     Background = Brushes.Transparent,
                     Padding = new Thickness(1, 0, 1, 0),
-                    Margin = new Thickness(1, 0, 1, 0),
+                    Margin = new Thickness(1, vOffset, 1, -vOffset),
                     VerticalAlignment = VerticalAlignment.Center,
                     ToolTip = "$" + latex + "$",
                     Child = mathContent

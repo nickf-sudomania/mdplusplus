@@ -1,6 +1,14 @@
 # MDPlus Release Notes
 
-## Version 1.14.5 (Latest)
+## Version 1.15.0 (Latest)
+
+See [docs/RELEASE_NOTES_v1.15.0.md](docs/RELEASE_NOTES_v1.15.0.md) for full details.
+
+### Highlights
+- **Native C# Mermaid Flowchart Engine:** Pure .NET 8 WPF vector renderer supporting `graph TD/LR`, shapes, edge styles, labels, subgraphs, Sugiyama layout, and dynamic theme switching.
+- **Inline Math Typographic Calibration:** Fixed floating superscript regression with zero-sum proportional vertical margins and ambient context font sizing.
+
+## Version 1.14.5
 
 See [docs/RELEASE_NOTES_v1.14.5.md](docs/RELEASE_NOTES_v1.14.5.md) for full details.
 

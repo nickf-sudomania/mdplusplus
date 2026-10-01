@@ -22,17 +22,21 @@ namespace MDPlus.E2E
 
             try
             {
-                // Run Tier 1: Feature Coverage
+                // Run Tier 1: Feature Coverage (Core Markdown/Multi-Format + Mermaid & Math)
                 Tier1_FeatureCoverage.RunAll();
+                Tier1_MermaidMathCoverage.RunAll();
 
-                // Run Tier 2: Boundary & Corner Cases
+                // Run Tier 2: Boundary & Corner Cases (Core Markdown/Multi-Format + Mermaid & Math)
                 Tier2_BoundaryCornerCases.RunAll();
+                Tier2_MermaidMathBoundary.RunAll();
 
-                // Run Tier 3: Cross-Feature Combinations
+                // Run Tier 3: Cross-Feature Combinations (Core Markdown/Multi-Format + Mermaid & Math)
                 Tier3_CrossFeatureCombinations.RunAll();
+                Tier3_MermaidMathCombinations.RunAll();
 
-                // Run Tier 4: Real-World Application Scenarios
+                // Run Tier 4: Real-World Application Scenarios (Core Markdown/Multi-Format + Mermaid & Math)
                 Tier4_RealWorldScenarios.RunAll();
+                Tier4_MermaidMathScenarios.RunAll();
 
                 // Run Tier 5: Adversarial Hardening (Challenger)
                 Tier5_AdversarialHardening.RunAll();
