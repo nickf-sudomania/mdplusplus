@@ -1,0 +1,224 @@
+<Window x:Class="MDPlus.Controls.PrintPreviewWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+        xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+        mc:Ignorable="d"
+        Title="Print Preview - MDPlus"
+        Icon="pack://application:,,,/Resources/AppIcon.ico"
+        Height="820" Width="1180"
+        MinHeight="550" MinWidth="750"
+        WindowStartupLocation="CenterOwner"
+        Background="{DynamicResource WindowBackgroundBrush}"
+        Foreground="{DynamicResource ForegroundBrush}"
+        KeyDown="Window_KeyDown"
+        Closing="Window_Closing">
+
+    <Window.Resources>
+        <!-- Clean minimal DocumentViewer template that removes the legacy ToolBar and FindBar -->
+        <Style x:Key="CleanDocumentViewerStyle" TargetType="DocumentViewer">
+            <Setter Property="Foreground" Value="{DynamicResource ForegroundBrush}"/>
+            <Setter Property="Background" Value="#2d2d30"/>
+            <Setter Property="Focusable" Value="True"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="DocumentViewer">
+                        <Border Background="{TemplateBinding Background}" BorderThickness="0" SnapsToDevicePixels="True">
+                            <ScrollViewer x:Name="PART_ContentHost"
+                                          CanContentScroll="True"
+                                          HorizontalScrollBarVisibility="Auto"
+                                          VerticalScrollBarVisibility="Auto"
+                                          IsDeferredScrollingEnabled="False"
+                                          Focusable="False">
+                                <ItemsPresenter SnapsToDevicePixels="{TemplateBinding SnapsToDevicePixels}" />
+                            </ScrollViewer>
+                        </Border>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
+        <Style x:Key="ToolbarButtonStyle" TargetType="Button">
+            <Setter Property="Background" Value="{DynamicResource ButtonBackgroundBrush}"/>
+            <Setter Property="Foreground" Value="{DynamicResource ForegroundBrush}"/>
+            <Setter Property="BorderBrush" Value="{DynamicResource BorderBrush}"/>
+            <Setter Property="BorderThickness" Value="1"/>
+            <Setter Property="Padding" Value="10,4,10,4"/>
+            <Setter Property="Height" Value="30"/>
+            <Setter Property="Cursor" Value="Hand"/>
+            <Setter Property="Focusable" Value="False"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Button">
+                        <Border x:Name="BtnBorder" Background="{TemplateBinding Background}" BorderBrush="{TemplateBinding BorderBrush}" 
+                                BorderThickness="{TemplateBinding BorderThickness}" CornerRadius="3" Padding="{TemplateBinding Padding}">
+                            <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center" RecognizesAccessKey="True"/>
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="BtnBorder" Property="Background" Value="{DynamicResource ButtonHoverBackgroundBrush}"/>
+                            </Trigger>
+                            <Trigger Property="IsPressed" Value="True">
+                                <Setter TargetName="BtnBorder" Property="Background" Value="{DynamicResource ButtonPressedBackgroundBrush}"/>
+                            </Trigger>
+                            <Trigger Property="IsEnabled" Value="False">
+                                <Setter Property="Opacity" Value="0.5"/>
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
+        <Style x:Key="PrimaryToolbarButtonStyle" TargetType="Button" BasedOn="{StaticResource ToolbarButtonStyle}">
+            <Setter Property="Background" Value="#0969da"/>
+            <Setter Property="Foreground" Value="#ffffff"/>
+            <Setter Property="BorderThickness" Value="0"/>
+            <Setter Property="FontWeight" Value="SemiBold"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Button">
+                        <Border x:Name="BtnBorder" Background="{TemplateBinding Background}" CornerRadius="3" Padding="{TemplateBinding Padding}">
+                            <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center" RecognizesAccessKey="True"/>
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="BtnBorder" Property="Background" Value="#085bc4"/>
+                            </Trigger>
+                            <Trigger Property="IsPressed" Value="True">
+                                <Setter TargetName="BtnBorder" Property="Background" Value="#074da7"/>
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
+        <Style x:Key="ToolbarComboBoxStyle" TargetType="ComboBox">
+            <Setter Property="Height" Value="30"/>
+            <Setter Property="VerticalContentAlignment" Value="Center"/>
+            <Setter Property="Padding" Value="6,2,6,2"/>
+            <Setter Property="Background" Value="{DynamicResource InputBackgroundBrush}"/>
+            <Setter Property="Foreground" Value="{DynamicResource ForegroundBrush}"/>
+            <Setter Property="BorderBrush" Value="{DynamicResource BorderBrush}"/>
+            <Setter Property="BorderThickness" Value="1"/>
+        </Style>
+    </Window.Resources>
+
+    <Grid>
+        <Grid.RowDefinitions>
+            <!-- Row 0: Top Toolbar -->
+            <RowDefinition Height="Auto"/>
+            <!-- Row 1: Document Preview Canvas -->
+            <RowDefinition Height="*"/>
+            <!-- Row 2: Status & Navigation Bar -->
+            <RowDefinition Height="Auto"/>
+        </Grid.RowDefinitions>
+
+        <!-- TOP TOOLBAR -->
+        <Border Grid.Row="0" Background="{DynamicResource MenuBackgroundBrush}" BorderBrush="{DynamicResource BorderBrush}" BorderThickness="0,0,0,1" Padding="8,6,8,6">
+            <WrapPanel Orientation="Horizontal" VerticalAlignment="Center">
+                <!-- Print Button -->
+                <Button Content="🖨️ Print... (Ctrl+P)" Click="PrintButton_Click" Style="{StaticResource PrimaryToolbarButtonStyle}" Margin="0,0,10,0"/>
+
+                <Rectangle Width="1" Height="22" Fill="{DynamicResource BorderBrush}" Margin="2,4,10,4" VerticalAlignment="Center"/>
+
+                <!-- Paper Size -->
+                <StackPanel Orientation="Horizontal" VerticalAlignment="Center" Margin="0,0,10,0">
+                    <TextBlock Text="Paper:" Foreground="{DynamicResource MutedForegroundBrush}" VerticalAlignment="Center" Margin="0,0,4,0"/>
+                    <ComboBox Name="PaperSizeComboBox" Width="105" Style="{StaticResource ToolbarComboBoxStyle}" SelectionChanged="SettingsChanged_Handler">
+                        <ComboBoxItem Content="Letter (8.5x11&quot;)" IsSelected="True"/>
+                        <ComboBoxItem Content="A4 (210x297mm)"/>
+                        <ComboBoxItem Content="Legal (8.5x14&quot;)"/>
+                    </ComboBox>
+                </StackPanel>
+
+                <!-- Orientation -->
+                <StackPanel Orientation="Horizontal" VerticalAlignment="Center" Margin="0,0,10,0">
+                    <TextBlock Text="Orientation:" Foreground="{DynamicResource MutedForegroundBrush}" VerticalAlignment="Center" Margin="0,0,4,0"/>
+                    <ComboBox Name="OrientationComboBox" Width="95" Style="{StaticResource ToolbarComboBoxStyle}" SelectionChanged="SettingsChanged_Handler">
+                        <ComboBoxItem Content="Portrait" IsSelected="True"/>
+                        <ComboBoxItem Content="Landscape"/>
+                    </ComboBox>
+                </StackPanel>
+
+                <!-- Margins -->
+                <StackPanel Orientation="Horizontal" VerticalAlignment="Center" Margin="0,0,10,0">
+                    <TextBlock Text="Margins:" Foreground="{DynamicResource MutedForegroundBrush}" VerticalAlignment="Center" Margin="0,0,4,0"/>
+                    <ComboBox Name="MarginComboBox" Width="95" Style="{StaticResource ToolbarComboBoxStyle}" SelectionChanged="SettingsChanged_Handler">
+                        <ComboBoxItem Content="Normal (0.75&quot;)" IsSelected="True"/>
+                        <ComboBoxItem Content="Narrow (0.5&quot;)"/>
+                        <ComboBoxItem Content="Wide (1.0&quot;)"/>
+                    </ComboBox>
+                </StackPanel>
+
+                <!-- Theme -->
+                <StackPanel Orientation="Horizontal" VerticalAlignment="Center" Margin="0,0,10,0">
+                    <TextBlock Text="Theme:" Foreground="{DynamicResource MutedForegroundBrush}" VerticalAlignment="Center" Margin="0,0,4,0"/>
+                    <ComboBox Name="ThemeComboBox" Width="120" Style="{StaticResource ToolbarComboBoxStyle}" SelectionChanged="SettingsChanged_Handler">
+                        <ComboBoxItem Content="Light Paper (Ink Saver)" IsSelected="True"/>
+                        <ComboBoxItem Content="Current Theme"/>
+                    </ComboBox>
+                </StackPanel>
+
+                <!-- Headers & Footers Checkbox -->
+                <CheckBox Name="HeadersFootersCheckBox" Content="Headers &amp; Footers" VerticalAlignment="Center" 
+                          IsChecked="True" Foreground="{DynamicResource ForegroundBrush}" Margin="4,0,12,0" 
+                          Checked="SettingsChanged_Handler" Unchecked="SettingsChanged_Handler"/>
+
+                <Rectangle Width="1" Height="22" Fill="{DynamicResource BorderBrush}" Margin="2,4,10,4" VerticalAlignment="Center"/>
+
+                <!-- Zoom Controls -->
+                <Button Content="Fit Width" Click="FitWidthButton_Click" Style="{StaticResource ToolbarButtonStyle}" Margin="0,0,4,0"/>
+                <Button Content="Fit Page" Click="FitPageButton_Click" Style="{StaticResource ToolbarButtonStyle}" Margin="0,0,4,0"/>
+                <Button Content="Two Pages" Click="TwoPagesButton_Click" Style="{StaticResource ToolbarButtonStyle}" Margin="0,0,4,0"/>
+                <Button Content="100%" Click="Zoom100Button_Click" Style="{StaticResource ToolbarButtonStyle}" Margin="0,0,4,0"/>
+
+                <Button Content="-" Width="28" Click="ZoomOutButton_Click" Style="{StaticResource ToolbarButtonStyle}" Margin="0,0,2,0" ToolTip="Zoom Out (Ctrl+-)"/>
+                <Button Content="+" Width="28" Click="ZoomInButton_Click" Style="{StaticResource ToolbarButtonStyle}" Margin="0,0,10,0" ToolTip="Zoom In (Ctrl++)"/>
+
+                <Button Content="Close (Esc)" Click="CloseButton_Click" Style="{StaticResource ToolbarButtonStyle}"/>
+            </WrapPanel>
+        </Border>
+
+        <!-- DOCUMENT PREVIEW CANVAS -->
+        <DocumentViewer Grid.Row="1" Name="PreviewDocumentViewer" Style="{StaticResource CleanDocumentViewerStyle}"/>
+
+        <!-- BOTTOM STATUS & NAVIGATION BAR -->
+        <Border Grid.Row="2" Background="{DynamicResource StatusBarBackgroundBrush}" BorderBrush="{DynamicResource BorderBrush}" BorderThickness="0,1,0,0" Padding="12,4,12,4">
+            <Grid>
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="Auto"/>
+                    <ColumnDefinition Width="*"/>
+                    <ColumnDefinition Width="Auto"/>
+                </Grid.ColumnDefinitions>
+
+                <!-- Left: Document & Page Info -->
+                <StackPanel Grid.Column="0" Orientation="Horizontal" VerticalAlignment="Center">
+                    <TextBlock Name="DocumentInfoText" Text="Loading preview..." Foreground="{DynamicResource MutedForegroundBrush}" FontSize="12"/>
+                </StackPanel>
+
+                <!-- Center: Page Navigation Controls -->
+                <StackPanel Grid.Column="1" Orientation="Horizontal" HorizontalAlignment="Center" VerticalAlignment="Center">
+                    <Button Name="FirstPageButton" Content="⏮" Width="30" Height="24" Click="FirstPageButton_Click" Style="{StaticResource ToolbarButtonStyle}" ToolTip="First Page (Home)"/>
+                    <Button Name="PreviousPageButton" Content="◀" Width="30" Height="24" Click="PreviousPageButton_Click" Style="{StaticResource ToolbarButtonStyle}" Margin="2,0,6,0" ToolTip="Previous Page (Left Arrow)"/>
+
+                    <TextBlock Text="Page" Foreground="{DynamicResource ForegroundBrush}" VerticalAlignment="Center" Margin="0,0,4,0"/>
+                    <TextBox Name="CurrentPageTextBox" Width="38" Height="22" Text="1" TextAlignment="Center" 
+                             VerticalContentAlignment="Center" Background="{DynamicResource InputBackgroundBrush}" 
+                             Foreground="{DynamicResource ForegroundBrush}" BorderBrush="{DynamicResource BorderBrush}"
+                             KeyDown="CurrentPageTextBox_KeyDown" LostFocus="CurrentPageTextBox_LostFocus"/>
+                    <TextBlock Name="TotalPagesTextBlock" Text="of 1" Foreground="{DynamicResource ForegroundBrush}" VerticalAlignment="Center" Margin="4,0,6,0"/>
+
+                    <Button Name="NextPageButton" Content="▶" Width="30" Height="24" Click="NextPageButton_Click" Style="{StaticResource ToolbarButtonStyle}" Margin="0,0,2,0" ToolTip="Next Page (Right Arrow)"/>
+                    <Button Name="LastPageButton" Content="⏭" Width="30" Height="24" Click="LastPageButton_Click" Style="{StaticResource ToolbarButtonStyle}" ToolTip="Last Page (End)"/>
+                </StackPanel>
+
+                <!-- Right: Zoom Indicator -->
+                <StackPanel Grid.Column="2" Orientation="Horizontal" VerticalAlignment="Center">
+                    <TextBlock Name="ZoomLevelTextBlock" Text="100%" Foreground="{DynamicResource MutedForegroundBrush}" FontSize="12" Margin="0,0,8,0"/>
+                </StackPanel>
+            </Grid>
+        </Border>
+    </Grid>
+</Window>

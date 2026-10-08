@@ -1,6 +1,15 @@
 # MDPlus Release Notes
 
-## Version 1.15.2 (Latest)
+## Version 1.15.3 (Latest)
+
+See [docs/RELEASE_NOTES_v1.15.3.md](docs/RELEASE_NOTES_v1.15.3.md) for full details.
+
+### Highlights
+- **Native Print Preview & In-Memory XPS Pipeline:** Pure .NET 8 WPF print preview window (`PrintPreviewWindow`) with zoom presets, multi-page navigation, and zero-disk-IO XPS document builder.
+- **Dynamic Running Headers & Footers:** Automatic document title, date, and "Page X of Y" pagination with crisp separation rules.
+- **Print Settings & Page Range Slicing:** Customizable paper sizes (Letter, A4, Legal), margins, and page selection ranges (`PageRangeDocumentPaginator`).
+
+## Version 1.15.2
 
 See [docs/RELEASE_NOTES_v1.15.2.md](docs/RELEASE_NOTES_v1.15.2.md) for full details.
 

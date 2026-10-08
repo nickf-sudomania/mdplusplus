@@ -13,6 +13,7 @@ using System.Windows.Media;
 using MDPlus.Core;
 using MDPlus.Models;
 using MDPlus.Controls;
+using MDPlus.Core.Printing;
 
 using WpfTable = System.Windows.Documents.Table;
 using WpfTableCell = System.Windows.Documents.TableCell;
@@ -262,6 +263,14 @@ namespace MDPlus.Tests
             RunTest("List Continuation Hard Line Breaks & Display Math Container", TestListContinuationHardLineBreaksAndDisplayMath);
             RunTest("Query 8 Activist Short Math Typographic Baseline Layout", TestQuery8ActivistShortMathTypographicBaselineLayout);
             RunTest("ScrollBar Metrics, Theme Contrast & Hit Target Security", TestScrollBarMetricsAndHitTargetSecurity);
+
+            // 28. Print Preview & Native Printing Subsystem Tests
+            RunTest("PrintSettings Paper Sizes, Orientations & Margins", TestPrintSettingsMetricsAndDefaults);
+            RunTest("HeaderFooterDocumentPaginator Metrics & Visual Decoration", TestHeaderFooterDocumentPaginatorDecoration);
+            RunTest("PageRangeDocumentPaginator User Page Slicing", TestPageRangeDocumentPaginatorSlicing);
+            RunTest("PrintDocumentBuilder Single-Column FlowDocument Generation", TestPrintDocumentBuilderFlowDocGeneration);
+            RunTest("PrintDocumentBuilder In-Memory XPS Document Generation", TestPrintDocumentBuilderInmemoryXpsGeneration);
+            RunTest("PrintDocumentBuilder Multi-Format (CSV, JSON, PlainText) Print Support", TestPrintDocumentBuilderMultiFormat);
 
             sw.Stop();
 
@@ -6463,5 +6472,265 @@ MDPlus v1.09 expands the hyper-fast native Windows reader with universal text su
             Assert(xamlText.Contains("<Setter Property=\"Width\" Value=\"14\"/>"), "Global ScrollBar style must set Width=14");
             Assert(xamlText.Contains("<Setter Property=\"Height\" Value=\"14\"/>"), "Global ScrollBar style must set Height=14");
         }
+
+        #region 28. Print Preview & Native Printing Subsystem Tests
+
+        private static void TestPrintSettingsMetricsAndDefaults()
+        {
+            var settings = new PrintSettings();
+            Assert(settings.PaperSize == PaperSizeKind.Letter || settings.PaperSize == PaperSizeKind.A4, "Default paper size should be Letter or A4 based on region");
+
+            // Test Letter portrait & landscape
+            settings.PaperSize = PaperSizeKind.Letter;
+            settings.Orientation = PageOrientationKind.Portrait;
+            var size = settings.GetPhysicalPageSize();
+            Assert(Math.Abs(size.Width - 816) < 1.0 && Math.Abs(size.Height - 1056) < 1.0, $"Letter portrait size must be 816x1056, got {size.Width}x{size.Height}");
+
+            settings.Orientation = PageOrientationKind.Landscape;
+            var landSize = settings.GetPhysicalPageSize();
+            Assert(Math.Abs(landSize.Width - 1056) < 1.0 && Math.Abs(landSize.Height - 816) < 1.0, $"Letter landscape size must be 1056x816, got {landSize.Width}x{landSize.Height}");
+
+            // Test A4 portrait & landscape
+            settings.PaperSize = PaperSizeKind.A4;
+            settings.Orientation = PageOrientationKind.Portrait;
+            var a4Size = settings.GetPhysicalPageSize();
+            Assert(Math.Abs(a4Size.Width - 794) < 1.0 && Math.Abs(a4Size.Height - 1123) < 1.0, $"A4 portrait size must be ~794x1123, got {a4Size.Width}x{a4Size.Height}");
+
+            // Test Legal portrait & landscape
+            settings.PaperSize = PaperSizeKind.Legal;
+            settings.Orientation = PageOrientationKind.Portrait;
+            var legalSize = settings.GetPhysicalPageSize();
+            Assert(Math.Abs(legalSize.Width - 816) < 1.0 && Math.Abs(legalSize.Height - 1344) < 1.0, $"Legal portrait size must be 816x1344, got {legalSize.Width}x{legalSize.Height}");
+
+            // Test Content Padding
+            settings.Margin = MarginKind.Narrow;
+            settings.IncludeHeadersAndFooters = true;
+            var narrowPad = settings.GetContentPadding();
+            Assert(narrowPad.Left == 48 && narrowPad.Top == 54, "Narrow margin with headers must be 48 side, 54 top");
+
+            settings.Margin = MarginKind.Normal;
+            var normalPad = settings.GetContentPadding();
+            Assert(normalPad.Left == 72 && normalPad.Top == 60, "Normal margin with headers must be 72 side, 60 top");
+
+            settings.Margin = MarginKind.Wide;
+            var widePad = settings.GetContentPadding();
+            Assert(widePad.Left == 96 && widePad.Top == 72, "Wide margin with headers must be 96 side, 72 top");
+        }
+
+        private static void TestHeaderFooterDocumentPaginatorDecoration()
+        {
+            var flowDoc = new FlowDocument();
+            flowDoc.Blocks.Add(new Paragraph(new Run("Test content paragraph 1")));
+            flowDoc.Blocks.Add(new Paragraph(new Run("Test content paragraph 2")));
+
+            var settings = new PrintSettings
+            {
+                PaperSize = PaperSizeKind.Letter,
+                Orientation = PageOrientationKind.Portrait,
+                DocumentTitle = "Financial Screener Guide",
+                FilePath = @"C:\Users\test\docs\FinancialGuide.md",
+                IncludeHeadersAndFooters = true
+            };
+
+            var pageSize = settings.GetPhysicalPageSize();
+            flowDoc.PageWidth = pageSize.Width;
+            flowDoc.PageHeight = pageSize.Height;
+            flowDoc.PagePadding = settings.GetContentPadding();
+            flowDoc.ColumnWidth = double.PositiveInfinity;
+
+            IDocumentPaginatorSource idp = flowDoc;
+            var innerPaginator = idp.DocumentPaginator;
+            var paginator = new HeaderFooterDocumentPaginator(innerPaginator, settings);
+            paginator.ComputePageCount();
+
+            Assert(paginator.PageCount >= 1, "PageCount must be >= 1");
+            Assert(paginator.PageSize.Width == 816 && paginator.PageSize.Height == 1056, "PageSize must match letter size");
+
+            var page = paginator.GetPage(0);
+            Assert(page != null, "DocumentPage must not be null");
+            Assert(page.Visual is ContainerVisual, "Page visual must be a ContainerVisual hosting content and headers/footers");
+
+            var container = (ContainerVisual)page.Visual;
+            Assert(container.Children.Count >= 2, "Container visual must have at least 2 children (content + header/footer visual)");
+
+            // Verify with IncludeHeadersAndFooters = false returns inner visual
+            settings.IncludeHeadersAndFooters = false;
+            var plainPage = paginator.GetPage(0);
+            Assert(plainPage != null, "Plain page must not be null");
+        }
+
+        private static void TestPageRangeDocumentPaginatorSlicing()
+        {
+            var flowDoc = new FlowDocument();
+            for (int i = 1; i <= 10; i++)
+            {
+                // Force page breaks between paragraphs
+                var p = new Paragraph(new Run($"Page paragraph {i}"));
+                p.BreakPageBefore = true;
+                flowDoc.Blocks.Add(p);
+            }
+
+            var settings = new PrintSettings
+            {
+                PaperSize = PaperSizeKind.Letter,
+                Orientation = PageOrientationKind.Portrait,
+                IncludeHeadersAndFooters = false
+            };
+
+            var pageSize = settings.GetPhysicalPageSize();
+            flowDoc.PageWidth = pageSize.Width;
+            flowDoc.PageHeight = pageSize.Height;
+            flowDoc.PagePadding = settings.GetContentPadding();
+            flowDoc.ColumnWidth = double.PositiveInfinity;
+
+            IDocumentPaginatorSource idp = flowDoc;
+            var inner = idp.DocumentPaginator;
+            inner.ComputePageCount();
+            int totalPages = inner.PageCount;
+            Assert(totalPages >= 3, $"Inner paginator should have at least 3 pages, got {totalPages}");
+
+            // Slice pages 2 to 3
+            var rangePaginator = new PageRangeDocumentPaginator(inner, new PageRange(2, 3));
+            Assert(rangePaginator.PageCount == 2, $"Range 2..3 must have PageCount 2, got {rangePaginator.PageCount}");
+
+            var page0 = rangePaginator.GetPage(0);
+            Assert(page0 != null, "Sliced page 0 must be non-null");
+            var page1 = rangePaginator.GetPage(1);
+            Assert(page1 != null, "Sliced page 1 must be non-null");
+        }
+
+        private static void TestPrintDocumentBuilderFlowDocGeneration()
+        {
+            var tab = new DocumentTabItem
+            {
+                Title = "Print Test Markdown",
+                FilePath = @"C:\Users\test\docs\PrintTest.md",
+                Format = DocumentFormat.Markdown
+            };
+
+            string md = @"# Print Test Heading
+This is a paragraph with **bold** text and an equation: $x \ge 10$.
+
+| Metric | Target | Status |
+| :--- | :--- | :--- |
+| ROIC | > 18% | Pass |
+| Margin | \ge 25% | Pass |
+
+- [x] Item 1
+- [ ] Item 2
+";
+            tab.Document = new MarkdownParser().Parse(md);
+
+            var settings = new PrintSettings
+            {
+                PaperSize = PaperSizeKind.Letter,
+                Orientation = PageOrientationKind.Portrait,
+                Margin = MarginKind.Normal,
+                Theme = PrintThemeKind.LightPaper,
+                IncludeHeadersAndFooters = true
+            };
+
+            var flowDoc = PrintDocumentBuilder.BuildPrintFlowDocument(tab, settings);
+            Assert(flowDoc != null, "Generated print FlowDocument must not be null");
+            Assert(flowDoc.PageWidth == 816, "PageWidth must be 816 for Letter");
+            Assert(flowDoc.PageHeight == 1056, "PageHeight must be 1056 for Letter");
+            Assert(double.IsPositiveInfinity(flowDoc.ColumnWidth), "ColumnWidth must be PositiveInfinity for single column layout");
+
+            // Verify LightPaper theme applied
+            Assert(flowDoc.Background is SolidColorBrush, "FlowDoc background must be a brush");
+            var bg = (SolidColorBrush)flowDoc.Background;
+            Assert(bg.Color == Color.FromRgb(255, 255, 255), "LightPaper background must be pure white (#ffffff)");
+
+            // Verify activeEditorText override
+            string unsavedMd = "# Unsaved Edit Heading\nUnsaved content.";
+            var unsavedDoc = PrintDocumentBuilder.BuildPrintFlowDocument(tab, settings, unsavedMd);
+            Assert(unsavedDoc != null, "Unsaved FlowDoc must not be null");
+            Assert(unsavedDoc.Blocks.Count > 0, "Unsaved FlowDoc must have blocks");
+        }
+
+        private static void TestPrintDocumentBuilderInmemoryXpsGeneration()
+        {
+            var tab = new DocumentTabItem
+            {
+                Title = "XPS Generation Test",
+                FilePath = @"C:\Users\test\docs\XpsTest.md",
+                Format = DocumentFormat.Markdown
+            };
+
+            string md = @"# High Fidelity In-Memory XPS Document
+Testing in-memory XPS generation for MDPlus Print Preview without disk I/O.
+";
+            tab.Document = new MarkdownParser().Parse(md);
+
+            var settings = new PrintSettings
+            {
+                PaperSize = PaperSizeKind.Letter,
+                Orientation = PageOrientationKind.Portrait,
+                IncludeHeadersAndFooters = true,
+                DocumentTitle = "In-Memory XPS Verification"
+            };
+
+            var flowDoc = PrintDocumentBuilder.BuildPrintFlowDocument(tab, settings);
+            using (var handle = PrintDocumentBuilder.CreateInmemoryXpsDocument(flowDoc, settings))
+            {
+                Assert(handle != null, "PrintPreviewDocumentHandle must not be null");
+                Assert(handle.DocumentSequence != null, "DocumentSequence must not be null");
+                Assert(handle.PageCount >= 1, $"PageCount must be >= 1, got {handle.PageCount}");
+                Assert(handle.Package != null, "Package must be open and non-null");
+                var page = handle.DocumentSequence.DocumentPaginator.GetPage(0);
+                Assert(page != null && page.Visual != null, "Fixed page 0 must be non-null and renderable");
+            }
+        }
+
+        private static void TestPrintDocumentBuilderMultiFormat()
+        {
+            var settings = new PrintSettings { Theme = PrintThemeKind.LightPaper };
+
+            // 1. CSV
+            var csvTab = new DocumentTabItem
+            {
+                Title = "FinancialData.csv",
+                FilePath = @"C:\data\FinancialData.csv",
+                Format = DocumentFormat.Csv,
+                RawMarkdown = "Ticker,Metric,Value\nAAPL,PE,32.5\nMSFT,PE,34.1"
+            };
+            var csvDoc = PrintDocumentBuilder.BuildPrintFlowDocument(csvTab, settings);
+            Assert(csvDoc != null && csvDoc.Blocks.Count > 0, "CSV print FlowDocument must be generated");
+
+            // 2. TSV
+            var tsvTab = new DocumentTabItem
+            {
+                Title = "Data.tsv",
+                FilePath = @"C:\data\Data.tsv",
+                Format = DocumentFormat.Tsv,
+                RawMarkdown = "Col1\tCol2\nVal1\tVal2"
+            };
+            var tsvDoc = PrintDocumentBuilder.BuildPrintFlowDocument(tsvTab, settings);
+            Assert(tsvDoc != null && tsvDoc.Blocks.Count > 0, "TSV print FlowDocument must be generated");
+
+            // 3. JSON
+            var jsonTab = new DocumentTabItem
+            {
+                Title = "Config.json",
+                FilePath = @"C:\data\Config.json",
+                Format = DocumentFormat.Json,
+                RawMarkdown = "{\n  \"appName\": \"MDPlus\",\n  \"version\": \"1.15.2\"\n}"
+            };
+            var jsonDoc = PrintDocumentBuilder.BuildPrintFlowDocument(jsonTab, settings);
+            Assert(jsonDoc != null && jsonDoc.Blocks.Count > 0, "JSON print FlowDocument must be generated");
+
+            // 4. PlainText
+            var textTab = new DocumentTabItem
+            {
+                Title = "Log.txt",
+                FilePath = @"C:\data\Log.txt",
+                Format = DocumentFormat.PlainText,
+                RawMarkdown = "2026-10-08 10:00:00 [INFO] System initialized."
+            };
+            var textDoc = PrintDocumentBuilder.BuildPrintFlowDocument(textTab, settings);
+            Assert(textDoc != null && textDoc.Blocks.Count > 0, "PlainText print FlowDocument must be generated");
+        }
+
+        #endregion
     }
 }

@@ -6,7 +6,7 @@
         xmlns:controls="clr-namespace:MDPlus.Controls"
         xmlns:models="clr-namespace:MDPlus.Models"
         mc:Ignorable="d"
-        Title="MDPlus v1.15.1 - Markdown Viewer" 
+        Title="MDPlus v1.15.3 - Markdown Viewer" 
         Icon="pack://application:,,,/Resources/AppIcon.ico"
         Height="760" Width="1160"
         MinHeight="400" MinWidth="600"
@@ -47,6 +47,7 @@
                 <Separator />
                 <MenuItem Header="Export as _HTML..." InputGestureText="Ctrl+Shift+E" Click="ExportHtml_Click" />
                 <MenuItem Header="Copy as HTML" InputGestureText="Ctrl+Shift+H" Click="CopyHtml_Click" />
+                <MenuItem Header="Print Pre_view..." InputGestureText="Ctrl+Shift+P" Click="PrintPreview_Click" />
                 <MenuItem Header="_Print..." InputGestureText="Ctrl+P" Click="Print_Click" />
                 <Separator />
                 <MenuItem Header="_Recent Files" Name="RecentFilesMenu" />
@@ -166,6 +167,7 @@
                                 <Separator />
                                 <MenuItem Header="Export as _HTML..." InputGestureText="Ctrl+Shift+E" Click="ExportHtml_Click" />
                                 <MenuItem Header="Copy as HTML" InputGestureText="Ctrl+Shift+H" Click="CopyHtml_Click" />
+                                <MenuItem Header="Print Pre_view..." InputGestureText="Ctrl+Shift+P" Click="PrintPreview_Click" />
                                 <MenuItem Header="_Print..." InputGestureText="Ctrl+P" Click="Print_Click" />
                                 <Separator />
                                 <MenuItem Header="_Recent Files" Name="HamburgerRecentFilesMenu" />

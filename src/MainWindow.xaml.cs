@@ -1863,26 +1863,26 @@ Plugins can be enabled or disabled instantly via the Plugins menu without restar
             }
         }
 
+        private void PrintPreview_Click(object sender, RoutedEventArgs e)
+        {
+            if (_activeTab == null) return;
+
+            string? activeEditorText = null;
+            if (_activeTab.ViewMode == ViewDisplayMode.Raw || _activeTab.ViewMode == ViewDisplayMode.Split)
+            {
+                activeEditorText = RawMarkdownTextBox.Text;
+            }
+
+            var previewWnd = new PrintPreviewWindow(_activeTab, activeEditorText)
+            {
+                Owner = this
+            };
+            previewWnd.ShowDialog();
+        }
+
         private void Print_Click(object sender, RoutedEventArgs e)
         {
-            FlowDocument? doc = null;
-            if (_activeTab?.Format is DocumentFormat.Csv or DocumentFormat.Tsv)
-            {
-                doc = _activeTab.FlowDocument;
-            }
-            else
-            {
-                doc = MarkdownViewer.Document;
-            }
-
-            if (doc == null) return;
-
-            var printDlg = new PrintDialog();
-            if (printDlg.ShowDialog() == true)
-            {
-                IDocumentPaginatorSource idp = doc;
-                printDlg.PrintDocument(idp.DocumentPaginator, _activeTab?.Title ?? "Markdown Document");
-            }
+            PrintPreview_Click(sender, e);
         }
 
         private void Exit_Click(object sender, RoutedEventArgs e)
@@ -2269,7 +2269,8 @@ Plugins can be enabled or disabled instantly via the Plugins menu without restar
 | **Ctrl + 0** | Reset Zoom to 100% |
 | **F8** | Cycle Theme (Dark & Light) |
 | **F11** | Toggle Full Screen |
-| **Ctrl + P** | Print Document |
+| **Ctrl + P** | Print Document (with Print Preview) |
+| **Ctrl + Shift + P** | Open Print Preview |
 | **Ctrl + Shift + S** | Export to Standalone HTML |
 ";
             var doc = _parser.Parse(shortcuts);
@@ -2619,6 +2620,10 @@ Plugins can be enabled or disabled instantly via the Plugins menu without restar
                         break;
                     case Key.H:
                         CopyHtml_Click(this, new RoutedEventArgs());
+                        e.Handled = true;
+                        break;
+                    case Key.P:
+                        PrintPreview_Click(this, new RoutedEventArgs());
                         e.Handled = true;
                         break;
                 }
