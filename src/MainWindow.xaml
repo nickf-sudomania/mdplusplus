@@ -37,6 +37,8 @@
             <MenuItem Header="_File">
                 <MenuItem Header="_New Tab" InputGestureText="Ctrl+N" Click="NewTab_Click" />
                 <MenuItem Header="_Open File..." InputGestureText="Ctrl+O" Click="OpenFile_Click" />
+                <MenuItem Header="Open _Folder..." InputGestureText="Ctrl+Shift+O" Name="OpenFolderMenuItem" Click="OpenFolderDialog_Click" />
+                <MenuItem Header="View Folder in _One Go (Combined)" InputGestureText="Ctrl+Shift+F" Name="OpenFolderCombinedMenuItem" Click="OpenFolderCombined_Click" />
                 <MenuItem Header="_Save" InputGestureText="Ctrl+S" Click="SaveFile_Click" />
                 <MenuItem Header="Save _As..." InputGestureText="Ctrl+Shift+S" Click="SaveAsFile_Click" />
                 <MenuItem Header="Open _Containing Folder" Click="OpenFolder_Click" />
@@ -74,6 +76,7 @@
                 <MenuItem Header="_Reset Zoom" InputGestureText="Ctrl+0" Click="ResetZoom_Click" />
                 <Separator />
                 <MenuItem Header="Toggle _Menu Bar" InputGestureText="Ctrl+M" IsCheckable="True" Name="ToggleMenuBarMenuItem" Click="ToggleMenuBar_Click" />
+                <MenuItem Header="_Folder Explorer" InputGestureText="Ctrl+E" IsCheckable="True" Name="FolderExplorerMenuItem" Click="ToggleFolderExplorer_Click" />
                 <MenuItem Header="Table of _Contents" InputGestureText="Ctrl+T" IsCheckable="True" Name="TocMenuItem" Click="ToggleToc_Click" />
                 <Separator />
                 <MenuItem Header="View Mode">
@@ -157,6 +160,8 @@
                             <MenuItem Header="_File">
                                 <MenuItem Header="_New Tab" InputGestureText="Ctrl+N" Click="NewTab_Click" />
                                 <MenuItem Header="_Open File..." InputGestureText="Ctrl+O" Click="OpenFile_Click" />
+                                <MenuItem Header="Open _Folder..." InputGestureText="Ctrl+Shift+O" Name="HamburgerOpenFolderMenuItem" Click="OpenFolderDialog_Click" />
+                                <MenuItem Header="View Folder in _One Go (Combined)" InputGestureText="Ctrl+Shift+F" Name="HamburgerOpenFolderCombinedMenuItem" Click="OpenFolderCombined_Click" />
                                 <MenuItem Header="_Save" InputGestureText="Ctrl+S" Click="SaveFile_Click" />
                                 <MenuItem Header="Save _As..." InputGestureText="Ctrl+Shift+S" Click="SaveAsFile_Click" />
                                 <MenuItem Header="Open _Containing Folder" Click="OpenFolder_Click" />
@@ -194,6 +199,7 @@
                                 <MenuItem Header="_Reset Zoom" InputGestureText="Ctrl+0" Click="ResetZoom_Click" />
                                 <Separator />
                                 <MenuItem Header="Toggle _Menu Bar" InputGestureText="Ctrl+M" IsCheckable="True" Name="HamburgerViewToggleMenuBarItem" Click="ToggleMenuBar_Click" />
+                                <MenuItem Header="_Folder Explorer" InputGestureText="Ctrl+E" IsCheckable="True" Name="HamburgerFolderExplorerMenuItem" Click="ToggleFolderExplorer_Click" />
                                 <MenuItem Header="Table of _Contents" InputGestureText="Ctrl+T" IsCheckable="True" Name="HamburgerTocMenuItem" Click="ToggleToc_Click" />
                                 <Separator />
                                 <MenuItem Header="View Mode">
@@ -264,10 +270,10 @@
         <!-- 3. Find Bar (Docked) -->
         <controls:FindBar Grid.Row="2" x:Name="DocumentFindBar" Visibility="Collapsed" />
 
-        <!-- 4. Main Workspace (TOC Sidebar + Content Area) -->
+        <!-- 4. Main Workspace (Sidebar + Content Area) -->
         <Grid Grid.Row="3" Name="WorkspaceGrid">
             <Grid.ColumnDefinitions>
-                <!-- Column 0: Table of Contents Sidebar -->
+                <!-- Column 0: Sidebar (Folder Explorer + Table of Contents) -->
                 <ColumnDefinition Width="260" MinWidth="140" MaxWidth="500" Name="SidebarColumn" />
                 <!-- Column 1: Splitter -->
                 <ColumnDefinition Width="5" Name="SidebarSplitterColumn" />
@@ -275,7 +281,7 @@
                 <ColumnDefinition Width="*" />
             </Grid.ColumnDefinitions>
 
-            <!-- Table of Contents Sidebar -->
+            <!-- Sidebar (Folder Explorer & Table of Contents) -->
             <Border Grid.Column="0" Name="SidebarBorder" Background="{DynamicResource SidebarBackgroundBrush}" BorderThickness="0,0,1,0" BorderBrush="{DynamicResource BorderBrush}">
                 <Grid>
                     <Grid.RowDefinitions>
@@ -283,15 +289,32 @@
                         <RowDefinition Height="*" />
                     </Grid.RowDefinitions>
 
-                    <Border Grid.Row="0" Name="SidebarHeaderBorder" Background="{DynamicResource MenuBackgroundBrush}" Padding="12,0,8,0" BorderThickness="0,0,0,1" BorderBrush="{DynamicResource BorderBrush}">
+                    <Border Grid.Row="0" Name="SidebarHeaderBorder" Background="{DynamicResource MenuBackgroundBrush}" Padding="6,0,6,0" BorderThickness="0,0,0,1" BorderBrush="{DynamicResource BorderBrush}">
                         <Grid VerticalAlignment="Center">
-                            <TextBlock Name="SidebarHeaderTitle" Text="TABLE OF CONTENTS" FontWeight="SemiBold" FontSize="11" Foreground="{DynamicResource MutedForegroundBrush}" VerticalAlignment="Center"/>
-                            <Button Name="SidebarCloseButton" Content="✕" Width="20" Height="20" HorizontalAlignment="Right" 
-                                    Click="CloseSidebar_Click" ToolTip="Hide Outline (Ctrl+T)"
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*" />
+                                <ColumnDefinition Width="Auto" />
+                            </Grid.ColumnDefinitions>
+
+                            <StackPanel Grid.Column="0" Orientation="Horizontal" VerticalAlignment="Center">
+                                <Button Name="SidebarFilesTabButton" Content="📁 FILES" Padding="8,4,8,4" Margin="0,0,2,0"
+                                        Click="SidebarFilesTab_Click" ToolTip="Folder Explorer (Ctrl+E)"
+                                        Background="Transparent" Foreground="{DynamicResource MutedForegroundBrush}"
+                                        BorderThickness="0" FontWeight="SemiBold" FontSize="11" Cursor="Hand" />
+                                <Button Name="SidebarOutlineTabButton" Content="📑 OUTLINE" Padding="8,4,8,4" Margin="0,0,4,0"
+                                        Click="SidebarOutlineTab_Click" ToolTip="Table of Contents (Ctrl+T)"
+                                        Background="Transparent" Foreground="{DynamicResource ForegroundBrush}"
+                                        BorderThickness="0" FontWeight="SemiBold" FontSize="11" Cursor="Hand" />
+                                <TextBlock Name="SidebarHeaderTitle" Text="TABLE OF CONTENTS" Visibility="Collapsed" FontWeight="SemiBold" FontSize="11" Foreground="{DynamicResource MutedForegroundBrush}" VerticalAlignment="Center"/>
+                            </StackPanel>
+
+                            <Button Grid.Column="1" Name="SidebarCloseButton" Content="✕" Width="20" Height="20" HorizontalAlignment="Right" 
+                                    Click="CloseSidebar_Click" ToolTip="Hide Sidebar (Ctrl+T / Ctrl+E)"
                                     Background="Transparent" Foreground="{DynamicResource MutedForegroundBrush}" BorderThickness="0" Cursor="Hand"/>
                         </Grid>
                     </Border>
 
+                    <!-- Mode 1: Table of Contents List -->
                     <ListBox Grid.Row="1" Name="TocListBox" Background="Transparent" BorderThickness="0"
                              Foreground="{DynamicResource ForegroundBrush}"
                              ScrollViewer.HorizontalScrollBarVisibility="Disabled"
@@ -347,10 +370,181 @@
                             </DataTemplate>
                         </ListBox.ItemTemplate>
                     </ListBox>
+
+                    <!-- Mode 2: Folder Explorer View -->
+                    <Grid Grid.Row="1" Name="FolderExplorerPanel" Visibility="Collapsed">
+                        <Grid.RowDefinitions>
+                            <!-- Row 0: Active Folder Header & Navigation Buttons -->
+                            <RowDefinition Height="Auto" />
+                            <!-- Row 1: Combined View ("See in One Go") & Open All Actions -->
+                            <RowDefinition Height="Auto" />
+                            <!-- Row 2: Search/Filter Bar -->
+                            <RowDefinition Height="Auto" />
+                            <!-- Row 3: Virtualized File Tree List -->
+                            <RowDefinition Height="*" />
+                        </Grid.RowDefinitions>
+
+                        <!-- Folder Header Bar -->
+                        <Border Grid.Row="0" Name="FolderToolbarBorder" Padding="8,6,6,6" BorderThickness="0,0,0,1" BorderBrush="{DynamicResource BorderBrush}">
+                            <Grid>
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="Auto" />
+                                </Grid.ColumnDefinitions>
+
+                                <TextBlock Grid.Column="0" Name="FolderCurrentNameText" Text="No folder open"
+                                           FontWeight="SemiBold" FontSize="12" VerticalAlignment="Center"
+                                           TextTrimming="CharacterEllipsis"
+                                           Foreground="{DynamicResource HeadingForegroundBrush}" />
+
+                                <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center">
+                                    <Button Name="FolderPrevFileButton" Content="↑" Width="22" Height="22" Margin="1,0,1,0"
+                                            Click="FolderPrevFile_Click" ToolTip="Previous File in Folder (Alt+Up)"
+                                            Background="Transparent" Foreground="{DynamicResource ForegroundBrush}" BorderThickness="0" Cursor="Hand" />
+                                    <Button Name="FolderNextFileButton" Content="↓" Width="22" Height="22" Margin="1,0,1,0"
+                                            Click="FolderNextFile_Click" ToolTip="Next File in Folder (Alt+Down)"
+                                            Background="Transparent" Foreground="{DynamicResource ForegroundBrush}" BorderThickness="0" Cursor="Hand" />
+                                    <Button Name="FolderRefreshButton" Content="↻" Width="22" Height="22" Margin="1,0,1,0"
+                                            Click="FolderRefresh_Click" ToolTip="Refresh Folder"
+                                            Background="Transparent" Foreground="{DynamicResource ForegroundBrush}" BorderThickness="0" Cursor="Hand" />
+                                    <Button Name="FolderBrowseButton" Content="📂" Width="24" Height="22" Margin="1,0,0,0"
+                                            Click="OpenFolderDialog_Click" ToolTip="Open Folder... (Ctrl+Shift+O)"
+                                            Background="Transparent" Foreground="{DynamicResource AccentBrush}" BorderThickness="0" Cursor="Hand" />
+                                </StackPanel>
+                            </Grid>
+                        </Border>
+
+                        <!-- "See It In One Go" Combined View & Open All Bar -->
+                        <Border Grid.Row="1" Name="FolderQuickActionsBorder" Padding="6,4,6,4" BorderThickness="0,0,0,1" BorderBrush="{DynamicResource BorderBrush}">
+                            <Grid>
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="Auto" />
+                                </Grid.ColumnDefinitions>
+
+                                <Button Grid.Column="0" Name="FolderCombinedViewButton" Content="📖 See All in One Go"
+                                        Height="24" Padding="6,2,6,2" Margin="0,0,4,0"
+                                        Click="OpenFolderCombined_Click"
+                                        ToolTip="Render and browse all files in this folder together in one continuous view (Ctrl+Shift+F)"
+                                        Background="{DynamicResource CodeBackgroundBrush}"
+                                        Foreground="{DynamicResource ForegroundBrush}"
+                                        BorderBrush="{DynamicResource BorderBrush}" BorderThickness="1"
+                                        FontSize="11" FontWeight="SemiBold" Cursor="Hand" />
+
+                                <Button Grid.Column="1" Name="FolderOpenAllTabsButton" Content="📑 Open Tabs"
+                                        Height="24" Padding="6,2,6,2"
+                                        Click="OpenAllFolderFilesInTabs_Click"
+                                        ToolTip="Open files from this folder in separate tabs"
+                                        Background="{DynamicResource CodeBackgroundBrush}"
+                                        Foreground="{DynamicResource ForegroundBrush}"
+                                        BorderBrush="{DynamicResource BorderBrush}" BorderThickness="1"
+                                        FontSize="11" Cursor="Hand" />
+                            </Grid>
+                        </Border>
+
+                        <!-- Filter Box & MD-Only Toggle -->
+                        <Border Grid.Row="2" Name="FolderFilterBorder" Padding="6,4,6,4" BorderThickness="0,0,0,1" BorderBrush="{DynamicResource BorderBrush}">
+                            <Grid>
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="Auto" />
+                                </Grid.ColumnDefinitions>
+
+                                <TextBox Grid.Column="0" Name="FolderFilterTextBox" Height="22" Padding="4,2,4,2"
+                                         FontSize="12" VerticalContentAlignment="Center"
+                                         Background="{DynamicResource DocumentBackgroundBrush}"
+                                         Foreground="{DynamicResource ForegroundBrush}"
+                                         CaretBrush="{DynamicResource ForegroundBrush}"
+                                         BorderBrush="{DynamicResource BorderBrush}" BorderThickness="1"
+                                         ToolTip="Filter files in folder by name..."
+                                         TextChanged="FolderFilterTextBox_TextChanged" />
+
+                                <CheckBox Grid.Column="1" Name="FolderMdOnlyCheckBox" Content="MD only"
+                                          Margin="6,0,0,0" VerticalAlignment="Center" FontSize="11"
+                                          Foreground="{DynamicResource MutedForegroundBrush}"
+                                          ToolTip="Show only Markdown (.md) files"
+                                          Checked="FolderMdOnlyCheckBox_Changed"
+                                          Unchecked="FolderMdOnlyCheckBox_Changed" />
+                            </Grid>
+                        </Border>
+
+                        <!-- Folder Files ListBox -->
+                        <ListBox Grid.Row="3" Name="FolderFilesListBox" Background="Transparent" BorderThickness="0"
+                                 Foreground="{DynamicResource ForegroundBrush}"
+                                 ScrollViewer.HorizontalScrollBarVisibility="Disabled"
+                                 PreviewMouseLeftButtonUp="FolderFilesListBox_PreviewMouseLeftButtonUp"
+                                 KeyDown="FolderFilesListBox_KeyDown">
+                            <ListBox.ContextMenu>
+                                <ContextMenu Name="FolderItemContextMenu">
+                                    <MenuItem Header="_Open" Click="FolderItemOpen_Click" />
+                                    <MenuItem Header="Open in _New Tab" Click="FolderItemOpenNewTab_Click" />
+                                    <Separator />
+                                    <MenuItem Header="View Folder in _One Go (Combined)" Click="OpenFolderCombined_Click" />
+                                    <MenuItem Header="Reveal in _File Explorer" Click="FolderItemRevealExplorer_Click" />
+                                    <MenuItem Header="_Copy Path" Click="FolderItemCopyPath_Click" />
+                                </ContextMenu>
+                            </ListBox.ContextMenu>
+                            <ListBox.ItemContainerStyle>
+                                <Style TargetType="{x:Type ListBoxItem}">
+                                    <Setter Property="Background" Value="Transparent"/>
+                                    <Setter Property="BorderThickness" Value="0"/>
+                                    <Setter Property="Padding" Value="6,4,6,4"/>
+                                    <Setter Property="Margin" Value="2,1,2,1"/>
+                                    <Setter Property="Cursor" Value="Hand"/>
+                                    <Setter Property="Template">
+                                        <Setter.Value>
+                                            <ControlTemplate TargetType="{x:Type ListBoxItem}">
+                                                <Border x:Name="FolderItemBorder" Background="{TemplateBinding Background}"
+                                                        BorderThickness="0" CornerRadius="3"
+                                                        Padding="{TemplateBinding Padding}" SnapsToDevicePixels="True">
+                                                    <ContentPresenter SnapsToDevicePixels="True"/>
+                                                </Border>
+                                                <ControlTemplate.Triggers>
+                                                    <Trigger Property="IsMouseOver" Value="True">
+                                                        <Setter TargetName="FolderItemBorder" Property="Background" Value="{DynamicResource MenuHoverBackgroundBrush}"/>
+                                                    </Trigger>
+                                                    <Trigger Property="IsSelected" Value="True">
+                                                        <Setter TargetName="FolderItemBorder" Property="Background" Value="{DynamicResource SelectionBackgroundBrush}"/>
+                                                    </Trigger>
+                                                </ControlTemplate.Triggers>
+                                            </ControlTemplate>
+                                        </Setter.Value>
+                                    </Setter>
+                                </Style>
+                            </ListBox.ItemContainerStyle>
+                            <ListBox.ItemTemplate>
+                                <DataTemplate DataType="{x:Type models:FolderNodeItem}">
+                                    <Grid Margin="{Binding IndentMargin}" ToolTip="{Binding RelativePath}">
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="Auto" />
+                                            <ColumnDefinition Width="Auto" />
+                                            <ColumnDefinition Width="*" />
+                                        </Grid.ColumnDefinitions>
+
+                                        <TextBlock Grid.Column="0" Text="{Binding ExpanderGlyph}" Width="12"
+                                                   FontSize="11" VerticalAlignment="Center"
+                                                   Foreground="{DynamicResource MutedForegroundBrush}" />
+
+                                        <Border Grid.Column="1" Background="{DynamicResource CodeBackgroundBrush}"
+                                                BorderBrush="{DynamicResource BorderBrush}" BorderThickness="1"
+                                                CornerRadius="2" Padding="3,0,3,0" Margin="0,0,6,0" VerticalAlignment="Center">
+                                            <TextBlock Text="{Binding BadgeText}" FontSize="9" FontWeight="Bold"
+                                                       Foreground="{DynamicResource AccentBrush}" />
+                                        </Border>
+
+                                        <TextBlock Grid.Column="2" Text="{Binding Name}" FontSize="12.5"
+                                                   FontWeight="{Binding ItemFontWeight}"
+                                                   TextTrimming="CharacterEllipsis" VerticalAlignment="Center"
+                                                   Foreground="{DynamicResource ForegroundBrush}" />
+                                    </Grid>
+                                </DataTemplate>
+                            </ListBox.ItemTemplate>
+                        </ListBox>
+                    </Grid>
                 </Grid>
             </Border>
 
-            <!-- GridSplitter between TOC and Document -->
+            <!-- GridSplitter between Sidebar and Document -->
             <GridSplitter Grid.Column="1" Name="SidebarSplitter" Width="5" HorizontalAlignment="Stretch" Background="{DynamicResource BorderBrush}" Cursor="SizeWE" />
 
             <!-- Document Content Area (Split between Rendered and Raw views) -->
@@ -430,12 +624,16 @@
                         <Button Content="📂 Open Markdown File... (Ctrl+O)" Height="38" Padding="20,0,20,0" FontSize="14" 
                                 Margin="0,0,0,8" Click="OpenFile_Click" Cursor="Hand"
                                 Background="#0969da" Foreground="#ffffff" BorderThickness="0" FontWeight="SemiBold"/>
+
+                        <Button Name="WelcomeOpenFolderButton" Content="📁 Open Folder View... (Ctrl+Shift+O)" Height="36" Padding="20,0,20,0" FontSize="13.5" 
+                                Margin="0,0,0,8" Click="OpenFolderDialog_Click" Cursor="Hand"
+                                Background="#1f6feb" Foreground="#ffffff" BorderThickness="0" FontWeight="SemiBold"/>
                         
                         <Button Content="➕ New Document (Ctrl+N)" Height="34" Padding="20,0,20,0" FontSize="13" 
                                 Margin="0,0,0,12" Click="NewTab_Click" Cursor="Hand"
                                 Background="#21262d" Foreground="#ffffff" BorderThickness="1" BorderBrush="#30363d" FontWeight="SemiBold"/>
                         
-                        <TextBlock Text="Or drag and drop any .md file here" FontSize="13" Foreground="#666666" HorizontalAlignment="Center" Margin="0,10,0,0"/>
+                        <TextBlock Text="Or drag and drop any file or folder here" FontSize="13" Foreground="#666666" HorizontalAlignment="Center" Margin="0,10,0,0"/>
                     </StackPanel>
                 </Border>
             </Grid>

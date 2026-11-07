@@ -21,6 +21,14 @@ namespace MDPlus.Models
 
         public bool ShowMenuBar { get; set; } = false;
         public bool ShowToc { get; set; } = true;
+
+        [JsonConverter(typeof(JsonStringEnumConverter))]
+        public SidebarMode ActiveSidebarMode { get; set; } = SidebarMode.Outline;
+
+        public string? LastOpenedFolder { get; set; }
+        public bool FolderFilterMarkdownOnly { get; set; } = false;
+        public bool AutoTrackActiveFileFolder { get; set; } = true;
+
         public bool ShowLineNumbers { get; set; } = true;
         public bool AutoReload { get; set; } = true;
         public bool WordWrap { get; set; } = true;

@@ -39,6 +39,13 @@ namespace MDPlus
         private DateTime _lastHamburgerClosedTime = DateTime.MinValue;
         private readonly UpdateService _updateService = new UpdateService();
         private ScrollViewer? _csvScrollViewer;
+        private string? _currentFolderPath;
+        private List<FolderNodeItem> _currentFolderTree = new List<FolderNodeItem>();
+        private SidebarMode _sidebarMode = SidebarMode.Outline;
+        private bool _suppressFolderFilterEvents = false;
+
+        public string? CurrentFolderPath => _currentFolderPath;
+        public SidebarMode CurrentSidebarMode => _sidebarMode;
 
         private enum EditSource
         {
@@ -100,6 +107,11 @@ namespace MDPlus
 
             TocMenuItem.IsChecked = _settings.ShowToc;
             if (HamburgerTocMenuItem != null) HamburgerTocMenuItem.IsChecked = _settings.ShowToc;
+            _sidebarMode = _settings.ActiveSidebarMode;
+            _suppressFolderFilterEvents = true;
+            if (FolderMdOnlyCheckBox != null) FolderMdOnlyCheckBox.IsChecked = _settings.FolderFilterMarkdownOnly;
+            _suppressFolderFilterEvents = false;
+            SetSidebarMode(_sidebarMode, ensureVisible: false);
             SetSidebarVisibility(_settings.ShowToc);
 
             WordWrapMenuItem.IsChecked = _settings.WordWrap;
@@ -143,6 +155,8 @@ namespace MDPlus
                 return;
             }
 
+            string? cliFolder = App.ResolveStartupFolder(_settings, args, cliOnly: true);
+            string? restoredFolder = App.ResolveStartupFolder(_settings, args, cliOnly: false);
             var startupFiles = App.ResolveStartupFiles(_settings, args);
 
             if (startupFiles.Count > 0)
@@ -174,6 +188,16 @@ namespace MDPlus
                 }
 
                 SaveSessionState();
+            }
+
+            if (!string.IsNullOrEmpty(cliFolder))
+            {
+                OpenFolderInWorkspace(cliFolder, activateSidebar: true, openFirstFile: !loadedAny);
+                loadedAny = true;
+            }
+            else if (!string.IsNullOrEmpty(restoredFolder))
+            {
+                OpenFolderInWorkspace(restoredFolder, activateSidebar: false, openFirstFile: false);
             }
 
             if (!loadedAny)
@@ -575,6 +599,7 @@ Plugins can be enabled or disabled instantly via the Plugins menu without restar
                 CsvDataGrid.Visibility = Visibility.Collapsed;
                 RawMarkdownTextBox.Text = string.Empty;
                 TocListBox.ItemsSource = null;
+                RefreshFolderVisibleList();
                 Title = $"MDPlus v{UpdateService.GetCurrentVersion().TrimStart('v', 'V')}";
                 UpdateStatusBar();
                 RebuildTabStrip();
@@ -624,6 +649,11 @@ Plugins can be enabled or disabled instantly via the Plugins menu without restar
             if (!string.IsNullOrEmpty(tab.FilePath))
             {
                 _settings.ActiveFile = tab.FilePath;
+                SyncFolderWithActiveFile(tab.FilePath);
+            }
+            else
+            {
+                RefreshFolderVisibleList();
             }
             UpdateStatusBar();
 
@@ -1229,6 +1259,7 @@ Plugins can be enabled or disabled instantly via the Plugins menu without restar
                 SidebarSplitter.Visibility = Visibility.Visible;
                 TocMenuItem.IsChecked = true;
                 if (HamburgerTocMenuItem != null) HamburgerTocMenuItem.IsChecked = true;
+                UpdateSidebarModeUI();
             }
             else
             {
@@ -1238,6 +1269,7 @@ Plugins can be enabled or disabled instantly via the Plugins menu without restar
                 SidebarSplitter.Visibility = Visibility.Collapsed;
                 TocMenuItem.IsChecked = false;
                 if (HamburgerTocMenuItem != null) HamburgerTocMenuItem.IsChecked = false;
+                UpdateSidebarModeUI();
             }
         }
 
@@ -1294,6 +1326,7 @@ Plugins can be enabled or disabled instantly via the Plugins menu without restar
 
             ApplyThemeToCsvGrid(palette);
             DocumentFindBar.ApplyTheme(isDark);
+            ApplyThemeToFolderExplorer(palette);
             UpdateThemeMenuChecks();
 
             ReRenderAllTabs();
@@ -1984,8 +2017,605 @@ Plugins can be enabled or disabled instantly via the Plugins menu without restar
         private void ToggleToc_Click(object sender, RoutedEventArgs e)
         {
             bool isVisible = SidebarBorder.Visibility == Visibility.Visible;
+            if (isVisible && _sidebarMode != SidebarMode.Outline)
+            {
+                SetSidebarMode(SidebarMode.Outline, ensureVisible: true);
+                return;
+            }
+            SetSidebarMode(SidebarMode.Outline, ensureVisible: false);
             SetSidebarVisibility(!isVisible);
             _settings.ShowToc = !isVisible;
+        }
+
+        private void ToggleFolderExplorer_Click(object sender, RoutedEventArgs e)
+        {
+            bool isVisible = SidebarBorder.Visibility == Visibility.Visible;
+            if (isVisible && _sidebarMode == SidebarMode.Files)
+            {
+                SetSidebarVisibility(false);
+                _settings.ShowToc = false;
+                _settings.Save();
+            }
+            else
+            {
+                if (string.IsNullOrEmpty(_currentFolderPath) && _activeTab != null && !string.IsNullOrEmpty(_activeTab.FilePath))
+                {
+                    SyncFolderWithActiveFile(_activeTab.FilePath);
+                }
+                SetSidebarMode(SidebarMode.Files, ensureVisible: true);
+            }
+        }
+
+        private void SidebarFilesTab_Click(object sender, RoutedEventArgs e)
+        {
+            if (string.IsNullOrEmpty(_currentFolderPath) && _activeTab != null && !string.IsNullOrEmpty(_activeTab.FilePath))
+            {
+                SyncFolderWithActiveFile(_activeTab.FilePath);
+            }
+            SetSidebarMode(SidebarMode.Files, ensureVisible: true);
+        }
+
+        private void SidebarOutlineTab_Click(object sender, RoutedEventArgs e)
+        {
+            SetSidebarMode(SidebarMode.Outline, ensureVisible: true);
+        }
+
+        public void SetSidebarMode(SidebarMode mode, bool ensureVisible = true)
+        {
+            _sidebarMode = mode;
+            _settings.ActiveSidebarMode = mode;
+
+            if (ensureVisible)
+            {
+                SetSidebarVisibility(true);
+                _settings.ShowToc = true;
+            }
+            else
+            {
+                UpdateSidebarModeUI();
+            }
+
+            _settings.Save();
+        }
+
+        private void UpdateSidebarModeUI()
+        {
+            bool isVisible = SidebarBorder.Visibility == Visibility.Visible;
+            bool isFiles = _sidebarMode == SidebarMode.Files;
+
+            if (TocListBox != null)
+            {
+                TocListBox.Visibility = isFiles ? Visibility.Collapsed : Visibility.Visible;
+            }
+            if (FolderExplorerPanel != null)
+            {
+                FolderExplorerPanel.Visibility = isFiles ? Visibility.Visible : Visibility.Collapsed;
+            }
+
+            if (TocMenuItem != null) TocMenuItem.IsChecked = isVisible && !isFiles;
+            if (HamburgerTocMenuItem != null) HamburgerTocMenuItem.IsChecked = isVisible && !isFiles;
+            if (FolderExplorerMenuItem != null) FolderExplorerMenuItem.IsChecked = isVisible && isFiles;
+            if (HamburgerFolderExplorerMenuItem != null) HamburgerFolderExplorerMenuItem.IsChecked = isVisible && isFiles;
+
+            if (SidebarCloseButton != null)
+            {
+                SidebarCloseButton.ToolTip = isFiles ? "Hide Folder Explorer (Ctrl+E)" : "Hide Outline (Ctrl+T)";
+            }
+
+            var palette = ThemeManager.Instance.CurrentPalette;
+            if (SidebarFilesTabButton != null)
+            {
+                SidebarFilesTabButton.Foreground = isFiles ? palette.HeadingFg : palette.MutedFg;
+                SidebarFilesTabButton.Background = isFiles ? palette.SelectionBg : Brushes.Transparent;
+            }
+            if (SidebarOutlineTabButton != null)
+            {
+                SidebarOutlineTabButton.Foreground = !isFiles ? palette.HeadingFg : palette.MutedFg;
+                SidebarOutlineTabButton.Background = !isFiles ? palette.SelectionBg : Brushes.Transparent;
+            }
+        }
+
+        private void ApplyThemeToFolderExplorer(ThemePalette palette)
+        {
+            UpdateSidebarModeUI();
+
+            if (FolderToolbarBorder != null)
+            {
+                FolderToolbarBorder.BorderBrush = palette.Border;
+                FolderToolbarBorder.Background = palette.SidebarBg;
+            }
+            if (FolderQuickActionsBorder != null)
+            {
+                FolderQuickActionsBorder.BorderBrush = palette.Border;
+                FolderQuickActionsBorder.Background = palette.SidebarBg;
+            }
+            if (FolderFilterBorder != null)
+            {
+                FolderFilterBorder.BorderBrush = palette.Border;
+                FolderFilterBorder.Background = palette.SidebarBg;
+            }
+            if (FolderCurrentNameText != null)
+            {
+                FolderCurrentNameText.Foreground = palette.HeadingFg;
+            }
+            if (FolderFilterTextBox != null)
+            {
+                FolderFilterTextBox.Background = palette.EditorBg;
+                FolderFilterTextBox.Foreground = palette.EditorFg;
+                FolderFilterTextBox.CaretBrush = palette.EditorFg;
+                FolderFilterTextBox.BorderBrush = palette.Border;
+            }
+            if (FolderMdOnlyCheckBox != null)
+            {
+                FolderMdOnlyCheckBox.Foreground = palette.MutedFg;
+            }
+            if (FolderCombinedViewButton != null)
+            {
+                FolderCombinedViewButton.Background = palette.CodeBg;
+                FolderCombinedViewButton.Foreground = palette.EditorFg;
+                FolderCombinedViewButton.BorderBrush = palette.Border;
+            }
+            if (FolderOpenAllTabsButton != null)
+            {
+                FolderOpenAllTabsButton.Background = palette.CodeBg;
+                FolderOpenAllTabsButton.Foreground = palette.EditorFg;
+                FolderOpenAllTabsButton.BorderBrush = palette.Border;
+            }
+        }
+
+        public void OpenFolderInWorkspace(string folderPath, bool activateSidebar = true, bool openFirstFile = false, bool openCombined = false)
+        {
+            if (string.IsNullOrWhiteSpace(folderPath) || !Directory.Exists(folderPath))
+            {
+                return;
+            }
+
+            string fullFolder;
+            try
+            {
+                fullFolder = Path.GetFullPath(folderPath);
+            }
+            catch
+            {
+                return;
+            }
+
+            _currentFolderPath = fullFolder;
+            _settings.LastOpenedFolder = fullFolder;
+
+            string folderName = Path.GetFileName(fullFolder.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar));
+            if (string.IsNullOrEmpty(folderName))
+            {
+                folderName = fullFolder;
+            }
+
+            if (FolderCurrentNameText != null)
+            {
+                FolderCurrentNameText.Text = folderName;
+                FolderCurrentNameText.ToolTip = fullFolder;
+            }
+
+            bool mdOnly = _settings.FolderFilterMarkdownOnly;
+            _currentFolderTree = FolderService.ScanFolderTree(fullFolder, markdownOnly: mdOnly);
+
+            if (_activeTab != null && !string.IsNullOrEmpty(_activeTab.FilePath))
+            {
+                FolderService.ExpandToFile(_currentFolderTree, _activeTab.FilePath);
+            }
+
+            RefreshFolderVisibleList();
+
+            if (activateSidebar)
+            {
+                SetSidebarMode(SidebarMode.Files, ensureVisible: true);
+            }
+            else
+            {
+                _settings.Save();
+            }
+
+            if (openCombined)
+            {
+                OpenCombinedFolderView(fullFolder);
+            }
+            else if (openFirstFile)
+            {
+                var allFiles = FolderService.GetAllFilePaths(_currentFolderTree);
+                if (allFiles.Count > 0)
+                {
+                    // Prefer README.md or welcome.md if present in the root, otherwise open the first file
+                    string? preferred = allFiles.FirstOrDefault(f =>
+                        string.Equals(Path.GetDirectoryName(f), fullFolder, StringComparison.OrdinalIgnoreCase) &&
+                        (string.Equals(Path.GetFileName(f), "README.md", StringComparison.OrdinalIgnoreCase) ||
+                         string.Equals(Path.GetFileName(f), "index.md", StringComparison.OrdinalIgnoreCase) ||
+                         string.Equals(Path.GetFileName(f), "welcome.md", StringComparison.OrdinalIgnoreCase)));
+
+                    OpenDocument(preferred ?? allFiles[0], activate: true, saveSession: true);
+                }
+            }
+        }
+
+        private void SyncFolderWithActiveFile(string? filePath)
+        {
+            if (string.IsNullOrWhiteSpace(filePath) || !_settings.AutoTrackActiveFileFolder)
+            {
+                RefreshFolderVisibleList();
+                return;
+            }
+
+            string? parentDir;
+            try
+            {
+                parentDir = Path.GetDirectoryName(Path.GetFullPath(filePath));
+            }
+            catch
+            {
+                parentDir = null;
+            }
+
+            if (string.IsNullOrEmpty(parentDir) || !Directory.Exists(parentDir))
+            {
+                RefreshFolderVisibleList();
+                return;
+            }
+
+            // If a workspace folder is already open and contains this file, keep the root folder and expand to the file
+            if (!string.IsNullOrEmpty(_currentFolderPath) &&
+                Directory.Exists(_currentFolderPath) &&
+                IsSubPathOf(_currentFolderPath, filePath))
+            {
+                FolderService.ExpandToFile(_currentFolderTree, filePath);
+                RefreshFolderVisibleList();
+                return;
+            }
+
+            // Otherwise load the active file's parent directory into the Folder Explorer
+            OpenFolderInWorkspace(parentDir, activateSidebar: false, openFirstFile: false);
+        }
+
+        private static bool IsSubPathOf(string baseDirPath, string candidatePath)
+        {
+            try
+            {
+                string fullBase = Path.GetFullPath(baseDirPath).TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar) + Path.DirectorySeparatorChar;
+                string fullCandidate = Path.GetFullPath(candidatePath);
+                return fullCandidate.StartsWith(fullBase, StringComparison.OrdinalIgnoreCase);
+            }
+            catch
+            {
+                return false;
+            }
+        }
+
+        private void RefreshFolderVisibleList()
+        {
+            if (FolderFilesListBox == null) return;
+
+            string filter = FolderFilterTextBox?.Text ?? string.Empty;
+            string? activeFile = _activeTab?.FilePath;
+
+            var visibleNodes = FolderService.FlattenVisibleNodes(_currentFolderTree, filter, activeFile);
+            FolderFilesListBox.ItemsSource = visibleNodes;
+
+            var activeNode = visibleNodes.FirstOrDefault(n => n.IsActiveDocument);
+            if (activeNode != null)
+            {
+                FolderFilesListBox.SelectedItem = activeNode;
+                FolderFilesListBox.ScrollIntoView(activeNode);
+            }
+            else
+            {
+                FolderFilesListBox.SelectedItem = null;
+            }
+        }
+
+        public void OpenCombinedFolderView(string? folderPath = null)
+        {
+            string? targetFolder = folderPath ?? _currentFolderPath;
+            if (string.IsNullOrWhiteSpace(targetFolder) && _activeTab != null && !string.IsNullOrEmpty(_activeTab.DirectoryName))
+            {
+                targetFolder = _activeTab.DirectoryName;
+            }
+
+            if (string.IsNullOrWhiteSpace(targetFolder) || !Directory.Exists(targetFolder))
+            {
+                var dlg = new OpenFolderDialog
+                {
+                    Title = "Select Folder to View in One Go"
+                };
+                if (dlg.ShowDialog(this) != true || string.IsNullOrWhiteSpace(dlg.FolderName))
+                {
+                    return;
+                }
+                targetFolder = dlg.FolderName;
+            }
+
+            string fullFolder = Path.GetFullPath(targetFolder);
+            if (!string.Equals(_currentFolderPath, fullFolder, StringComparison.OrdinalIgnoreCase))
+            {
+                OpenFolderInWorkspace(fullFolder, activateSidebar: true, openFirstFile: false);
+            }
+
+            string folderName = Path.GetFileName(fullFolder.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar));
+            if (string.IsNullOrEmpty(folderName))
+            {
+                folderName = fullFolder;
+            }
+
+            bool mdOnly = _settings.FolderFilterMarkdownOnly;
+            var (combinedMd, includedFiles) = FolderService.BuildCombinedFolderMarkdown(fullFolder, markdownOnly: mdOnly, includeSubfolders: true);
+
+            string tabTitle = $"📂 {folderName} ({includedFiles.Count} files)";
+            var doc = _parser.Parse(combinedMd);
+            doc.Title = tabTitle;
+
+            // Reuse existing combined tab for the same folder if already open
+            var existingTab = _tabs.FirstOrDefault(t =>
+                string.IsNullOrEmpty(t.FilePath) &&
+                string.Equals(t.BaseDirectory, fullFolder, StringComparison.OrdinalIgnoreCase));
+
+            if (existingTab != null)
+            {
+                existingTab.Title = tabTitle;
+                existingTab.RawMarkdown = combinedMd;
+                existingTab.Document = doc;
+                existingTab.Headings = ExtractHeadings(doc);
+                RenderDocumentTab(existingTab);
+                existingTab.MarkClean();
+                SetActiveTab(existingTab);
+            }
+            else
+            {
+                var tab = new DocumentTabItem
+                {
+                    FilePath = string.Empty,
+                    BaseDirectory = fullFolder,
+                    Title = tabTitle,
+                    RawMarkdown = combinedMd,
+                    Document = doc,
+                    Headings = ExtractHeadings(doc),
+                    Format = DocumentFormat.Markdown
+                };
+
+                RenderDocumentTab(tab);
+
+                if (_tabs.Count == 1 && string.IsNullOrEmpty(_tabs[0].FilePath) && string.IsNullOrEmpty(_tabs[0].BaseDirectory) && !_tabs[0].IsDirty)
+                {
+                    _tabs[0] = tab;
+                }
+                else
+                {
+                    _tabs.Add(tab);
+                }
+
+                RebuildTabStrip();
+                SetActiveTab(tab);
+            }
+
+            StatusFileText.Text = $"Combined Folder View: {fullFolder} ({includedFiles.Count} files)";
+        }
+
+        public void OpenAllFolderFilesInTabs(string? folderPath = null, int maxTabs = 25)
+        {
+            string? targetFolder = folderPath ?? _currentFolderPath;
+            if (string.IsNullOrWhiteSpace(targetFolder) || !Directory.Exists(targetFolder))
+            {
+                return;
+            }
+
+            var allFiles = FolderService.GetAllFilePaths(_currentFolderTree);
+            if (allFiles.Count == 0) return;
+
+            int count = Math.Min(allFiles.Count, maxTabs);
+            for (int i = 0; i < count; i++)
+            {
+                OpenDocument(allFiles[i], activate: i == 0, saveSession: false, openInNewTab: true);
+            }
+
+            BuildRecentFilesMenu();
+            SaveSessionState();
+        }
+
+        public bool NavigateFolderFile(bool forward)
+        {
+            var allFiles = FolderService.GetAllFilePaths(_currentFolderTree);
+            if (allFiles.Count == 0) return false;
+
+            string? currentFile = _activeTab?.FilePath;
+            int currentIdx = -1;
+            if (!string.IsNullOrEmpty(currentFile))
+            {
+                currentIdx = allFiles.FindIndex(f => string.Equals(f, currentFile, StringComparison.OrdinalIgnoreCase));
+            }
+
+            int nextIdx;
+            if (currentIdx < 0)
+            {
+                nextIdx = forward ? 0 : allFiles.Count - 1;
+            }
+            else
+            {
+                nextIdx = forward
+                    ? (currentIdx + 1) % allFiles.Count
+                    : (currentIdx - 1 + allFiles.Count) % allFiles.Count;
+            }
+
+            OpenDocument(allFiles[nextIdx], activate: true, saveSession: true);
+            return true;
+        }
+
+        private void OpenFolderDialog_Click(object sender, RoutedEventArgs e)
+        {
+            var dlg = new OpenFolderDialog
+            {
+                Title = "Open Folder in MDPlus"
+            };
+
+            if (!string.IsNullOrEmpty(_currentFolderPath) && Directory.Exists(_currentFolderPath))
+            {
+                dlg.InitialDirectory = _currentFolderPath;
+            }
+            else if (_activeTab != null && !string.IsNullOrEmpty(_activeTab.DirectoryName) && Directory.Exists(_activeTab.DirectoryName))
+            {
+                dlg.InitialDirectory = _activeTab.DirectoryName;
+            }
+
+            if (dlg.ShowDialog(this) == true && !string.IsNullOrWhiteSpace(dlg.FolderName))
+            {
+                OpenFolderInWorkspace(dlg.FolderName, activateSidebar: true, openFirstFile: true);
+            }
+        }
+
+        private void OpenFolderCombined_Click(object sender, RoutedEventArgs e)
+        {
+            OpenCombinedFolderView();
+        }
+
+        private void OpenAllFolderFilesInTabs_Click(object sender, RoutedEventArgs e)
+        {
+            if (string.IsNullOrEmpty(_currentFolderPath))
+            {
+                OpenFolderDialog_Click(sender, e);
+            }
+            OpenAllFolderFilesInTabs();
+        }
+
+        private void FolderPrevFile_Click(object sender, RoutedEventArgs e)
+        {
+            NavigateFolderFile(forward: false);
+        }
+
+        private void FolderNextFile_Click(object sender, RoutedEventArgs e)
+        {
+            NavigateFolderFile(forward: true);
+        }
+
+        private void FolderRefresh_Click(object sender, RoutedEventArgs e)
+        {
+            if (!string.IsNullOrEmpty(_currentFolderPath) && Directory.Exists(_currentFolderPath))
+            {
+                OpenFolderInWorkspace(_currentFolderPath, activateSidebar: false, openFirstFile: false);
+            }
+        }
+
+        private void FolderFilterTextBox_TextChanged(object sender, TextChangedEventArgs e)
+        {
+            if (_suppressFolderFilterEvents) return;
+            RefreshFolderVisibleList();
+        }
+
+        private void FolderMdOnlyCheckBox_Changed(object sender, RoutedEventArgs e)
+        {
+            if (_suppressFolderFilterEvents) return;
+            _settings.FolderFilterMarkdownOnly = FolderMdOnlyCheckBox.IsChecked == true;
+            _settings.Save();
+            if (!string.IsNullOrEmpty(_currentFolderPath) && Directory.Exists(_currentFolderPath))
+            {
+                OpenFolderInWorkspace(_currentFolderPath, activateSidebar: false, openFirstFile: false);
+            }
+        }
+
+        private void FolderFilesListBox_PreviewMouseLeftButtonUp(object sender, MouseButtonEventArgs e)
+        {
+            if (e.OriginalSource is DependencyObject dep)
+            {
+                var listBoxItem = FindVisualAncestor<ListBoxItem>(dep);
+                if (listBoxItem?.DataContext is FolderNodeItem node)
+                {
+                    if (node.IsDirectory)
+                    {
+                        node.IsExpanded = !node.IsExpanded;
+                        RefreshFolderVisibleList();
+                    }
+                    else if (!string.IsNullOrEmpty(node.FullPath) && File.Exists(node.FullPath))
+                    {
+                        bool? forceNewTab = Keyboard.Modifiers.HasFlag(ModifierKeys.Control) ? true : null;
+                        OpenDocument(node.FullPath, activate: true, saveSession: true, openInNewTab: forceNewTab);
+                    }
+                }
+            }
+        }
+
+        private void FolderFilesListBox_KeyDown(object sender, KeyEventArgs e)
+        {
+            if (FolderFilesListBox.SelectedItem is FolderNodeItem node)
+            {
+                if (e.Key == Key.Enter || e.Key == Key.Space)
+                {
+                    if (node.IsDirectory)
+                    {
+                        node.IsExpanded = !node.IsExpanded;
+                        RefreshFolderVisibleList();
+                    }
+                    else if (!string.IsNullOrEmpty(node.FullPath) && File.Exists(node.FullPath))
+                    {
+                        OpenDocument(node.FullPath, activate: true, saveSession: true);
+                    }
+                    e.Handled = true;
+                }
+            }
+        }
+
+        private void FolderItemOpen_Click(object sender, RoutedEventArgs e)
+        {
+            if (FolderFilesListBox.SelectedItem is FolderNodeItem node)
+            {
+                if (node.IsDirectory)
+                {
+                    node.IsExpanded = !node.IsExpanded;
+                    RefreshFolderVisibleList();
+                }
+                else if (File.Exists(node.FullPath))
+                {
+                    OpenDocument(node.FullPath, activate: true, saveSession: true);
+                }
+            }
+        }
+
+        private void FolderItemOpenNewTab_Click(object sender, RoutedEventArgs e)
+        {
+            if (FolderFilesListBox.SelectedItem is FolderNodeItem node && !node.IsDirectory && File.Exists(node.FullPath))
+            {
+                OpenDocument(node.FullPath, activate: true, saveSession: true, openInNewTab: true);
+            }
+        }
+
+        private void FolderItemRevealExplorer_Click(object sender, RoutedEventArgs e)
+        {
+            if (FolderFilesListBox.SelectedItem is FolderNodeItem node && !string.IsNullOrEmpty(node.FullPath))
+            {
+                string targetDir = node.IsDirectory ? node.FullPath : (Path.GetDirectoryName(node.FullPath) ?? string.Empty);
+                if (Directory.Exists(targetDir))
+                {
+                    System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo("explorer.exe", targetDir) { UseShellExecute = true });
+                }
+            }
+            else if (!string.IsNullOrEmpty(_currentFolderPath) && Directory.Exists(_currentFolderPath))
+            {
+                System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo("explorer.exe", _currentFolderPath) { UseShellExecute = true });
+            }
+        }
+
+        private void FolderItemCopyPath_Click(object sender, RoutedEventArgs e)
+        {
+            if (FolderFilesListBox.SelectedItem is FolderNodeItem node && !string.IsNullOrEmpty(node.FullPath))
+            {
+                ClipboardHelper.SetText(node.FullPath);
+            }
+            else if (!string.IsNullOrEmpty(_currentFolderPath))
+            {
+                ClipboardHelper.SetText(_currentFolderPath);
+            }
+        }
+
+        private static T? FindVisualAncestor<T>(DependencyObject? current) where T : DependencyObject
+        {
+            while (current != null)
+            {
+                if (current is T match) return match;
+                current = VisualTreeHelper.GetParent(current);
+            }
+            return null;
         }
 
         private void CloseSidebar_Click(object sender, RoutedEventArgs e)
@@ -2255,6 +2885,10 @@ Plugins can be enabled or disabled instantly via the Plugins menu without restar
 | Shortcut | Action |
 | :--- | :--- |
 | **Ctrl + O** | Open Markdown File |
+| **Ctrl + Shift + O** | Open Folder in Folder Explorer |
+| **Ctrl + Shift + F** | View Folder in One Go (Combined View) |
+| **Ctrl + E** | Toggle Folder Explorer Sidebar |
+| **Alt + Up / Down** | Previous / Next File in Folder |
 | **Ctrl + N** | New Document / Open File |
 | **Ctrl + W** | Close Current Tab |
 | **F5** or **Ctrl + R** | Reload Document |
@@ -2508,7 +3142,11 @@ Plugins can be enabled or disabled instantly via the Plugins menu without restar
                 string[] files = (string[])e.Data.GetData(DataFormats.FileDrop);
                 foreach (var file in files)
                 {
-                    if (File.Exists(file))
+                    if (Directory.Exists(file))
+                    {
+                        OpenFolderInWorkspace(file, activateSidebar: true, openFirstFile: true);
+                    }
+                    else if (File.Exists(file))
                     {
                         OpenDocument(file);
                     }
@@ -2565,6 +3203,10 @@ Plugins can be enabled or disabled instantly via the Plugins menu without restar
                         Reload_Click(this, new RoutedEventArgs());
                         e.Handled = true;
                         break;
+                    case Key.E:
+                        ToggleFolderExplorer_Click(this, new RoutedEventArgs());
+                        e.Handled = true;
+                        break;
                     case Key.T:
                         ToggleToc_Click(this, new RoutedEventArgs());
                         e.Handled = true;
@@ -2614,6 +3256,14 @@ Plugins can be enabled or disabled instantly via the Plugins menu without restar
                         SaveAsFile_Click(this, new RoutedEventArgs());
                         e.Handled = true;
                         break;
+                    case Key.O:
+                        OpenFolderDialog_Click(this, new RoutedEventArgs());
+                        e.Handled = true;
+                        break;
+                    case Key.F:
+                        OpenFolderCombined_Click(this, new RoutedEventArgs());
+                        e.Handled = true;
+                        break;
                     case Key.E:
                         ExportHtml_Click(this, new RoutedEventArgs());
                         e.Handled = true;
@@ -2652,6 +3302,24 @@ Plugins can be enabled or disabled instantly via the Plugins menu without restar
                         FindNext_Click(this, new RoutedEventArgs());
                         e.Handled = true;
                         break;
+                }
+            }
+            else if (mods == ModifierKeys.Alt && (e.Key == Key.Up || e.SystemKey == Key.Up))
+            {
+                if (NavigateFolderFile(forward: false))
+                {
+                    _altKeyCandidate = false;
+                    e.Handled = true;
+                    return;
+                }
+            }
+            else if (mods == ModifierKeys.Alt && (e.Key == Key.Down || e.SystemKey == Key.Down))
+            {
+                if (NavigateFolderFile(forward: true))
+                {
+                    _altKeyCandidate = false;
+                    e.Handled = true;
+                    return;
                 }
             }
             else if (mods == ModifierKeys.Shift && e.Key == Key.F3)

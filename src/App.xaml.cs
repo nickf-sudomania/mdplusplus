@@ -158,6 +158,12 @@ namespace MDPlus
             if (Application.Current?.MainWindow is MainWindow mw)
             {
                 var settings = AppSettings.Load();
+                string? folderToOpen = ResolveStartupFolder(settings, incomingArgs, cliOnly: true);
+                if (!string.IsNullOrEmpty(folderToOpen))
+                {
+                    mw.OpenFolderInWorkspace(folderToOpen, activateSidebar: true, openFirstFile: true);
+                }
+
                 var filesToOpen = ResolveStartupFiles(settings, incomingArgs);
 
                 foreach (var file in filesToOpen)
@@ -167,6 +173,64 @@ namespace MDPlus
 
                 mw.RestoreAndActivateWindow();
             }
+        }
+
+        /// <summary>
+        /// Resolves a folder path passed via CLI arguments or restored from the previous session.
+        /// </summary>
+        public static string? ResolveStartupFolder(AppSettings settings, string[]? args = null, bool cliOnly = false)
+        {
+            args ??= StartupArgs;
+
+            if (args != null && args.Length > 0)
+            {
+                bool forceStartFresh = args.Any(a => a.Equals("--fresh", StringComparison.OrdinalIgnoreCase) ||
+                                                     a.Equals("--start-fresh", StringComparison.OrdinalIgnoreCase));
+                if (forceStartFresh)
+                {
+                    return null;
+                }
+
+                foreach (string arg in args)
+                {
+                    if (string.IsNullOrWhiteSpace(arg) || arg.StartsWith("-")) continue;
+                    if (Directory.Exists(arg))
+                    {
+                        try
+                        {
+                            return Path.GetFullPath(arg);
+                        }
+                        catch
+                        {
+                            return arg;
+                        }
+                    }
+                }
+
+                if (cliOnly)
+                {
+                    return null;
+                }
+            }
+
+            if (cliOnly)
+            {
+                return null;
+            }
+
+            if (settings.ResumeSession && !string.IsNullOrWhiteSpace(settings.LastOpenedFolder) && Directory.Exists(settings.LastOpenedFolder))
+            {
+                try
+                {
+                    return Path.GetFullPath(settings.LastOpenedFolder);
+                }
+                catch
+                {
+                    return settings.LastOpenedFolder;
+                }
+            }
+
+            return null;
         }
 
         /// <summary>

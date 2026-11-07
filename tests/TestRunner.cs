@@ -272,6 +272,13 @@ namespace MDPlus.Tests
             RunTest("PrintDocumentBuilder In-Memory XPS Document Generation", TestPrintDocumentBuilderInmemoryXpsGeneration);
             RunTest("PrintDocumentBuilder Multi-Format (CSV, JSON, PlainText) Print Support", TestPrintDocumentBuilderMultiFormat);
 
+            // 29. Folder View & Combined Folder Browsing Tests
+            RunTest("FolderService Tree Scanning, Sorting, Pruning & Format Filtering", TestFolderServiceScanAndFilter);
+            RunTest("FolderService Tree Flattening, Search Filtering & Active File Tracking", TestFolderServiceFlattenAndSearch);
+            RunTest("FolderService Combined Folder View ('See It In One Go') Markdown Generation", TestFolderServiceCombinedViewGeneration);
+            RunTest("Startup Folder Resolution & CLI Directory Routing", TestStartupFolderResolution);
+            RunTest("Folder Explorer UI XAML & Windows Installer Folder Context Menu", TestFolderViewUiAndInstallerIntegration);
+
             sw.Stop();
 
 
@@ -6729,6 +6736,180 @@ Testing in-memory XPS generation for MDPlus Print Preview without disk I/O.
             };
             var textDoc = PrintDocumentBuilder.BuildPrintFlowDocument(textTab, settings);
             Assert(textDoc != null && textDoc.Blocks.Count > 0, "PlainText print FlowDocument must be generated");
+        }
+
+        // 29. Folder View & Combined Folder Browsing Tests
+
+        private static void TestFolderServiceScanAndFilter()
+        {
+            string tempRoot = System.IO.Path.Combine(System.IO.Path.GetTempPath(), "MDPlus_FolderTest_" + Guid.NewGuid().ToString("N"));
+            try
+            {
+                System.IO.Directory.CreateDirectory(tempRoot);
+                System.IO.File.WriteAllText(System.IO.Path.Combine(tempRoot, "b_guide.md"), "# Guide");
+                System.IO.File.WriteAllText(System.IO.Path.Combine(tempRoot, "a_readme.md"), "# Readme");
+                System.IO.File.WriteAllText(System.IO.Path.Combine(tempRoot, "data.csv"), "col1,col2\n1,2");
+                System.IO.File.WriteAllText(System.IO.Path.Combine(tempRoot, "config.json"), "{\"ok\":true}");
+                System.IO.File.WriteAllText(System.IO.Path.Combine(tempRoot, "ignored.exe"), "binary");
+
+                string subWithDoc = System.IO.Path.Combine(tempRoot, "docs");
+                System.IO.Directory.CreateDirectory(subWithDoc);
+                System.IO.File.WriteAllText(System.IO.Path.Combine(subWithDoc, "nested.md"), "## Nested");
+
+                string subEmpty = System.IO.Path.Combine(tempRoot, "empty_dir");
+                System.IO.Directory.CreateDirectory(subEmpty);
+
+                string gitDir = System.IO.Path.Combine(tempRoot, ".git");
+                System.IO.Directory.CreateDirectory(gitDir);
+                System.IO.File.WriteAllText(System.IO.Path.Combine(gitDir, "config.md"), "hidden");
+
+                // 1. All supported files scan
+                var treeAll = FolderService.ScanFolderTree(tempRoot, markdownOnly: false);
+                AssertEqual(5, treeAll.Count, "Root tree count (1 non-empty folder + 4 supported files)");
+                Assert(treeAll[0].IsDirectory && treeAll[0].Name == "docs", "Directories must be sorted before files");
+                AssertEqual("a_readme.md", treeAll[1].Name, "Files must be sorted alphabetically");
+                AssertEqual("b_guide.md", treeAll[2].Name, "Second file must be b_guide.md");
+                AssertEqual("config.json", treeAll[3].Name, "Third file must be config.json");
+                AssertEqual("data.csv", treeAll[4].Name, "Fourth file must be data.csv");
+
+                // 2. Markdown-only scan
+                var treeMdOnly = FolderService.ScanFolderTree(tempRoot, markdownOnly: true);
+                AssertEqual(3, treeMdOnly.Count, "Markdown-only scan must include 1 subfolder + 2 .md files");
+                Assert(treeMdOnly.All(n => n.IsDirectory || n.Format == DocumentFormat.Markdown), "All files in markdownOnly mode must be Markdown");
+            }
+            finally
+            {
+                try { if (System.IO.Directory.Exists(tempRoot)) System.IO.Directory.Delete(tempRoot, true); } catch { }
+            }
+        }
+
+        private static void TestFolderServiceFlattenAndSearch()
+        {
+            string tempRoot = System.IO.Path.Combine(System.IO.Path.GetTempPath(), "MDPlus_FlattenTest_" + Guid.NewGuid().ToString("N"));
+            try
+            {
+                System.IO.Directory.CreateDirectory(tempRoot);
+                string rootFile = System.IO.Path.Combine(tempRoot, "overview.md");
+                System.IO.File.WriteAllText(rootFile, "# Overview");
+
+                string subDir = System.IO.Path.Combine(tempRoot, "guides");
+                System.IO.Directory.CreateDirectory(subDir);
+                string subFile = System.IO.Path.Combine(subDir, "architecture_spec.md");
+                System.IO.File.WriteAllText(subFile, "# Spec");
+
+                var tree = FolderService.ScanFolderTree(tempRoot);
+                AssertEqual(2, tree.Count, "Root should have 1 folder and 1 file");
+
+                // Top-level subfolder is expanded by default -> 3 visible items ('guides', 'architecture_spec.md', 'overview.md')
+                var flatExpanded = FolderService.FlattenVisibleNodes(tree, searchFilter: null, activeFilePath: subFile);
+                AssertEqual(3, flatExpanded.Count, "Expanded tree must flatten to 3 visible nodes");
+                Assert(flatExpanded.Any(n => n.IsActiveDocument && n.Name == "architecture_spec.md"), "Active document must be flagged");
+
+                // Collapse 'guides' folder -> 2 visible items
+                tree[0].IsExpanded = false;
+                var flatCollapsed = FolderService.FlattenVisibleNodes(tree, searchFilter: null, activeFilePath: rootFile);
+                AssertEqual(2, flatCollapsed.Count, "Collapsed folder must hide child nodes when unfiltered");
+
+                // Search filter must find nested file even when folder is collapsed
+                var filtered = FolderService.FlattenVisibleNodes(tree, searchFilter: "arch", activeFilePath: null);
+                Assert(filtered.Any(n => !n.IsDirectory && n.Name == "architecture_spec.md"), "Filter must match nested file across subfolders");
+
+                // ExpandToFile must re-expand collapsed parent folder
+                bool expanded = FolderService.ExpandToFile(tree, subFile);
+                Assert(expanded && tree[0].IsExpanded, "ExpandToFile must expand ancestor directory containing target file");
+            }
+            finally
+            {
+                try { if (System.IO.Directory.Exists(tempRoot)) System.IO.Directory.Delete(tempRoot, true); } catch { }
+            }
+        }
+
+        private static void TestFolderServiceCombinedViewGeneration()
+        {
+            string tempRoot = System.IO.Path.Combine(System.IO.Path.GetTempPath(), "MDPlus_CombinedTest_" + Guid.NewGuid().ToString("N"));
+            try
+            {
+                System.IO.Directory.CreateDirectory(tempRoot);
+                System.IO.File.WriteAllText(System.IO.Path.Combine(tempRoot, "01_intro.md"), "---\ntitle: Intro\n---\n# Welcome Section\nHello world.");
+                System.IO.File.WriteAllText(System.IO.Path.Combine(tempRoot, "02_metrics.csv"), "Metric,Score\nSpeed,100");
+                System.IO.File.WriteAllText(System.IO.Path.Combine(tempRoot, "03_settings.json"), "{\n  \"mode\": \"fast\"\n}");
+
+                var (combinedMd, includedFiles) = FolderService.BuildCombinedFolderMarkdown(tempRoot, markdownOnly: false, includeSubfolders: true);
+                AssertEqual(3, includedFiles.Count, "Combined view must include all 3 supported files");
+                Assert(combinedMd.Contains("# 📂 Folder View:"), "Combined Markdown must include top-level folder header");
+                Assert(combinedMd.Contains("# 📄 01_intro.md"), "Combined Markdown must include file H1 section for 01_intro.md");
+                Assert(combinedMd.Contains("## Welcome Section"), "Internal H1 inside Markdown file must be demoted to H2 under the file heading");
+                Assert(!combinedMd.Contains("title: Intro"), "Leading YAML frontmatter inside combined file must be stripped cleanly");
+                Assert(combinedMd.Contains("```csv"), "CSV file must be rendered in a csv fenced block in combined view");
+                Assert(combinedMd.Contains("```json"), "JSON file must be rendered in a json fenced block in combined view");
+
+                // Verify that the combined Markdown parses cleanly into a MarkdownDocument with headings for TOC outline
+                var parser = new MarkdownParser();
+                var parsed = parser.Parse(combinedMd);
+                Assert(parsed.Blocks.OfType<HeadingBlock>().Count() >= 5, "Combined view must produce navigable headings for the Outline sidebar");
+            }
+            finally
+            {
+                try { if (System.IO.Directory.Exists(tempRoot)) System.IO.Directory.Delete(tempRoot, true); } catch { }
+            }
+        }
+
+        private static void TestStartupFolderResolution()
+        {
+            string sampleDir = System.IO.Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "sample_docs");
+            Assert(System.IO.Directory.Exists(sampleDir), "sample_docs directory must exist");
+
+            var settings = new AppSettings
+            {
+                ResumeSession = true,
+                LastOpenedFolder = sampleDir
+            };
+
+            // 1. CLI directory argument resolves directly
+            string? cliDir = App.ResolveStartupFolder(settings, new[] { sampleDir }, cliOnly: true);
+            AssertEqual(System.IO.Path.GetFullPath(sampleDir), cliDir, "CLI directory argument must be resolved");
+
+            // 2. --start-fresh suppresses folder resolution
+            string? freshDir = App.ResolveStartupFolder(settings, new[] { "--start-fresh" }, cliOnly: false);
+            AssertEqual(null, freshDir, "--start-fresh must return null folder");
+
+            // 3. Session restoration restores LastOpenedFolder when no CLI args are present
+            string? restoredDir = App.ResolveStartupFolder(settings, Array.Empty<string>(), cliOnly: false);
+            AssertEqual(System.IO.Path.GetFullPath(sampleDir), restoredDir, "ResumeSession must restore LastOpenedFolder");
+        }
+
+        private static void TestFolderViewUiAndInstallerIntegration()
+        {
+            string[] possibleXamlPaths = new[]
+            {
+                System.IO.Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "..", "..", "..", "..", "src", "MainWindow.xaml"),
+                System.IO.Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "..", "..", "..", "src", "MainWindow.xaml"),
+                System.IO.Path.Combine(Environment.CurrentDirectory, "src", "MainWindow.xaml")
+            };
+            string xamlPath = possibleXamlPaths.FirstOrDefault(p => System.IO.File.Exists(p)) ?? string.Empty;
+            Assert(!string.IsNullOrEmpty(xamlPath), "MainWindow.xaml must exist");
+            string xaml = System.IO.File.ReadAllText(xamlPath);
+
+            Assert(xaml.Contains("Name=\"FolderExplorerPanel\""), "MainWindow.xaml must contain FolderExplorerPanel");
+            Assert(xaml.Contains("Name=\"FolderFilesListBox\""), "MainWindow.xaml must contain FolderFilesListBox");
+            Assert(xaml.Contains("Name=\"FolderCombinedViewButton\""), "MainWindow.xaml must contain FolderCombinedViewButton");
+            Assert(xaml.Contains("Name=\"SidebarFilesTabButton\""), "MainWindow.xaml must contain SidebarFilesTabButton");
+            Assert(xaml.Contains("Name=\"SidebarOutlineTabButton\""), "MainWindow.xaml must contain SidebarOutlineTabButton");
+            Assert(xaml.Contains("Name=\"OpenFolderMenuItem\""), "MainWindow.xaml must contain OpenFolderMenuItem");
+            Assert(xaml.Contains("Name=\"FolderExplorerMenuItem\""), "MainWindow.xaml must contain FolderExplorerMenuItem");
+
+            string[] possibleIssPaths = new[]
+            {
+                System.IO.Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "..", "..", "..", "..", "installer", "MDPlus.iss"),
+                System.IO.Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "..", "..", "..", "installer", "MDPlus.iss"),
+                System.IO.Path.Combine(Environment.CurrentDirectory, "installer", "MDPlus.iss")
+            };
+            string issPath = possibleIssPaths.FirstOrDefault(p => System.IO.File.Exists(p)) ?? string.Empty;
+            Assert(!string.IsNullOrEmpty(issPath), "MDPlus.iss must exist");
+            string iss = System.IO.File.ReadAllText(issPath);
+
+            Assert(iss.Contains("Software\\Classes\\Directory\\shell\\OpenWithMDPlus"), "Installer must register Directory context menu for Open Folder with MDPlus");
+            Assert(iss.Contains("Software\\Classes\\Directory\\Background\\shell\\OpenWithMDPlus"), "Installer must register Directory Background context menu for Open Folder with MDPlus");
         }
 
         #endregion

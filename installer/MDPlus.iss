@@ -57,6 +57,7 @@ Name: "fileassoc_txt"; Description: "Associate Plain Text files (.txt) with MDPl
 Name: "fileassoc_csv"; Description: "Associate CSV spreadsheet files (.csv) with MDPlus"; GroupDescription: "File associations:"; Flags: unchecked
 Name: "fileassoc_tsv"; Description: "Associate TSV spreadsheet files (.tsv) with MDPlus"; GroupDescription: "File associations:"; Flags: unchecked
 Name: "fileassoc_json"; Description: "Associate JSON data files (.json) with MDPlus"; GroupDescription: "File associations:"; Flags: unchecked
+Name: "folder_contextmenu"; Description: "Add ""Open Folder with MDPlus"" to Windows Explorer folder context menu"; GroupDescription: "Windows Explorer integration:"; Flags: checkedonce
 
 [Files]
 ; Primary MDPlus application files
@@ -139,6 +140,15 @@ Root: HKA; Subkey: "Software\Classes\SystemFileAssociations\.tsv\shell\OpenWithM
 Root: HKA; Subkey: "Software\Classes\SystemFileAssociations\.json\shell\OpenWithMDPlus"; ValueType: string; ValueName: ""; ValueData: "Open with MDPlus"; Flags: uninsdeletekey; Tasks: fileassoc_json
 Root: HKA; Subkey: "Software\Classes\SystemFileAssociations\.json\shell\OpenWithMDPlus"; ValueType: string; ValueName: "Icon"; ValueData: """{app}\{#MyAppExeName}"",0"; Flags: uninsdeletekey; Tasks: fileassoc_json
 Root: HKA; Subkey: "Software\Classes\SystemFileAssociations\.json\shell\OpenWithMDPlus\command"; ValueType: string; ValueName: ""; ValueData: """{app}\{#MyAppExeName}"" ""%1"""; Flags: uninsdeletekey; Tasks: fileassoc_json
+
+; Folder Context Menu: "Open Folder with MDPlus" on directory right-click and directory background right-click
+Root: HKA; Subkey: "Software\Classes\Directory\shell\OpenWithMDPlus"; ValueType: string; ValueName: ""; ValueData: "Open Folder with MDPlus"; Flags: uninsdeletekey; Tasks: folder_contextmenu
+Root: HKA; Subkey: "Software\Classes\Directory\shell\OpenWithMDPlus"; ValueType: string; ValueName: "Icon"; ValueData: """{app}\{#MyAppExeName}"",0"; Flags: uninsdeletekey; Tasks: folder_contextmenu
+Root: HKA; Subkey: "Software\Classes\Directory\shell\OpenWithMDPlus\command"; ValueType: string; ValueName: ""; ValueData: """{app}\{#MyAppExeName}"" ""%1"""; Flags: uninsdeletekey; Tasks: folder_contextmenu
+
+Root: HKA; Subkey: "Software\Classes\Directory\Background\shell\OpenWithMDPlus"; ValueType: string; ValueName: ""; ValueData: "Open Folder with MDPlus"; Flags: uninsdeletekey; Tasks: folder_contextmenu
+Root: HKA; Subkey: "Software\Classes\Directory\Background\shell\OpenWithMDPlus"; ValueType: string; ValueName: "Icon"; ValueData: """{app}\{#MyAppExeName}"",0"; Flags: uninsdeletekey; Tasks: folder_contextmenu
+Root: HKA; Subkey: "Software\Classes\Directory\Background\shell\OpenWithMDPlus\command"; ValueType: string; ValueName: ""; ValueData: """{app}\{#MyAppExeName}"" ""%V"""; Flags: uninsdeletekey; Tasks: folder_contextmenu
 
 [Run]
 Filename: "{app}\{#MyAppExeName}"; Description: "{cm:LaunchProgram,{#StringChange(MyAppName, '&', '&&')}}"; Flags: nowait postinstall skipifsilent runasoriginaluser

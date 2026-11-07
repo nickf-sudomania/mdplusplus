@@ -118,6 +118,13 @@ namespace MDPlus.E2E.Tiers
             RunTest("Tier1", "F13.3: Inno Setup Default Apps capabilities registry directives for multi-format", TestF13_InnoSetupRegistryDirectives);
             RunTest("Tier1", "F13.4: Release notes RELEASE_NOTES_v1.15.3.md and RELEASE_NOTES.md present", TestF13_ReleaseNotesDocumentation);
             RunTest("Tier1", "F13.5: SHA-256 build verification target MDPlus.1.15.3.checksums.sha256 in build.ps1", TestF13_BuildScriptChecksumManifest);
+
+            // Feature 14: Folder View & Combined Folder Browsing ("See It In One Go")
+            RunTest("Tier1", "F14.1: FolderService tree scanning, sorting, pruning, and Markdown-only filtering", TestF14_FolderServiceTreeScanning);
+            RunTest("Tier1", "F14.2: FolderService tree flattening, search filtering, and active document highlighting", TestF14_FolderServiceFlattenAndFilter);
+            RunTest("Tier1", "F14.3: Combined Folder View ('See It In One Go') multi-file Markdown synthesis", TestF14_CombinedFolderViewGeneration);
+            RunTest("Tier1", "F14.4: CLI startup folder resolution and session LastOpenedFolder persistence", TestF14_StartupFolderResolution);
+            RunTest("Tier1", "F14.5: MainWindow Folder Explorer XAML controls and Windows Explorer folder context menu", TestF14_FolderExplorerUiAndInstaller);
         }
 
         #region Feature 1: Markdown Parsing & AST
@@ -1533,6 +1540,74 @@ int a = 1;
              string buildScript = File.ReadAllText(Path.Combine(repoRoot, "build.ps1"));
              AssertContains("MDPlus.1.15.3.checksums.sha256", buildScript, "build.ps1 must specify MDPlus.1.15.3.checksums.sha256 target.");
              AssertContains("-Action Verify", buildScript, "build.ps1 must implement -Action Verify.");
+         }
+
+         #endregion
+
+         #region Feature 14: Folder View & Combined Folder Browsing
+
+         private static void TestF14_FolderServiceTreeScanning()
+         {
+             string repoRoot = GetRepositoryRoot();
+             string sampleDocs = Path.Combine(repoRoot, "sample_docs");
+             var tree = FolderService.ScanFolderTree(sampleDocs, markdownOnly: false);
+             AssertTrue(tree.Count >= 3, "sample_docs scan must return multiple supported files.");
+             AssertTrue(tree.Any(n => !n.IsDirectory && n.Name.Equals("welcome.md", StringComparison.OrdinalIgnoreCase)), "welcome.md must be discovered in sample_docs.");
+         }
+
+         private static void TestF14_FolderServiceFlattenAndFilter()
+         {
+             string repoRoot = GetRepositoryRoot();
+             string sampleDocs = Path.Combine(repoRoot, "sample_docs");
+             string welcomePath = Path.Combine(sampleDocs, "welcome.md");
+             var tree = FolderService.ScanFolderTree(sampleDocs, markdownOnly: false);
+
+             var visible = FolderService.FlattenVisibleNodes(tree, searchFilter: null, activeFilePath: welcomePath);
+             AssertTrue(visible.Any(n => n.IsActiveDocument && n.Name.Equals("welcome.md", StringComparison.OrdinalIgnoreCase)), "welcome.md must be marked as IsActiveDocument.");
+
+             var filtered = FolderService.FlattenVisibleNodes(tree, searchFilter: "gfm", activeFilePath: null);
+             AssertEqual(1, filtered.Count, "Search filter 'gfm' should isolate gfm_features.md.");
+             AssertEqual("gfm_features.md", filtered[0].Name);
+         }
+
+         private static void TestF14_CombinedFolderViewGeneration()
+         {
+             string repoRoot = GetRepositoryRoot();
+             string sampleDocs = Path.Combine(repoRoot, "sample_docs");
+             var (combinedMd, includedFiles) = FolderService.BuildCombinedFolderMarkdown(sampleDocs, markdownOnly: true, includeSubfolders: false);
+
+             AssertTrue(includedFiles.Count >= 3, "Combined Folder View on sample_docs must include all Markdown files.");
+             AssertContains("# 📂 Folder View: sample_docs", combinedMd, "Combined view must include folder title header.");
+             AssertContains("# 📄 welcome.md", combinedMd, "Combined view must include section header for welcome.md.");
+             AssertContains("# 📄 gfm_features.md", combinedMd, "Combined view must include section header for gfm_features.md.");
+         }
+
+         private static void TestF14_StartupFolderResolution()
+         {
+             string repoRoot = GetRepositoryRoot();
+             string sampleDocs = Path.Combine(repoRoot, "sample_docs");
+             var settings = new AppSettings { ResumeSession = true, LastOpenedFolder = sampleDocs };
+
+             string? cliResolved = App.ResolveStartupFolder(settings, new[] { sampleDocs }, cliOnly: true);
+             AssertEqual(Path.GetFullPath(sampleDocs), cliResolved, "CLI folder argument must resolve to full folder path.");
+
+             string? sessionResolved = App.ResolveStartupFolder(settings, Array.Empty<string>(), cliOnly: false);
+             AssertEqual(Path.GetFullPath(sampleDocs), sessionResolved, "Session LastOpenedFolder must restore when ResumeSession is true.");
+         }
+
+         private static void TestF14_FolderExplorerUiAndInstaller()
+         {
+             string repoRoot = GetRepositoryRoot();
+             string xaml = File.ReadAllText(Path.Combine(repoRoot, "src", "MainWindow.xaml"));
+             AssertContains("Name=\"FolderExplorerPanel\"", xaml);
+             AssertContains("Name=\"FolderFilesListBox\"", xaml);
+             AssertContains("Name=\"FolderCombinedViewButton\"", xaml);
+             AssertContains("Name=\"SidebarFilesTabButton\"", xaml);
+             AssertContains("Name=\"SidebarOutlineTabButton\"", xaml);
+
+             string iss = File.ReadAllText(Path.Combine(repoRoot, "installer", "MDPlus.iss"));
+             AssertContains("Software\\Classes\\Directory\\shell\\OpenWithMDPlus", iss);
+             AssertContains("Software\\Classes\\Directory\\Background\\shell\\OpenWithMDPlus", iss);
          }
 
          #endregion

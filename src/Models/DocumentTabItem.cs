@@ -125,7 +125,8 @@ namespace MDPlus.Models
         }
 
         public string FileName => string.IsNullOrEmpty(_filePath) ? _title : Path.GetFileName(_filePath);
-        public string DirectoryName => string.IsNullOrEmpty(_filePath) ? string.Empty : Path.GetDirectoryName(_filePath) ?? string.Empty;
+        public string? BaseDirectory { get; set; }
+        public string DirectoryName => !string.IsNullOrEmpty(BaseDirectory) ? BaseDirectory : (string.IsNullOrEmpty(_filePath) ? string.Empty : Path.GetDirectoryName(_filePath) ?? string.Empty);
 
         public string Title
         {
