@@ -1,6 +1,15 @@
 # MDPlus Release Notes
 
-## Version 1.15.3 (Latest)
+## Version 1.15.4 (Latest)
+
+See [docs/RELEASE_NOTES_v1.15.4.md](docs/RELEASE_NOTES_v1.15.4.md) for full details.
+
+### Highlights
+- **Folder View Explorer Sidebar (`Ctrl+E`):** Hierarchical folder tree in a tabbed sidebar (`📁 FILES` | `📑 OUTLINE`) with live search filter, `MD only` toggle, auto-tracking of the active file's folder, and `Alt+Up`/`Alt+Down` file navigation.
+- **Combined Folder View ("See All in One Go", `Ctrl+Shift+F`):** Renders all files in a folder into a single continuous scrollable tab with a clickable file index, section dividers, and ATX heading demotion.
+- **Folder Open Entry Points & Shell Integration:** Open folders via `Ctrl+Shift+O`, Welcome screen button, drag-and-drop, CLI folder path, or the Windows Explorer `"Open Folder with MDPlus"` context menu.
+
+## Version 1.15.3
 
 See [docs/RELEASE_NOTES_v1.15.3.md](docs/RELEASE_NOTES_v1.15.3.md) for full details.
 
